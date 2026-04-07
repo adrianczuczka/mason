@@ -1,5 +1,9 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { MasonConfig } from "./config.js";
 import { getDefaultModel } from "./config.js";
+
+const exec = promisify(execFile);
 
 const CLAUDE_MD_SYSTEM_PROMPT = `You are Mason, a context engineering tool. You've been given a comprehensive analysis of a codebase including:
 - Git history stats (commit patterns, frequently changed files, stale directories)
@@ -20,32 +24,114 @@ The CLAUDE.md should include:
 
 Be specific and actionable. Reference actual file paths. Don't be generic — every rule should be grounded in what you see in the data.`;
 
+export type CallResult =
+  | { type: "response"; text: string }
+  | { type: "prompt"; text: string };
+
 export async function callLLM(
   config: MasonConfig,
   userMessage: string,
   systemPrompt?: string
-): Promise<string> {
+): Promise<CallResult> {
   const model = config.model ?? getDefaultModel(config.provider);
   const system = systemPrompt ?? CLAUDE_MD_SYSTEM_PROMPT;
 
   switch (config.provider) {
     case "claude":
-      return callClaude(config.apiKey!, model, system, userMessage);
-    case "gemini":
-      return callGemini(config.apiKey!, model, system, userMessage);
-    case "openai":
-      return callOpenAI(config.apiKey!, model, system, userMessage);
+      if (config.apiKey) {
+        return {
+          type: "response",
+          text: await callClaudeAPI(config.apiKey, model, system, userMessage),
+        };
+      }
+      return {
+        type: "response",
+        text: await callClaudeCLI(system, userMessage),
+      };
+
     case "ollama":
-      return callOllama(
-        config.ollamaHost ?? "http://localhost:11434",
-        model,
-        system,
-        userMessage
-      );
+      return {
+        type: "response",
+        text: await callOllamaCLI(
+          config.ollamaHost ?? "http://localhost:11434",
+          model,
+          system,
+          userMessage,
+        ),
+      };
+
+    case "gemini":
+      if (config.apiKey) {
+        return {
+          type: "response",
+          text: await callGeminiAPI(config.apiKey, model, system, userMessage),
+        };
+      }
+      return {
+        type: "prompt",
+        text: formatPromptForCopy(system, userMessage),
+      };
+
+    case "openai":
+      if (config.apiKey) {
+        return {
+          type: "response",
+          text: await callOpenAIAPI(config.apiKey, model, system, userMessage),
+        };
+      }
+      return {
+        type: "prompt",
+        text: formatPromptForCopy(system, userMessage),
+      };
   }
 }
 
-async function callClaude(
+function formatPromptForCopy(system: string, userMessage: string): string {
+  return `${system}\n\n---\n\n${userMessage}`;
+}
+
+// === CLI-based providers (no API key) ===
+
+async function callClaudeCLI(
+  system: string,
+  userMessage: string
+): Promise<string> {
+  const prompt = `${system}\n\n${userMessage}`;
+  const { stdout } = await exec("claude", ["-p", prompt], {
+    maxBuffer: 10_000_000,
+    timeout: 120_000,
+  });
+  return stdout.trim();
+}
+
+async function callOllamaCLI(
+  host: string,
+  model: string,
+  system: string,
+  userMessage: string
+): Promise<string> {
+  const response = await fetch(`${host}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      stream: false,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userMessage },
+      ],
+    }),
+  });
+
+  const result = (await response.json()) as {
+    message?: { content?: string };
+  };
+  return result.message?.content ?? "";
+}
+
+// === API-based providers ===
+
+async function callClaudeAPI(
   apiKey: string,
   model: string,
   system: string,
@@ -65,7 +151,7 @@ async function callClaude(
   return textBlock?.text ?? "";
 }
 
-async function callGemini(
+async function callGeminiAPI(
   apiKey: string,
   model: string,
   system: string,
@@ -89,7 +175,7 @@ async function callGemini(
   return response.choices[0]?.message?.content ?? "";
 }
 
-async function callOpenAI(
+async function callOpenAIAPI(
   apiKey: string,
   model: string,
   system: string,
@@ -108,29 +194,4 @@ async function callOpenAI(
   });
 
   return response.choices[0]?.message?.content ?? "";
-}
-
-async function callOllama(
-  host: string,
-  model: string,
-  system: string,
-  userMessage: string
-): Promise<string> {
-  const response = await fetch(`${host}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      stream: false,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userMessage },
-      ],
-    }),
-  });
-
-  const result = (await response.json()) as {
-    message?: { content?: string };
-  };
-  return result.message?.content ?? "";
 }

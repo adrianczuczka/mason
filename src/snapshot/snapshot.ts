@@ -132,9 +132,15 @@ export async function createSnapshot(
 
   // Call LLM to summarize
   const userMessage = buildSnapshotPrompt(filesWithContent);
-  const llmResponse = await callLLM(config, userMessage, SNAPSHOT_SYSTEM_PROMPT);
+  const result = await callLLM(config, userMessage, SNAPSHOT_SYSTEM_PROMPT);
 
-  const summaries = parseLLMResponse(llmResponse);
+  if (result.type === "prompt") {
+    throw new Error(
+      "No CLI or API key available for this provider. Use claude or ollama (no key needed), or provide an API key."
+    );
+  }
+
+  const summaries = parseLLMResponse(result.text);
   const gitHash = await getCurrentGitHash(resolvedRoot);
   const now = new Date().toISOString();
 
@@ -246,13 +252,19 @@ export async function updateSnapshot(
         filesWithContent,
         existingSummaries
       );
-      const llmResponse = await callLLM(
+      const llmResult = await callLLM(
         config,
         userMessage,
         SNAPSHOT_SYSTEM_PROMPT
       );
 
-      const newSummaries = parseLLMResponse(llmResponse);
+      if (llmResult.type === "prompt") {
+        throw new Error(
+          "No CLI or API key available for this provider."
+        );
+      }
+
+      const newSummaries = parseLLMResponse(llmResult.text);
       const gitHash = await getCurrentGitHash(resolvedRoot);
       const now = new Date().toISOString();
 

@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const exec = promisify(execFile);
 
 export type Provider = "claude" | "gemini" | "openai" | "ollama";
 
@@ -47,4 +51,33 @@ export function validateProvider(value: string): Provider {
     );
   }
   return value as Provider;
+}
+
+export async function detectCLI(
+  provider: Provider
+): Promise<{ available: boolean; version?: string }> {
+  if (provider === "claude") {
+    try {
+      const { stdout } = await exec("claude", ["--version"]);
+      return { available: true, version: stdout.trim() };
+    } catch {
+      return { available: false };
+    }
+  }
+
+  if (provider === "ollama") {
+    try {
+      const { stdout } = await exec("ollama", ["--version"]);
+      return { available: true, version: stdout.trim() };
+    } catch {
+      return { available: false };
+    }
+  }
+
+  // Gemini/OpenAI don't have subscription CLIs
+  return { available: false };
+}
+
+export function needsApiKey(provider: Provider): boolean {
+  return provider === "gemini" || provider === "openai";
 }

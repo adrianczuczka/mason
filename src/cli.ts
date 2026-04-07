@@ -10,6 +10,8 @@ import {
   saveConfig,
   validateProvider,
   getDefaultModel,
+  detectCLI,
+  needsApiKey,
 } from "./llm/config.js";
 import { callLLM } from "./llm/providers.js";
 import { fullAnalysis } from "./mcp/tools.js";
@@ -95,7 +97,7 @@ export function createCLI(): Command {
     .command("set-llm")
     .description("Configure the LLM provider for standalone generation")
     .argument("<provider>", "LLM provider: claude, gemini, openai, or ollama")
-    .argument("[api-key]", "API key (not needed for ollama)")
+    .argument("[api-key]", "API key (not needed for claude or ollama)")
     .option("--model <model>", "Override the default model")
     .option("--ollama-host <host>", "Ollama server URL", "http://localhost:11434")
     .action(
@@ -106,9 +108,28 @@ export function createCLI(): Command {
       ) => {
         const validProvider = validateProvider(provider);
 
-        if (validProvider !== "ollama" && !apiKey) {
-          log.error(`API key is required for ${validProvider}. Usage: mason set-llm ${validProvider} <api-key>`);
+        // Claude and Ollama can work without API keys via their CLIs
+        if (needsApiKey(validProvider) && !apiKey) {
+          log.error(
+            `API key is required for ${validProvider}. Usage: mason set-llm ${validProvider} <api-key>`
+          );
           process.exit(1);
+        }
+
+        // For CLI-based providers, verify the CLI is available
+        if (!apiKey && !needsApiKey(validProvider)) {
+          const cli = await detectCLI(validProvider);
+          if (!cli.available) {
+            log.error(
+              validProvider === "claude"
+                ? "Claude Code CLI not found. Install it from https://claude.ai/code, or provide an API key: mason set-llm claude <api-key>"
+                : "Ollama not found. Install it from https://ollama.ai, or provide an API key for another provider."
+            );
+            process.exit(1);
+          }
+          log.info(
+            `Found ${validProvider} CLI (${cli.version ?? "installed"}). No API key needed.`
+          );
         }
 
         const config = {
@@ -148,20 +169,34 @@ export function createCLI(): Command {
       spinner.text = `Generating CLAUDE.md with ${runConfig.provider}...`;
 
       try {
-        const markdown = await callLLM(
+        const result = await callLLM(
           runConfig,
           `Here is the full project analysis. Write a CLAUDE.md based on this data:\n\n${analysisData}`
         );
 
-        if (!markdown.trim()) {
-          spinner.stop();
+        spinner.stop();
+
+        if (result.type === "prompt") {
+          // No CLI/API available — output prompt for user to paste
+          console.log(
+            chalk.bold("\nNo API key or CLI available. Copy this prompt into your LLM:\n")
+          );
+          console.log(chalk.gray("─".repeat(60)));
+          console.log(result.text);
+          console.log(chalk.gray("─".repeat(60)));
+          console.log(
+            chalk.gray("\nPaste the LLM's response into CLAUDE.md manually.")
+          );
+          return;
+        }
+
+        if (!result.text.trim()) {
           log.error("LLM returned empty response.");
           process.exit(1);
         }
 
         const outPath = path.join(rootDir, "CLAUDE.md");
-        await fs.writeFile(outPath, markdown, "utf-8");
-        spinner.stop();
+        await fs.writeFile(outPath, result.text, "utf-8");
         log.success(`Generated ${outPath}`);
       } catch (err) {
         spinner.stop();
