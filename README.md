@@ -1,6 +1,6 @@
 # Mason
 
-A context engineering tool that helps LLMs understand your codebase. Mason handles the expensive parts — aggregating git history, selecting architecturally important files, mapping test coverage — so the LLM can focus on interpretation.
+A context engineering tool that helps LLMs understand your codebase. Mason handles the expensive parts — aggregating git history, selecting architecturally important files, mapping test coverage, and persisting project knowledge across sessions — so the LLM can focus on interpretation.
 
 Works as an **MCP server** (for Claude Code, Cursor, etc.) or as a **standalone CLI** with any LLM provider.
 
@@ -22,17 +22,37 @@ claude mcp add mason -- npx mason-context mcp
 
 Then ask Claude to generate a CLAUDE.md — it will call Mason's tools automatically.
 
-Mason exposes 7 tools via MCP:
+Mason exposes 9 tools via MCP:
 
 | Tool | What it does |
 |---|---|
-| `full_analysis` | All-in-one: git stats + project structure + code samples + test map |
+| `full_analysis` | All-in-one: git stats + project structure + code samples + test map + snapshot |
+| `get_snapshot` | Load persistent project snapshot (file summaries from previous sessions) |
+| `save_snapshot` | Save file summaries for future sessions (no API key needed — the LLM generates them) |
 | `analyze_project` | Git history stats (commit patterns, stale dirs, hot files) |
 | `get_code_samples` | Smart file previews — config, entry points, architectural patterns, tests |
 | `get_file_content` | Read any file in full (drill-down after previewing) |
 | `get_project_structure` | Directory tree with file counts and extension breakdown |
 | `get_test_map` | Map test files to source files by name matching |
 | `write_claude_md` | Save the generated CLAUDE.md |
+
+### Persistent snapshots
+
+Mason can persist its understanding of your project across conversations, saving thousands of tokens per session.
+
+**Via MCP (no API key needed):**
+
+Ask your AI assistant to "create a mason snapshot for this project." It will analyze the codebase, summarize each key file, and call `save_snapshot` to persist the summaries. Next session, it loads the snapshot via `get_snapshot` instead of re-reading everything.
+
+**Via CLI (requires LLM provider):**
+
+```bash
+mason set-llm gemini AIza-xxx          # configure a provider
+mason snapshot ~/my-project            # generate snapshot
+mason snapshot --install-hook          # auto-update on every commit
+```
+
+The snapshot updates incrementally — after each commit, only changed files are re-summarized.
 
 ### As a standalone CLI
 
@@ -68,8 +88,9 @@ Mason's philosophy: **the LLM is smart, Mason is fast.** Instead of trying to un
 3. **Pair interfaces with implementations** — surfaces both `WeatherRepository.kt` and `WeatherRepositoryImpl.kt`
 4. **Include module build files** — so the LLM can infer the dependency graph itself
 5. **Map tests to source** — structural test coverage analysis
+6. **Persist knowledge** — snapshot summaries survive across conversations, eliminating cold-start token waste
 
-The LLM does all the interpretation — identifying conventions, understanding patterns, writing rules. Mason just makes sure it sees the right files.
+The LLM does all the interpretation — identifying conventions, understanding patterns, writing rules. Mason just makes sure it sees the right files and remembers what it learned.
 
 ## Smart file sampling
 
