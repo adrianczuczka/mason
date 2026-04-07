@@ -30,14 +30,5 @@ export interface AnalyzerResult {
 
 export interface AnalyzerContext {
   rootDir: string;
-  packageJson: Record<string, unknown> | null;
   gitAvailable: boolean;
-  previousAnswers: Map<string, string>;
-}
-
-export interface Rule {
-  section: string;
-  text: string;
-  source: string;
-  priority: number;
 }
