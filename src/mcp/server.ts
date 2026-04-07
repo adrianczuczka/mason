@@ -7,7 +7,9 @@ import {
   getCodeSamples,
   getFileContent,
   getProjectStructure,
+  getSnapshot,
   getTestMap,
+  saveSnapshotData,
   writeClaudeMd,
 } from "./tools.js";
 
@@ -19,7 +21,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool that helps you understand codebases efficiently. It handles aggregation and file selection so you can focus on interpretation. Recommended workflow: 1) Call full_analysis to get everything in one shot — git stats, project structure, code samples, and test map. 2) Call get_file_content for any files you want to read in full. 3) Use your intelligence to identify conventions, patterns, and architecture. 4) Call write_claude_md to save the result. Individual tools (analyze_project, get_code_samples, get_project_structure, get_test_map) are also available if you need to drill into a specific area.",
+        "Mason is a context engineering tool that helps you understand codebases efficiently. Recommended workflow: 1) Call get_snapshot first — if a snapshot exists, you already have file summaries and can skip re-reading most files. 2) If no snapshot, call full_analysis for git stats, project structure, code samples, and test map. 3) Call get_file_content to read specific files in full. 4) Call save_snapshot to persist your understanding for future sessions (saves thousands of tokens next time). 5) Call write_claude_md to save the final output. Individual tools (analyze_project, get_code_samples, get_project_structure, get_test_map) are also available for targeted queries.",
     }
   );
 
@@ -121,6 +123,59 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir }) => {
       const result = await getTestMap(dir);
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    }
+  );
+
+  server.tool(
+    "get_snapshot",
+    "Get the persistent project snapshot — LLM-generated summaries of key files including their purpose, role, and dependencies. The snapshot saves thousands of tokens by letting you understand the codebase without reading every file. Returns a suggestion to run 'mason snapshot' if no snapshot exists.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+    },
+    async ({ dir }) => {
+      const result = await getSnapshot(dir);
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    }
+  );
+
+  server.tool(
+    "save_snapshot",
+    "Save file summaries as a persistent project snapshot. Call this after reading code samples from get_code_samples or full_analysis — summarize each file's purpose, role, and dependencies, then save them here. The snapshot persists across conversations, so future sessions can call get_snapshot to understand the codebase without re-reading files. No API key needed — you are the LLM generating the summaries.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      files: z
+        .array(
+          z.object({
+            path: z.string().describe("Relative file path"),
+            summary: z
+              .string()
+              .describe(
+                "One-line summary: what the file does, key patterns, libraries used"
+              ),
+            role: z
+              .string()
+              .describe(
+                "Architectural role: viewmodel, repository, service, config, test, etc."
+              ),
+            dependencies: z
+              .array(z.string())
+              .optional()
+              .describe("File names this file depends on"),
+          })
+        )
+        .describe("Array of file summaries to save"),
+    },
+    async ({ dir, files }) => {
+      const result = await saveSnapshotData(dir, files);
       return {
         content: [{ type: "text", text: result }],
       };

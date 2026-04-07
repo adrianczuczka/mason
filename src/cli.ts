@@ -112,7 +112,10 @@ export function createCLI(): Command {
       spinner.text = `Generating CLAUDE.md with ${runConfig.provider}...`;
 
       try {
-        const markdown = await callLLM(runConfig, analysisData);
+        const markdown = await callLLM(
+          runConfig,
+          `Here is the full project analysis. Write a CLAUDE.md based on this data:\n\n${analysisData}`
+        );
 
         if (!markdown.trim()) {
           spinner.stop();
@@ -130,6 +133,80 @@ export function createCLI(): Command {
           `Failed to generate: ${err instanceof Error ? err.message : String(err)}`
         );
         process.exit(1);
+      }
+    });
+
+  program
+    .command("snapshot")
+    .description("Generate a persistent project snapshot using LLM")
+    .argument("[dir]", "Directory to analyze", ".")
+    .option("--install-hook", "Install a post-commit git hook to auto-update")
+    .action(async (dir: string, opts: { installHook?: boolean }) => {
+      const {
+        createSnapshot,
+        installHook,
+      } = await import("./snapshot/snapshot.js");
+
+      const rootDir = path.resolve(dir);
+
+      if (opts.installHook) {
+        try {
+          await installHook(rootDir);
+          log.success("Post-commit hook installed. Snapshot will auto-update on each commit.");
+        } catch (err) {
+          log.error(
+            `Failed to install hook: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+        return;
+      }
+
+      const config = await loadConfig();
+      if (!config) {
+        log.error(
+          'No LLM configured. Run "mason set-llm <provider> <api-key>" first.'
+        );
+        process.exit(1);
+      }
+
+      const spinner = ora("Building project snapshot...").start();
+      try {
+        const snapshot = await createSnapshot(rootDir, config);
+        spinner.stop();
+        log.success(
+          `Snapshot created with ${snapshot.files.length} file summaries → .mason/snapshot.json`
+        );
+      } catch (err) {
+        spinner.stop();
+        log.error(
+          `Failed to create snapshot: ${err instanceof Error ? err.message : String(err)}`
+        );
+        process.exit(1);
+      }
+    });
+
+  program
+    .command("snapshot-update")
+    .description("Incrementally update snapshot with recent changes")
+    .argument("[dir]", "Directory to update", ".")
+    .action(async (dir: string) => {
+      const { updateSnapshot } = await import("./snapshot/snapshot.js");
+      const rootDir = path.resolve(dir);
+
+      const config = await loadConfig();
+      if (!config) return; // Silent exit — called from hook, don't spam
+
+      try {
+        const result = await updateSnapshot(rootDir, config);
+        if (result.added + result.updated + result.removed === 0) {
+          // No changes — silent when called from hook
+          return;
+        }
+        log.success(
+          `Snapshot updated: ${result.added} added, ${result.updated} updated, ${result.removed} removed`
+        );
+      } catch {
+        // Silent failure — don't break the user's commit flow
       }
     });
 

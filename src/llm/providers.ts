@@ -1,7 +1,7 @@
 import type { MasonConfig } from "./config.js";
 import { getDefaultModel } from "./config.js";
 
-const SYSTEM_PROMPT = `You are Mason, a context engineering tool. You've been given a comprehensive analysis of a codebase including:
+const CLAUDE_MD_SYSTEM_PROMPT = `You are Mason, a context engineering tool. You've been given a comprehensive analysis of a codebase including:
 - Git history stats (commit patterns, frequently changed files, stale directories)
 - Project structure (directory layout, file counts by type)
 - Curated code samples (key architectural files with previews)
@@ -22,26 +22,34 @@ Be specific and actionable. Reference actual file paths. Don't be generic — ev
 
 export async function callLLM(
   config: MasonConfig,
-  analysisData: string
+  userMessage: string,
+  systemPrompt?: string
 ): Promise<string> {
   const model = config.model ?? getDefaultModel(config.provider);
+  const system = systemPrompt ?? CLAUDE_MD_SYSTEM_PROMPT;
 
   switch (config.provider) {
     case "claude":
-      return callClaude(config.apiKey!, model, analysisData);
+      return callClaude(config.apiKey!, model, system, userMessage);
     case "gemini":
-      return callGemini(config.apiKey!, model, analysisData);
+      return callGemini(config.apiKey!, model, system, userMessage);
     case "openai":
-      return callOpenAI(config.apiKey!, model, analysisData);
+      return callOpenAI(config.apiKey!, model, system, userMessage);
     case "ollama":
-      return callOllama(config.ollamaHost ?? "http://localhost:11434", model, analysisData);
+      return callOllama(
+        config.ollamaHost ?? "http://localhost:11434",
+        model,
+        system,
+        userMessage
+      );
   }
 }
 
 async function callClaude(
   apiKey: string,
   model: string,
-  data: string
+  system: string,
+  userMessage: string
 ): Promise<string> {
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
   const client = new Anthropic({ apiKey });
@@ -49,13 +57,8 @@ async function callClaude(
   const response = await client.messages.create({
     model,
     max_tokens: 8192,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Here is the full project analysis. Write a CLAUDE.md based on this data:\n\n${data}`,
-      },
-    ],
+    system,
+    messages: [{ role: "user", content: userMessage }],
   });
 
   const textBlock = response.content.find((b) => b.type === "text");
@@ -65,9 +68,9 @@ async function callClaude(
 async function callGemini(
   apiKey: string,
   model: string,
-  data: string
+  system: string,
+  userMessage: string
 ): Promise<string> {
-  // Gemini uses the OpenAI-compatible API
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
     apiKey,
@@ -78,11 +81,8 @@ async function callGemini(
     model,
     max_tokens: 8192,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Here is the full project analysis. Write a CLAUDE.md based on this data:\n\n${data}`,
-      },
+      { role: "system", content: system },
+      { role: "user", content: userMessage },
     ],
   });
 
@@ -92,7 +92,8 @@ async function callGemini(
 async function callOpenAI(
   apiKey: string,
   model: string,
-  data: string
+  system: string,
+  userMessage: string
 ): Promise<string> {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey });
@@ -101,11 +102,8 @@ async function callOpenAI(
     model,
     max_tokens: 8192,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Here is the full project analysis. Write a CLAUDE.md based on this data:\n\n${data}`,
-      },
+      { role: "system", content: system },
+      { role: "user", content: userMessage },
     ],
   });
 
@@ -115,7 +113,8 @@ async function callOpenAI(
 async function callOllama(
   host: string,
   model: string,
-  data: string
+  system: string,
+  userMessage: string
 ): Promise<string> {
   const response = await fetch(`${host}/api/chat`, {
     method: "POST",
@@ -124,15 +123,14 @@ async function callOllama(
       model,
       stream: false,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Here is the full project analysis. Write a CLAUDE.md based on this data:\n\n${data}`,
-        },
+        { role: "system", content: system },
+        { role: "user", content: userMessage },
       ],
     }),
   });
 
-  const result = (await response.json()) as { message?: { content?: string } };
+  const result = (await response.json()) as {
+    message?: { content?: string };
+  };
   return result.message?.content ?? "";
 }

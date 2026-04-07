@@ -4,6 +4,12 @@ import fg from "fast-glob";
 import { runAll } from "../analyzers/index.js";
 import { isGitRepo } from "../utils/git.js";
 import { sampleFiles, readFullFile } from "./sampler.js";
+import {
+  loadSnapshot,
+  saveSnapshot,
+  getCurrentGitHash,
+} from "../snapshot/snapshot.js";
+import type { Snapshot, FileSummary } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
 
 const IGNORE = [
@@ -318,15 +324,39 @@ function commonSegments(pathA: string, pathB: string): number {
   return count;
 }
 
+export async function getSnapshot(dir: string): Promise<string> {
+  const rootDir = path.resolve(dir);
+  const snapshot = await loadSnapshot(rootDir);
+
+  if (!snapshot) {
+    return JSON.stringify({
+      exists: false,
+      message:
+        'No snapshot found. Run "mason snapshot" to generate one (requires set-llm configured).',
+    });
+  }
+
+  return JSON.stringify({
+    exists: true,
+    createdAt: snapshot.createdAt,
+    updatedAt: snapshot.updatedAt,
+    fileCount: snapshot.files.length,
+    files: snapshot.files,
+  });
+}
+
 export async function fullAnalysis(dir: string): Promise<string> {
-  const [analysis, structure, samples, testMap] = await Promise.all([
+  const rootDir = path.resolve(dir);
+
+  const [analysis, structure, samples, testMap, snapshot] = await Promise.all([
     analyzeProject(dir),
     getProjectStructure(dir),
     getCodeSamples(dir, 25),
     getTestMap(dir),
+    loadSnapshot(rootDir),
   ]);
 
-  const output = {
+  const output: Record<string, unknown> = {
     note: "Full project analysis. Code samples are previews (~60 lines). Use get_file_content to read any file in full.",
     analysis: JSON.parse(analysis),
     structure: JSON.parse(structure),
@@ -334,7 +364,71 @@ export async function fullAnalysis(dir: string): Promise<string> {
     testMap: JSON.parse(testMap),
   };
 
+  if (snapshot) {
+    output.snapshot = {
+      updatedAt: snapshot.updatedAt,
+      fileCount: snapshot.files.length,
+      files: snapshot.files,
+    };
+    output.note =
+      "Full project analysis with snapshot. The snapshot contains LLM-generated summaries of key files — use these to understand the codebase without reading every file. Use get_file_content to drill into specific files.";
+  }
+
   return JSON.stringify(output, null, 2);
+}
+
+export async function saveSnapshotData(
+  dir: string,
+  files: Array<{
+    path: string;
+    summary: string;
+    role: string;
+    dependencies?: string[];
+  }>
+): Promise<string> {
+  const rootDir = path.resolve(dir);
+  const gitHash = await getCurrentGitHash(rootDir);
+  const now = new Date().toISOString();
+
+  const existing = await loadSnapshot(rootDir);
+
+  const fileSummaries: FileSummary[] = files.map((f) => ({
+    path: f.path,
+    summary: f.summary,
+    role: f.role,
+    dependencies: f.dependencies ?? [],
+    lastUpdated: now,
+    gitHash,
+  }));
+
+  if (existing) {
+    // Merge: update existing entries, add new ones
+    const newPaths = new Set(files.map((f) => f.path));
+    const kept = existing.files.filter((f) => !newPaths.has(f.path));
+    existing.files = [...kept, ...fileSummaries];
+    existing.updatedAt = now;
+    existing.gitHash = gitHash;
+    await saveSnapshot(rootDir, existing);
+    return JSON.stringify({
+      status: "updated",
+      totalFiles: existing.files.length,
+      addedOrUpdated: files.length,
+    });
+  }
+
+  const snapshot: Snapshot = {
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+    gitHash,
+    files: fileSummaries,
+  };
+
+  await saveSnapshot(rootDir, snapshot);
+  return JSON.stringify({
+    status: "created",
+    totalFiles: snapshot.files.length,
+  });
 }
 
 export async function writeClaudeMd(
