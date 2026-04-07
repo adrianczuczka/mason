@@ -37,13 +37,14 @@ claude mcp add mason -- npx mason-ai mcp
 
 Then ask Claude to generate a CLAUDE.md — it will call Mason's tools automatically.
 
-Mason exposes 9 tools via MCP:
+Mason exposes 10 tools via MCP:
 
 | Tool | What it does |
 |---|---|
 | `full_analysis` | All-in-one: git stats + project structure + code samples + test map + snapshot |
 | `get_snapshot` | Load persistent project snapshot (auto-detects staleness) |
 | `save_snapshot` | Save file summaries for future sessions (no API key needed) |
+| `configure_project` | Customize sampling — add patterns, always-include files, ignore paths |
 | `analyze_project` | Git history stats (commit patterns, stale dirs, hot files) |
 | `get_code_samples` | Smart file previews — config, entry points, architectural patterns, tests |
 | `get_file_content` | Read any file in full (drill-down after previewing) |
@@ -119,6 +120,21 @@ Mason doesn't dump your whole repo. It picks ~25 files across these categories:
 - **Directory representatives** — one source file per top-level directory for breadth
 
 All files are returned as previews (~60 lines) with metadata. The LLM can request full content of any file it wants to dig into.
+
+### Custom patterns
+
+Mason's built-in patterns won't catch everything. If your project uses different naming conventions (e.g., `*Gateway*` instead of `*Repository*`, `*Bloc*` instead of `*ViewModel*`), configure it per-project:
+
+```json
+// .mason/config.json
+{
+  "patterns": ["**/*Gateway.*", "**/*Bloc.*", "**/*Cubit.*"],
+  "alwaysInclude": ["src/core/config.ts", "lib/injection.dart"],
+  "ignore": ["**/fixtures/**", "**/mocks/**"]
+}
+```
+
+Or let the LLM configure it via the `configure_project` MCP tool when it notices the sampler missed important files.
 
 ## Language support
 

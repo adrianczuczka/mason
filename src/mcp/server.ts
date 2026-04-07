@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   analyzeProject,
+  configureProject,
   fullAnalysis,
   getCodeSamples,
   getFileContent,
@@ -176,6 +177,38 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir, files }) => {
       const result = await saveSnapshotData(dir, files);
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    }
+  );
+
+  server.tool(
+    "configure_project",
+    "Configure Mason for this project. Add custom file patterns to sample, files to always include, or paths to ignore. Saved to .mason/config.json. Use this when the default architectural patterns miss important files in the project.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      patterns: z
+        .array(z.string())
+        .optional()
+        .describe("Custom glob patterns for architecturally important files (e.g., '**/*Gateway.*', '**/*Bloc.*')"),
+      alwaysInclude: z
+        .array(z.string())
+        .optional()
+        .describe("Specific file paths to always include in samples (e.g., 'src/core/config.ts')"),
+      ignore: z
+        .array(z.string())
+        .optional()
+        .describe("Additional glob patterns to ignore (e.g., '**/fixtures/**')"),
+    },
+    async ({ dir, patterns, alwaysInclude, ignore }) => {
+      const result = await configureProject(dir, {
+        patterns,
+        alwaysInclude,
+        ignore,
+      });
       return {
         content: [{ type: "text", text: result }],
       };

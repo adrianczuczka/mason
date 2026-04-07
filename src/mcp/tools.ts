@@ -480,6 +480,41 @@ export async function saveSnapshotData(
   });
 }
 
+export async function configureProject(
+  dir: string,
+  config: {
+    patterns?: string[];
+    alwaysInclude?: string[];
+    ignore?: string[];
+  }
+): Promise<string> {
+  const rootDir = path.resolve(dir);
+  const configDir = path.join(rootDir, ".mason");
+  const configPath = path.join(configDir, "config.json");
+
+  // Load existing config and merge
+  let existing: Record<string, unknown> = {};
+  try {
+    const raw = await fs.readFile(configPath, "utf-8");
+    existing = JSON.parse(raw);
+  } catch {
+    // No existing config
+  }
+
+  if (config.patterns) existing.patterns = config.patterns;
+  if (config.alwaysInclude) existing.alwaysInclude = config.alwaysInclude;
+  if (config.ignore) existing.ignore = config.ignore;
+
+  await fs.mkdir(configDir, { recursive: true });
+  await fs.writeFile(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+  return JSON.stringify({
+    status: "saved",
+    path: configPath,
+    config: existing,
+  });
+}
+
 export async function writeClaudeMd(
   dir: string,
   content: string

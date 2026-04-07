@@ -146,6 +146,12 @@ const IGNORE_PATTERNS = [
 
 const PREVIEW_LINES = 60;
 
+export interface ProjectConfig {
+  patterns?: string[];
+  alwaysInclude?: string[];
+  ignore?: string[];
+}
+
 export interface SampledFile {
   path: string;
   preview: string;
@@ -154,11 +160,33 @@ export interface SampledFile {
   reason: string;
 }
 
+async function loadProjectConfig(
+  rootDir: string
+): Promise<ProjectConfig> {
+  try {
+    const raw = await fs.readFile(
+      path.join(rootDir, ".mason", "config.json"),
+      "utf-8"
+    );
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
 export async function sampleFiles(
   rootDir: string,
   maxFiles: number = 25
 ): Promise<SampledFile[]> {
   const selected = new Map<string, string>(); // path -> reason
+  const projectConfig = await loadProjectConfig(rootDir);
+  const ignorePatterns = [...IGNORE_PATTERNS, ...(projectConfig.ignore ?? [])];
+
+  // 0. Always-include files from project config (highest priority)
+  for (const filePath of projectConfig.alwaysInclude ?? []) {
+    if (selected.size >= maxFiles) break;
+    selected.set(filePath, "always-include (project config)");
+  }
 
   // 1. Config files (cap at 5)
   let configCount = 0;
@@ -166,7 +194,7 @@ export async function sampleFiles(
     if (configCount >= 5) break;
     const matches = await fg(pattern, {
       cwd: rootDir,
-      ignore: IGNORE_PATTERNS,
+      ignore: ignorePatterns,
       deep: 3,
     });
     for (const match of matches) {
@@ -192,7 +220,7 @@ export async function sampleFiles(
   for (const pattern of moduleBuildPatterns) {
     const matches = await fg(pattern, {
       cwd: rootDir,
-      ignore: IGNORE_PATTERNS,
+      ignore: ignorePatterns,
       deep: 4,
     });
     // Skip root-level files (already captured as config)
@@ -213,7 +241,7 @@ export async function sampleFiles(
     if (entryCount >= 2) break;
     const matches = await fg(pattern, {
       cwd: rootDir,
-      ignore: IGNORE_PATTERNS,
+      ignore: ignorePatterns,
       deep: 5,
     });
     for (const match of matches) {
@@ -271,7 +299,7 @@ export async function sampleFiles(
 
     const matches = await fg(pattern.glob, {
       cwd: rootDir,
-      ignore: IGNORE_PATTERNS,
+      ignore: ignorePatterns,
     });
 
     if (matches.length > 0) {
@@ -282,6 +310,22 @@ export async function sampleFiles(
           patternCount++;
           break;
         }
+      }
+    }
+  }
+
+  // 5b. Custom patterns from project config
+  for (const customGlob of projectConfig.patterns ?? []) {
+    if (selected.size >= maxFiles) break;
+    const matches = await fg(customGlob, {
+      cwd: rootDir,
+      ignore: ignorePatterns,
+    });
+    for (const match of matches) {
+      if (selected.size >= maxFiles) break;
+      if (!selected.has(match)) {
+        selected.set(match, "custom pattern (project config)");
+        break; // one per pattern
       }
     }
   }
@@ -306,7 +350,7 @@ export async function sampleFiles(
     if (testCount >= 3 || selected.size >= maxFiles) break;
     const testFiles = await fg(group.patterns, {
       cwd: rootDir,
-      ignore: IGNORE_PATTERNS,
+      ignore: ignorePatterns,
     });
     if (testFiles.length > 0) {
       for (const file of testFiles) {
@@ -323,7 +367,7 @@ export async function sampleFiles(
   const sourceGlobs = SOURCE_EXTENSIONS.map((ext) => `**/*.${ext}`);
   const allSourceFiles = await fg(sourceGlobs, {
     cwd: rootDir,
-    ignore: IGNORE_PATTERNS,
+    ignore: ignorePatterns,
   });
 
   const dirRepresentatives = new Map<string, string>();
