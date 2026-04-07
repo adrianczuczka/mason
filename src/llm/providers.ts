@@ -11,7 +11,9 @@ const CLAUDE_MD_SYSTEM_PROMPT = `You are Mason, a context engineering tool. You'
 - Curated code samples (key architectural files with previews)
 - Test-to-source file mapping
 
-Your job: analyze all this data and write a CLAUDE.md file that gives an AI coding assistant everything it needs to work effectively in this codebase.
+Your job: write a COMPLETE CLAUDE.md file from scratch based ONLY on the analysis data provided below. Do NOT read any existing files in the project. Do NOT reference or preserve any existing CLAUDE.md. Generate the entire document fresh.
+
+CRITICAL: Output ONLY the raw markdown content. No preamble, no summary, no "Here's the CLAUDE.md:", no explanation, no questions, no commentary. Start directly with "# CLAUDE.md" and end with the last line of content. Your entire response will be written directly to a file.
 
 The CLAUDE.md should include:
 - Project overview (what it is, tech stack, architecture)
@@ -92,28 +94,80 @@ function formatPromptForCopy(system: string, userMessage: string): string {
 
 // === CLI-based providers (no API key) ===
 
+async function callViaTempFile(
+  command: string,
+  args: (promptPath: string) => string[],
+  system: string,
+  userMessage: string
+): Promise<string> {
+  const fs = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+
+  const prompt = `${system}\n\n${userMessage}`;
+  const tmpFile = path.join(os.tmpdir(), `mason-prompt-${Date.now()}.txt`);
+
+  try {
+    await fs.writeFile(tmpFile, prompt, "utf-8");
+    const { stdout } = await exec(command, args(tmpFile), {
+      maxBuffer: 10_000_000,
+      timeout: 300_000,
+    });
+    return stdout.trim();
+  } finally {
+    await fs.unlink(tmpFile).catch(() => {});
+  }
+}
+
 async function callClaudeCLI(
   system: string,
   userMessage: string
 ): Promise<string> {
+  // claude -p reads prompt from argument; use temp file to avoid shell length limits
+  const fs = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+
   const prompt = `${system}\n\n${userMessage}`;
-  const { stdout } = await exec("claude", ["-p", prompt], {
-    maxBuffer: 10_000_000,
-    timeout: 120_000,
-  });
-  return stdout.trim();
+  const tmpFile = path.join(os.tmpdir(), `mason-prompt-${Date.now()}.txt`);
+
+  try {
+    await fs.writeFile(tmpFile, prompt, "utf-8");
+    // Read from file and pipe to claude
+    const promptContent = await fs.readFile(tmpFile, "utf-8");
+    const { stdout } = await exec(
+      "sh",
+      ["-c", `cat "${tmpFile}" | claude -p`],
+      { maxBuffer: 10_000_000, timeout: 300_000 }
+    );
+    return stdout.trim();
+  } finally {
+    await fs.unlink(tmpFile).catch(() => {});
+  }
 }
 
 async function callGeminiCLI(
   system: string,
   userMessage: string
 ): Promise<string> {
+  const fs = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+
   const prompt = `${system}\n\n${userMessage}`;
-  const { stdout } = await exec("gemini", ["-p", prompt], {
-    maxBuffer: 10_000_000,
-    timeout: 120_000,
-  });
-  return stdout.trim();
+  const tmpFile = path.join(os.tmpdir(), `mason-prompt-${Date.now()}.txt`);
+
+  try {
+    await fs.writeFile(tmpFile, prompt, "utf-8");
+    const { stdout } = await exec(
+      "sh",
+      ["-c", `cat "${tmpFile}" | gemini -p`],
+      { maxBuffer: 10_000_000, timeout: 300_000 }
+    );
+    return stdout.trim();
+  } finally {
+    await fs.unlink(tmpFile).catch(() => {});
+  }
 }
 
 async function callOllamaCLI(

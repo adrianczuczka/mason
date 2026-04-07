@@ -47,6 +47,28 @@ function printFindings(results: Awaited<ReturnType<typeof runAll>>): void {
   }
 }
 
+function extractMarkdown(raw: string): string {
+  const trimmed = raw.trim();
+
+  // If it starts with a markdown heading, it's already clean
+  if (trimmed.startsWith("# ")) return trimmed;
+
+  // If wrapped in a code fence, extract the content
+  const fenceMatch = trimmed.match(/```(?:markdown|md)?\n([\s\S]*?)```/);
+  if (fenceMatch) return fenceMatch[1].trim();
+
+  // Find the first markdown heading and take everything from there
+  const headingIndex = trimmed.search(/^# /m);
+  if (headingIndex >= 0) return trimmed.slice(headingIndex).trim();
+
+  // Last resort: find any line starting with ## and take from there
+  const subheadingIndex = trimmed.search(/^## /m);
+  if (subheadingIndex >= 0) return trimmed.slice(subheadingIndex).trim();
+
+  // Nothing looks like markdown — return as-is
+  return trimmed;
+}
+
 export function createCLI(): Command {
   const program = new Command();
 
@@ -191,13 +213,14 @@ export function createCLI(): Command {
           return;
         }
 
-        if (!result.text.trim()) {
+        const markdown = extractMarkdown(result.text);
+        if (!markdown.trim()) {
           log.error("LLM returned empty response.");
           process.exit(1);
         }
 
         const outPath = path.join(rootDir, "CLAUDE.md");
-        await fs.writeFile(outPath, result.text, "utf-8");
+        await fs.writeFile(outPath, markdown, "utf-8");
         log.success(`Generated ${outPath}`);
       } catch (err) {
         spinner.stop();
