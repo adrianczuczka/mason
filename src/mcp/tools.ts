@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import fg from "fast-glob";
+
+const exec = promisify(execFile);
 import { runAll } from "../analyzers/index.js";
 import { isGitRepo } from "../utils/git.js";
 import { sampleFiles, readFullFile } from "./sampler.js";
@@ -332,17 +336,62 @@ export async function getSnapshot(dir: string): Promise<string> {
     return JSON.stringify({
       exists: false,
       message:
-        'No snapshot found. Run "mason snapshot" to generate one (requires set-llm configured).',
+        "No snapshot found. Call full_analysis to read the codebase, then call save_snapshot with your summaries to create one.",
     });
   }
 
-  return JSON.stringify({
+  // Check staleness: compare snapshot git hash to current HEAD
+  const currentHash = await getCurrentGitHash(rootDir);
+  const isStale = snapshot.gitHash !== currentHash && snapshot.gitHash !== "unknown";
+
+  let changedFiles: string[] = [];
+  if (isStale) {
+    try {
+      const { stdout } = await exec(
+        "git",
+        ["diff", "--name-only", snapshot.gitHash, "HEAD"],
+        { cwd: rootDir }
+      );
+      changedFiles = stdout
+        .trim()
+        .split("\n")
+        .filter((f) => f.length > 0);
+    } catch {
+      // If diff fails, mark all as potentially stale
+      changedFiles = ["(unable to determine — snapshot hash no longer in git history)"];
+    }
+  }
+
+  // Check which snapshot files were affected
+  const snapshotPaths = new Set(snapshot.files.map((f) => f.path));
+  const staleFiles = changedFiles.filter((f) => snapshotPaths.has(f));
+  const newFiles = changedFiles.filter((f) => !snapshotPaths.has(f));
+
+  const output: Record<string, unknown> = {
     exists: true,
     createdAt: snapshot.createdAt,
     updatedAt: snapshot.updatedAt,
     fileCount: snapshot.files.length,
     files: snapshot.files,
-  });
+  };
+
+  if (isStale) {
+    output.stale = true;
+    output.staleSince = snapshot.gitHash.slice(0, 8);
+    output.staleInfo = {
+      totalChangedFiles: changedFiles.length,
+      snapshotFilesChanged: staleFiles,
+      newFiles: newFiles.slice(0, 20),
+      message:
+        staleFiles.length > 0
+          ? `${staleFiles.length} snapshot file(s) changed since last update. Use get_file_content to re-read them, then call save_snapshot to update.`
+          : `${changedFiles.length} file(s) changed but none are in the snapshot. Snapshot is still valid.`,
+    };
+  } else {
+    output.stale = false;
+  }
+
+  return JSON.stringify(output, null, 2);
 }
 
 export async function fullAnalysis(dir: string): Promise<string> {

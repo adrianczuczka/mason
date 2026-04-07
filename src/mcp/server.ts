@@ -131,7 +131,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_snapshot",
-    "Get the persistent project snapshot — LLM-generated summaries of key files including their purpose, role, and dependencies. The snapshot saves thousands of tokens by letting you understand the codebase without reading every file. Returns a suggestion to run 'mason snapshot' if no snapshot exists.",
+    "Get the persistent project snapshot — LLM-generated summaries of key files including their purpose, role, and dependencies. The snapshot saves thousands of tokens by letting you understand the codebase without reading every file. If the snapshot is stale (files changed since last update), it tells you which files need re-reading — use get_file_content on those, then call save_snapshot to update.",
     {
       dir: z
         .string()
