@@ -4,20 +4,35 @@ A context engineering tool that helps LLMs understand your codebase. Mason handl
 
 Works as an **MCP server** (for Claude Code, Cursor, etc.) or as a **standalone CLI** with any LLM provider.
 
+## Quick start
+
+```bash
+npx mason-ai setup    # registers Mason with Claude Code
+```
+
+Restart Claude Code, then ask: "use mason to analyze this project and generate a CLAUDE.md."
+
 ## Install
 
 ```bash
-npm install -g mason-context
+npm install -g mason-ai
 ```
 
 ## Usage
 
 ### As an MCP server (recommended)
 
-Add Mason to Claude Code:
+One-command setup for Claude Code:
 
 ```bash
-claude mcp add mason -- npx mason-context mcp
+mason setup                            # registers with Claude Code (user scope)
+mason setup --scope project            # project-scoped instead
+```
+
+Or manually:
+
+```bash
+claude mcp add mason -- npx mason-ai mcp
 ```
 
 Then ask Claude to generate a CLAUDE.md — it will call Mason's tools automatically.
@@ -27,8 +42,8 @@ Mason exposes 9 tools via MCP:
 | Tool | What it does |
 |---|---|
 | `full_analysis` | All-in-one: git stats + project structure + code samples + test map + snapshot |
-| `get_snapshot` | Load persistent project snapshot (file summaries from previous sessions) |
-| `save_snapshot` | Save file summaries for future sessions (no API key needed — the LLM generates them) |
+| `get_snapshot` | Load persistent project snapshot (auto-detects staleness) |
+| `save_snapshot` | Save file summaries for future sessions (no API key needed) |
 | `analyze_project` | Git history stats (commit patterns, stale dirs, hot files) |
 | `get_code_samples` | Smart file previews — config, entry points, architectural patterns, tests |
 | `get_file_content` | Read any file in full (drill-down after previewing) |
@@ -38,11 +53,11 @@ Mason exposes 9 tools via MCP:
 
 ### Persistent snapshots
 
-Mason can persist its understanding of your project across conversations, saving thousands of tokens per session.
+Mason persists its understanding of your project across conversations, saving thousands of tokens per session.
 
 **Via MCP (no API key needed):**
 
-Ask your AI assistant to "create a mason snapshot for this project." It will analyze the codebase, summarize each key file, and call `save_snapshot` to persist the summaries. Next session, it loads the snapshot via `get_snapshot` instead of re-reading everything.
+Ask your AI assistant to "create a mason snapshot for this project." It will analyze the codebase, summarize key files, and call `save_snapshot` to persist. Next session, it loads the snapshot via `get_snapshot` instead of re-reading everything. If the snapshot is stale (files changed since last update), Mason tells the LLM exactly which files to re-read.
 
 **Via CLI (requires LLM provider):**
 
@@ -51,8 +66,6 @@ mason set-llm gemini AIza-xxx          # configure a provider
 mason snapshot ~/my-project            # generate snapshot
 mason snapshot --install-hook          # auto-update on every commit
 ```
-
-The snapshot updates incrementally — after each commit, only changed files are re-summarized.
 
 ### As a standalone CLI
 

@@ -56,6 +56,42 @@ export function createCLI(): Command {
     .version("0.1.0");
 
   program
+    .command("setup")
+    .description("Register Mason as an MCP server with Claude Code")
+    .option("--scope <scope>", "Config scope: user or project", "user")
+    .action(async (opts: { scope: string }) => {
+      const { execFile } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const exec = promisify(execFile);
+
+      try {
+        // Check if claude CLI is available
+        await exec("claude", ["--version"]);
+      } catch {
+        log.error(
+          "Claude Code CLI not found. Install it from https://claude.ai/code"
+        );
+        process.exit(1);
+      }
+
+      try {
+        const args = [
+          "mcp", "add", "mason",
+          "--scope", opts.scope,
+          "--", "npx", "mason-ai", "mcp",
+        ];
+        await exec("claude", args);
+        log.success("Mason registered with Claude Code.");
+        log.info("Restart Claude Code to start using Mason's tools.");
+      } catch (err) {
+        log.error(
+          `Failed to register: ${err instanceof Error ? err.message : String(err)}`
+        );
+        process.exit(1);
+      }
+    });
+
+  program
     .command("set-llm")
     .description("Configure the LLM provider for standalone generation")
     .argument("<provider>", "LLM provider: claude, gemini, openai, or ollama")
