@@ -159,9 +159,10 @@ async function callGeminiCLI(
 
   try {
     await fs.writeFile(tmpFile, prompt, "utf-8");
+    // gemini -p takes the prompt as an argument, but pipe from file for length
     const { stdout } = await exec(
       "sh",
-      ["-c", `cat "${tmpFile}" | gemini -p`],
+      ["-c", `cat "${tmpFile}" | gemini -p ""`],
       { maxBuffer: 10_000_000, timeout: 300_000 }
     );
     return stdout.trim();
