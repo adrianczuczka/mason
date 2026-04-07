@@ -1,10 +1,10 @@
 {
-  "name": "foreman-context",
+  "name": "mason-context",
   "version": "0.1.0",
   "description": "Context engineering CLI — generates intelligent CLAUDE.md files through structured codebase analysis",
   "type": "module",
   "bin": {
-    "foreman": "./dist/bin/foreman.js"
+    "mason": "./dist/bin/mason.js"
   },
   "scripts": {
     "build": "tsup",
@@ -12,14 +12,21 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "keywords": ["context-engineering", "claude", "ai", "cli"],
+  "keywords": [
+    "context-engineering",
+    "claude",
+    "ai",
+    "cli"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@inquirer/prompts": "^8.4.0",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
     "fast-glob": "^3.3.3",
-    "ora": "^9.3.0"
+    "ora": "^9.3.0",
+    "ts-morph": "^27.0.2"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",

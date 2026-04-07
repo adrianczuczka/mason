@@ -1,3 +1,28 @@
 node_modules/
 dist/
 *.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.*
+
+# Mason cache (generated, user-specific)
+.mason-cache.json
+.foreman-cache.json
+
+# Coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*

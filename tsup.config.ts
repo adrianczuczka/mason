@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["bin/foreman.ts", "src/cli.ts"],
+  entry: ["bin/mason.ts", "src/cli.ts"],
   format: ["esm"],
   target: "node20",
   outDir: "dist",
