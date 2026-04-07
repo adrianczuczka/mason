@@ -68,8 +68,8 @@ export async function callLLM(
         };
       }
       return {
-        type: "prompt",
-        text: formatPromptForCopy(system, userMessage),
+        type: "response",
+        text: await callGeminiCLI(system, userMessage),
       };
 
     case "openai":
@@ -98,6 +98,18 @@ async function callClaudeCLI(
 ): Promise<string> {
   const prompt = `${system}\n\n${userMessage}`;
   const { stdout } = await exec("claude", ["-p", prompt], {
+    maxBuffer: 10_000_000,
+    timeout: 120_000,
+  });
+  return stdout.trim();
+}
+
+async function callGeminiCLI(
+  system: string,
+  userMessage: string
+): Promise<string> {
+  const prompt = `${system}\n\n${userMessage}`;
+  const { stdout } = await exec("gemini", ["-p", prompt], {
     maxBuffer: 10_000_000,
     timeout: 120_000,
   });

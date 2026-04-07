@@ -56,28 +56,21 @@ export function validateProvider(value: string): Provider {
 export async function detectCLI(
   provider: Provider
 ): Promise<{ available: boolean; version?: string }> {
-  if (provider === "claude") {
-    try {
-      const { stdout } = await exec("claude", ["--version"]);
-      return { available: true, version: stdout.trim() };
-    } catch {
-      return { available: false };
-    }
-  }
+  const cliName = provider === "claude" ? "claude"
+    : provider === "gemini" ? "gemini"
+    : provider === "ollama" ? "ollama"
+    : null;
 
-  if (provider === "ollama") {
-    try {
-      const { stdout } = await exec("ollama", ["--version"]);
-      return { available: true, version: stdout.trim() };
-    } catch {
-      return { available: false };
-    }
-  }
+  if (!cliName) return { available: false };
 
-  // Gemini/OpenAI don't have subscription CLIs
-  return { available: false };
+  try {
+    const { stdout } = await exec(cliName, ["--version"]);
+    return { available: true, version: stdout.trim() };
+  } catch {
+    return { available: false };
+  }
 }
 
 export function needsApiKey(provider: Provider): boolean {
-  return provider === "gemini" || provider === "openai";
+  return provider === "openai";
 }

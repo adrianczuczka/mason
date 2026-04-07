@@ -120,11 +120,12 @@ export function createCLI(): Command {
         if (!apiKey && !needsApiKey(validProvider)) {
           const cli = await detectCLI(validProvider);
           if (!cli.available) {
-            log.error(
-              validProvider === "claude"
-                ? "Claude Code CLI not found. Install it from https://claude.ai/code, or provide an API key: mason set-llm claude <api-key>"
-                : "Ollama not found. Install it from https://ollama.ai, or provide an API key for another provider."
-            );
+            const hints: Record<string, string> = {
+              claude: "Claude Code CLI not found. Install it from https://claude.ai/code, or provide an API key: mason set-llm claude <api-key>",
+              gemini: "Gemini CLI not found. Install it from https://ai.google.dev/gemini-api/docs/cli, or provide an API key: mason set-llm gemini <api-key>",
+              ollama: "Ollama not found. Install it from https://ollama.ai",
+            };
+            log.error(hints[validProvider] ?? "CLI not found for this provider.");
             process.exit(1);
           }
           log.info(
