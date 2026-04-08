@@ -515,12 +515,3 @@ export async function configureProject(
   });
 }
 
-export async function writeClaudeMd(
-  dir: string,
-  content: string
-): Promise<string> {
-  const rootDir = path.resolve(dir);
-  const outPath = path.join(rootDir, "CLAUDE.md");
-  await fs.writeFile(outPath, content, "utf-8");
-  return `Written to ${outPath}`;
-}

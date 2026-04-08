@@ -37,7 +37,7 @@ claude mcp add mason -- npx mason-ai mcp
 
 Then ask Claude to generate a CLAUDE.md — it will call Mason's tools automatically.
 
-Mason exposes 10 tools via MCP:
+Mason exposes 9 tools via MCP:
 
 | Tool | What it does |
 |---|---|
@@ -50,7 +50,6 @@ Mason exposes 10 tools via MCP:
 | `get_file_content` | Read any file in full (drill-down after previewing) |
 | `get_project_structure` | Directory tree with file counts and extension breakdown |
 | `get_test_map` | Map test files to source files by name matching |
-| `write_claude_md` | Save the generated CLAUDE.md |
 
 ### Persistent snapshots
 

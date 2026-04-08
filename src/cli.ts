@@ -219,7 +219,9 @@ export function createCLI(): Command {
           process.exit(1);
         }
 
-        const outPath = path.join(rootDir, "CLAUDE.md");
+        const claudeDir = path.join(rootDir, ".claude");
+        await fs.mkdir(claudeDir, { recursive: true });
+        const outPath = path.join(claudeDir, "CLAUDE.md");
         await fs.writeFile(outPath, markdown, "utf-8");
         log.success(`Generated ${outPath}`);
       } catch (err) {

@@ -11,7 +11,6 @@ import {
   getSnapshot,
   getTestMap,
   saveSnapshotData,
-  writeClaudeMd,
 } from "./tools.js";
 
 export function createMcpServer(): McpServer {
@@ -22,7 +21,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool that helps you understand codebases efficiently. Recommended workflow: 1) Call get_snapshot first — if a snapshot exists, you already have file summaries and can skip re-reading most files. 2) If no snapshot, call full_analysis for git stats, project structure, code samples, and test map. 3) Call get_file_content to read specific files in full. 4) Call save_snapshot to persist your understanding for future sessions (saves thousands of tokens next time). 5) Call write_claude_md to save the final output. Individual tools (analyze_project, get_code_samples, get_project_structure, get_test_map) are also available for targeted queries.",
+        "Mason is a context engineering tool that helps you understand codebases efficiently. Recommended workflow: 1) Call get_snapshot first — if a snapshot exists, you already have file summaries and can skip re-reading most files. 2) If no snapshot, call full_analysis for git stats, project structure, code samples, and test map. 3) Call get_file_content to read specific files in full. 4) Call save_snapshot to persist your understanding for future sessions (saves thousands of tokens next time). 5) Write the CLAUDE.md yourself using the analysis data. Individual tools (analyze_project, get_code_samples, get_project_structure, get_test_map) are also available for targeted queries.",
     }
   );
 
@@ -209,25 +208,6 @@ export function createMcpServer(): McpServer {
         alwaysInclude,
         ignore,
       });
-      return {
-        content: [{ type: "text", text: result }],
-      };
-    }
-  );
-
-  server.tool(
-    "write_claude_md",
-    "Write a CLAUDE.md file to a project directory. Use this after analyzing the project and generating rules.",
-    {
-      dir: z
-        .string()
-        .describe("Absolute path to the project root directory"),
-      content: z
-        .string()
-        .describe("The full markdown content to write to CLAUDE.md"),
-    },
-    async ({ dir, content }) => {
-      const result = await writeClaudeMd(dir, content);
       return {
         content: [{ type: "text", text: result }],
       };
