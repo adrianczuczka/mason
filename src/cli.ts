@@ -307,6 +307,44 @@ export function createCLI(): Command {
     });
 
   program
+    .command("lint")
+    .description("Check if CLAUDE.md has drifted from the actual codebase")
+    .argument("[dir]", "Directory to check", ".")
+    .action(async (dir: string) => {
+      const { detectDrift } = await import("./lint/drift.js");
+      const rootDir = path.resolve(dir);
+
+      const spinner = ora("Checking for drift...").start();
+      const result = await detectDrift(rootDir);
+      spinner.stop();
+
+      if (!result.claudeMdPath) {
+        log.warn('No CLAUDE.md found. Run "mason generate" to create one.');
+        return;
+      }
+
+      if (result.issues.length === 0) {
+        log.success("CLAUDE.md is up to date — no drift detected.");
+        return;
+      }
+
+      console.log(
+        chalk.bold(`\n${result.issues.length} issue(s) found:\n`)
+      );
+      for (const issue of result.issues) {
+        const icon =
+          issue.type === "deleted-reference" ? chalk.red("✖") :
+          issue.type === "stale-count" ? chalk.red("✖") :
+          issue.type === "new-module" ? chalk.yellow("⚠") :
+          chalk.yellow("⚠");
+        console.log(`  ${icon} ${issue.message}`);
+      }
+      console.log(
+        chalk.gray('\nRun "mason generate" to regenerate CLAUDE.md.')
+      );
+    });
+
+  program
     .command("analyze")
     .description("Analyze the codebase and print findings")
     .argument("[dir]", "Directory to analyze", ".")
