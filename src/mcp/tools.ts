@@ -472,24 +472,3 @@ export async function configureProject(
   });
 }
 
-export async function checkDrift(dir: string): Promise<string> {
-  const { detectDrift } = await import("../lint/drift.js");
-  const rootDir = path.resolve(dir);
-  const result = await detectDrift(rootDir);
-
-  if (!result.claudeMdPath) {
-    return JSON.stringify({
-      hasClaude: false,
-      message: "No CLAUDE.md found. Run mason generate to create one.",
-    });
-  }
-
-  return JSON.stringify({
-    hasClaude: true,
-    claudeMdPath: result.claudeMdPath,
-    lastGenerated: result.lastGenerated,
-    issueCount: result.issues.length,
-    issues: result.issues,
-    drifted: result.issues.length > 0,
-  });
-}

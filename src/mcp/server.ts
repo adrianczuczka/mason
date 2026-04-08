@@ -3,7 +3,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   analyzeProject,
-  checkDrift,
   configureProject,
   fullAnalysis,
   getCodeSamples,
@@ -173,22 +172,6 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir, features, flows }) => {
       const result = await saveSnapshotData(dir, features, flows);
-      return {
-        content: [{ type: "text", text: result }],
-      };
-    }
-  );
-
-  server.tool(
-    "check_drift",
-    "Check if the CLAUDE.md has drifted from the actual codebase. Detects deleted file references, new modules not mentioned, changed config files, dependency updates, and stale module counts. No LLM needed — purely deterministic.",
-    {
-      dir: z
-        .string()
-        .describe("Absolute path to the project root directory"),
-    },
-    async ({ dir }) => {
-      const result = await checkDrift(dir);
       return {
         content: [{ type: "text", text: result }],
       };
