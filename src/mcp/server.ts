@@ -21,7 +21,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool that helps you understand codebases efficiently. Recommended workflow: 1) Call get_snapshot first — if a concept map exists, use it to jump straight to relevant files (e.g., 'home screen' maps to HomeScreen.kt, HomeViewModel.kt). 2) If no snapshot, call full_analysis for git stats, project structure, code samples, and test map. 3) Call get_file_content to read specific files in full. 4) Call save_snapshot with features (concept-to-files) and flows (data chains) to persist your understanding for future sessions. 5) Call write_claude_md to save the final output.",
+        "IMPORTANT: You MUST call get_snapshot BEFORE reading any project files, using Explore agents, or running Glob/Grep. Do NOT skip this step. The snapshot is a concept map that tells you exactly which files implement each feature and flow — it eliminates the need to search. TRIGGER: Call get_snapshot whenever the user asks about codebase structure, features, flows, architecture, how something works, or asks you to modify/fix/add code. Workflow: 1) Call get_snapshot first. 2) If no snapshot exists, call full_analysis instead. 3) Use get_file_content to read the specific files the snapshot points to. 4) After understanding the codebase, call save_snapshot to persist your concept map for future sessions. 5) Call write_claude_md if generating documentation.",
     }
   );
 
