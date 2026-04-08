@@ -13,7 +13,7 @@ import {
   saveSnapshot,
   getCurrentGitHash,
 } from "../snapshot/snapshot.js";
-import type { Snapshot, FileSummary } from "../snapshot/snapshot.js";
+import type { Snapshot } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
 
 const IGNORE = [
@@ -336,59 +336,28 @@ export async function getSnapshot(dir: string): Promise<string> {
     return JSON.stringify({
       exists: false,
       message:
-        "No snapshot found. Call full_analysis to read the codebase, then call save_snapshot with your summaries to create one.",
+        "No concept map found. Run 'mason snapshot' to create one, or call save_snapshot with features and flows.",
     });
   }
 
-  // Check staleness: compare snapshot git hash to current HEAD
+  // Check staleness
   const currentHash = await getCurrentGitHash(rootDir);
   const isStale = snapshot.gitHash !== currentHash && snapshot.gitHash !== "unknown";
-
-  let changedFiles: string[] = [];
-  if (isStale) {
-    try {
-      const { stdout } = await exec(
-        "git",
-        ["diff", "--name-only", snapshot.gitHash, "HEAD"],
-        { cwd: rootDir }
-      );
-      changedFiles = stdout
-        .trim()
-        .split("\n")
-        .filter((f) => f.length > 0);
-    } catch {
-      // If diff fails, mark all as potentially stale
-      changedFiles = ["(unable to determine — snapshot hash no longer in git history)"];
-    }
-  }
-
-  // Check which snapshot files were affected
-  const snapshotPaths = new Set(snapshot.files.map((f) => f.path));
-  const staleFiles = changedFiles.filter((f) => snapshotPaths.has(f));
-  const newFiles = changedFiles.filter((f) => !snapshotPaths.has(f));
 
   const output: Record<string, unknown> = {
     exists: true,
     createdAt: snapshot.createdAt,
     updatedAt: snapshot.updatedAt,
-    fileCount: snapshot.files.length,
-    files: snapshot.files,
+    featureCount: Object.keys(snapshot.features).length,
+    flowCount: Object.keys(snapshot.flows).length,
+    features: snapshot.features,
+    flows: snapshot.flows,
+    stale: isStale,
   };
 
   if (isStale) {
-    output.stale = true;
-    output.staleSince = snapshot.gitHash.slice(0, 8);
-    output.staleInfo = {
-      totalChangedFiles: changedFiles.length,
-      snapshotFilesChanged: staleFiles,
-      newFiles: newFiles.slice(0, 20),
-      message:
-        staleFiles.length > 0
-          ? `${staleFiles.length} snapshot file(s) changed since last update. Use get_file_content to re-read them, then call save_snapshot to update.`
-          : `${changedFiles.length} file(s) changed but none are in the snapshot. Snapshot is still valid.`,
-    };
-  } else {
-    output.stale = false;
+    output.message =
+      "Snapshot is behind HEAD. Some features/flows may reference changed files. Run 'mason snapshot-update' or call save_snapshot to refresh.";
   }
 
   return JSON.stringify(output, null, 2);
@@ -414,13 +383,13 @@ export async function fullAnalysis(dir: string): Promise<string> {
   };
 
   if (snapshot) {
-    output.snapshot = {
+    output.conceptMap = {
       updatedAt: snapshot.updatedAt,
-      fileCount: snapshot.files.length,
-      files: snapshot.files,
+      features: snapshot.features,
+      flows: snapshot.flows,
     };
     output.note =
-      "Full project analysis with snapshot. The snapshot contains LLM-generated summaries of key files — use these to understand the codebase without reading every file. Use get_file_content to drill into specific files.";
+      "Full project analysis with concept map. The concept map shows which files implement each feature and how data flows through them. Use it to jump straight to relevant files instead of exploring. Use get_file_content to read specific files.";
   }
 
   return JSON.stringify(output, null, 2);
@@ -428,12 +397,8 @@ export async function fullAnalysis(dir: string): Promise<string> {
 
 export async function saveSnapshotData(
   dir: string,
-  files: Array<{
-    path: string;
-    summary: string;
-    role: string;
-    dependencies?: string[];
-  }>
+  features: Record<string, { description: string; files: string[]; tests?: string[] }>,
+  flows: Record<string, { description: string; chain: string[] }>
 ): Promise<string> {
   const rootDir = path.resolve(dir);
   const gitHash = await getCurrentGitHash(rootDir);
@@ -441,42 +406,34 @@ export async function saveSnapshotData(
 
   const existing = await loadSnapshot(rootDir);
 
-  const fileSummaries: FileSummary[] = files.map((f) => ({
-    path: f.path,
-    summary: f.summary,
-    role: f.role,
-    dependencies: f.dependencies ?? [],
-    lastUpdated: now,
-    gitHash,
-  }));
-
   if (existing) {
-    // Merge: update existing entries, add new ones
-    const newPaths = new Set(files.map((f) => f.path));
-    const kept = existing.files.filter((f) => !newPaths.has(f.path));
-    existing.files = [...kept, ...fileSummaries];
+    // Merge: overwrite matching features/flows, keep the rest
+    existing.features = { ...existing.features, ...features };
+    existing.flows = { ...existing.flows, ...flows };
     existing.updatedAt = now;
     existing.gitHash = gitHash;
     await saveSnapshot(rootDir, existing);
     return JSON.stringify({
       status: "updated",
-      totalFiles: existing.files.length,
-      addedOrUpdated: files.length,
+      features: Object.keys(existing.features).length,
+      flows: Object.keys(existing.flows).length,
     });
   }
 
   const snapshot: Snapshot = {
-    version: 1,
+    version: 2,
     createdAt: now,
     updatedAt: now,
     gitHash,
-    files: fileSummaries,
+    features,
+    flows,
   };
 
   await saveSnapshot(rootDir, snapshot);
   return JSON.stringify({
     status: "created",
-    totalFiles: snapshot.files.length,
+    features: Object.keys(features).length,
+    flows: Object.keys(flows).length,
   });
 }
 

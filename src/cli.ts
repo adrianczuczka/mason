@@ -270,8 +270,10 @@ export function createCLI(): Command {
       try {
         const snapshot = await createSnapshot(rootDir, config);
         spinner.stop();
+        const featureCount = Object.keys(snapshot.features).length;
+        const flowCount = Object.keys(snapshot.flows).length;
         log.success(
-          `Snapshot created with ${snapshot.files.length} file summaries → .mason/snapshot.json`
+          `Concept map created: ${featureCount} features, ${flowCount} flows → .mason/snapshot.json`
         );
       } catch (err) {
         spinner.stop();
@@ -295,13 +297,10 @@ export function createCLI(): Command {
 
       try {
         const result = await updateSnapshot(rootDir, config);
-        if (result.added + result.updated + result.removed === 0) {
-          // No changes — silent when called from hook
-          return;
+        if (result.status === "up-to-date" || result.status === "unchanged") {
+          return; // Silent when called from hook
         }
-        log.success(
-          `Snapshot updated: ${result.added} added, ${result.updated} updated, ${result.removed} removed`
-        );
+        log.success(`Concept map ${result.status}: ${result.details}`);
       } catch {
         // Silent failure — don't break the user's commit flow
       }

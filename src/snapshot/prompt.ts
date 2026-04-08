@@ -1,24 +1,46 @@
-export const SNAPSHOT_SYSTEM_PROMPT = `You are Mason, a context engineering tool. You're given source files from a codebase. For each file, produce a concise summary that helps an AI coding assistant understand the file without reading it.
+export const SNAPSHOT_SYSTEM_PROMPT = `You are Mason, a context engineering tool. You're given source files from a codebase. Your job is to create a concept-to-files map that helps an AI coding assistant instantly find the right files for any task.
 
-Respond with ONLY a JSON array. No markdown, no explanation, no code fences. Just the raw JSON array.
+Respond with ONLY a JSON object. No markdown, no explanation, no code fences. Just the raw JSON.
 
-Each element must have:
-- "path": the file path (exactly as given)
-- "summary": one-line description of what the file does and how (mention key patterns, libraries, types used)
-- "role": the architectural role (e.g., "viewmodel", "repository implementation", "DI module", "API client", "config", "entry point", "test", "model", "middleware", "route handler")
-- "dependencies": array of other file names this file likely depends on (based on imports/references you see in the code)
+The JSON must have two keys: "features" and "flows".
 
-Keep summaries specific and actionable. Mention concrete class names, patterns, and libraries — not generic descriptions.
+"features" maps user-facing feature names or concepts to the files that implement them. Group files by what a developer would naturally ask about. Use plain language names ("home screen", not "HomeScreenModule").
+
+"flows" maps data/action flows to ordered chains of files showing how data moves through the system. These help when someone asks "what happens when X?"
 
 Example output:
-[
-  {
-    "path": "src/services/AuthService.ts",
-    "summary": "Handles JWT authentication. Uses jsonwebtoken for token creation/verification, bcrypt for password hashing. Depends on UserRepository for user lookup.",
-    "role": "service",
-    "dependencies": ["UserRepository.ts", "User.ts"]
+{
+  "features": {
+    "user authentication": {
+      "description": "Login, signup, token refresh, and session management",
+      "files": ["src/services/AuthService.ts", "src/middleware/AuthMiddleware.ts", "src/models/User.ts", "src/routes/auth.ts"],
+      "tests": ["tests/auth.test.ts"]
+    },
+    "payment processing": {
+      "description": "Stripe integration for subscriptions and one-time payments",
+      "files": ["src/services/PaymentService.ts", "src/webhooks/stripe.ts", "src/models/Subscription.ts"],
+      "tests": ["tests/payment.test.ts"]
+    }
+  },
+  "flows": {
+    "user login": {
+      "description": "User submits credentials, gets JWT token",
+      "chain": ["src/routes/auth.ts", "src/services/AuthService.ts", "src/models/User.ts"]
+    },
+    "process payment": {
+      "description": "User initiates payment, Stripe charges card, webhook confirms",
+      "chain": ["src/routes/payment.ts", "src/services/PaymentService.ts", "src/webhooks/stripe.ts"]
+    }
   }
-]`;
+}
+
+Rules:
+- Use the FULL relative file paths exactly as given in the input
+- Group by what a human would naturally ask about, not by technical structure
+- Each feature should have 2-8 files — not too granular, not too broad
+- Flows should show the actual call chain order
+- Include test files in the "tests" field when they exist
+- Cover ALL the files you're given — don't skip any`;
 
 export function buildSnapshotPrompt(
   files: Array<{ path: string; content: string }>
@@ -30,17 +52,13 @@ export function buildSnapshotPrompt(
     )
     .join("\n\n");
 
-  return `Summarize each of these source files:\n\n${fileBlocks}`;
+  return `Create a concept-to-files map for this codebase. Here are the key source files:\n\n${fileBlocks}`;
 }
 
 export function buildIncrementalPrompt(
   files: Array<{ path: string; content: string }>,
-  existingSummaries: Array<{ path: string; summary: string; role: string }>
+  existingSnapshot: { features: Record<string, unknown>; flows: Record<string, unknown> }
 ): string {
-  const context = existingSummaries.length > 0
-    ? `\nFor context, here are existing summaries of other files in the project:\n${existingSummaries.map((s) => `- ${s.path}: ${s.summary}`).join("\n")}\n`
-    : "";
-
   const fileBlocks = files
     .map(
       (f) =>
@@ -48,5 +66,11 @@ export function buildIncrementalPrompt(
     )
     .join("\n\n");
 
-  return `${context}\nSummarize each of these updated/new source files:\n\n${fileBlocks}`;
+  return `Here is the existing concept map for this project:
+${JSON.stringify(existingSnapshot, null, 2)}
+
+These files have been added or changed. Update the concept map to incorporate them. Return the FULL updated map (not just the changes).
+
+Changed/new files:
+${fileBlocks}`;
 }

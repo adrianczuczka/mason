@@ -21,7 +21,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool that helps you understand codebases efficiently. Recommended workflow: 1) Call get_snapshot first — if a snapshot exists, you already have file summaries and can skip re-reading most files. 2) If no snapshot, call full_analysis for git stats, project structure, code samples, and test map. 3) Call get_file_content to read specific files in full. 4) Call save_snapshot to persist your understanding for future sessions (saves thousands of tokens next time). 5) Write the CLAUDE.md yourself using the analysis data. Individual tools (analyze_project, get_code_samples, get_project_structure, get_test_map) are also available for targeted queries.",
+        "Mason is a context engineering tool that helps you understand codebases efficiently. Recommended workflow: 1) Call get_snapshot first — if a concept map exists, use it to jump straight to relevant files (e.g., 'home screen' maps to HomeScreen.kt, HomeViewModel.kt). 2) If no snapshot, call full_analysis for git stats, project structure, code samples, and test map. 3) Call get_file_content to read specific files in full. 4) Call save_snapshot with features (concept-to-files) and flows (data chains) to persist your understanding for future sessions. 5) Call write_claude_md to save the final output.",
     }
   );
 
@@ -131,7 +131,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_snapshot",
-    "Get the persistent project snapshot — LLM-generated summaries of key files including their purpose, role, and dependencies. The snapshot saves thousands of tokens by letting you understand the codebase without reading every file. If the snapshot is stale (files changed since last update), it tells you which files need re-reading — use get_file_content on those, then call save_snapshot to update.",
+    "Get the project's concept map — a lookup table from features and flows to the files that implement them. Use this to jump straight to relevant files instead of exploring. Example: 'home screen' → [HomeScreen.kt, HomeViewModel.kt, HomeModule.kt]. If stale, run 'mason snapshot-update' to refresh.",
     {
       dir: z
         .string()
@@ -147,35 +147,31 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "save_snapshot",
-    "Save file summaries as a persistent project snapshot. Call this after reading code samples from get_code_samples or full_analysis — summarize each file's purpose, role, and dependencies, then save them here. The snapshot persists across conversations, so future sessions can call get_snapshot to understand the codebase without re-reading files. No API key needed — you are the LLM generating the summaries.",
+    "Save a concept-to-files map as a persistent project snapshot. Maps feature names and data flows to the files that implement them. Persists across conversations — future sessions can call get_snapshot to instantly find relevant files. No API key needed — you are the LLM generating the map.",
     {
       dir: z
         .string()
         .describe("Absolute path to the project root directory"),
-      files: z
-        .array(
+      features: z
+        .record(
           z.object({
-            path: z.string().describe("Relative file path"),
-            summary: z
-              .string()
-              .describe(
-                "One-line summary: what the file does, key patterns, libraries used"
-              ),
-            role: z
-              .string()
-              .describe(
-                "Architectural role: viewmodel, repository, service, config, test, etc."
-              ),
-            dependencies: z
-              .array(z.string())
-              .optional()
-              .describe("File names this file depends on"),
+            description: z.string().describe("One-line description of the feature"),
+            files: z.array(z.string()).describe("File paths that implement this feature"),
+            tests: z.array(z.string()).optional().describe("Test file paths for this feature"),
           })
         )
-        .describe("Array of file summaries to save"),
+        .describe("Map of feature names to their implementing files"),
+      flows: z
+        .record(
+          z.object({
+            description: z.string().describe("One-line description of the flow"),
+            chain: z.array(z.string()).describe("Ordered list of file paths showing data/call flow"),
+          })
+        )
+        .describe("Map of flow names to ordered file chains"),
     },
-    async ({ dir, files }) => {
-      const result = await saveSnapshotData(dir, files);
+    async ({ dir, features, flows }) => {
+      const result = await saveSnapshotData(dir, features, flows);
       return {
         content: [{ type: "text", text: result }],
       };

@@ -13,21 +13,24 @@ import {
 
 const exec = promisify(execFile);
 
-export interface FileSummary {
-  path: string;
-  summary: string;
-  role: string;
-  dependencies: string[];
-  lastUpdated: string;
-  gitHash: string;
+export interface FeatureEntry {
+  description: string;
+  files: string[];
+  tests?: string[];
+}
+
+export interface FlowEntry {
+  description: string;
+  chain: string[];
 }
 
 export interface Snapshot {
-  version: 1;
+  version: 2;
   createdAt: string;
   updatedAt: string;
   gitHash: string;
-  files: FileSummary[];
+  features: Record<string, FeatureEntry>;
+  flows: Record<string, FlowEntry>;
 }
 
 function snapshotDir(rootDir: string): string {
@@ -41,7 +44,10 @@ function snapshotPath(rootDir: string): string {
 export async function loadSnapshot(rootDir: string): Promise<Snapshot | null> {
   try {
     const raw = await fs.readFile(snapshotPath(rootDir), "utf-8");
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    // Skip v1 snapshots — they're the old per-file format
+    if (parsed.version !== 2) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -70,13 +76,10 @@ export async function getCurrentGitHash(rootDir: string): Promise<string> {
   }
 }
 
-function parseLLMResponse(raw: string): Array<{
-  path: string;
-  summary: string;
-  role: string;
-  dependencies: string[];
-}> {
-  // Strip markdown code fences if present
+function parseSnapshotResponse(raw: string): {
+  features: Record<string, FeatureEntry>;
+  flows: Record<string, FlowEntry>;
+} {
   let cleaned = raw.trim();
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
@@ -84,25 +87,25 @@ function parseLLMResponse(raw: string): Array<{
 
   try {
     const parsed = JSON.parse(cleaned);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item: unknown) =>
-        typeof item === "object" &&
-        item !== null &&
-        "path" in item &&
-        "summary" in item
-    );
+    return {
+      features: parsed.features ?? {},
+      flows: parsed.flows ?? {},
+    };
   } catch {
-    // Try to find JSON array in the response
-    const match = raw.match(/\[[\s\S]*\]/);
+    // Try to find JSON object in the response
+    const match = raw.match(/\{[\s\S]*\}/);
     if (match) {
       try {
-        return JSON.parse(match[0]);
+        const parsed = JSON.parse(match[0]);
+        return {
+          features: parsed.features ?? {},
+          flows: parsed.flows ?? {},
+        };
       } catch {
-        return [];
+        return { features: {}, flows: {} };
       }
     }
-    return [];
+    return { features: {}, flows: {} };
   }
 }
 
@@ -124,41 +127,42 @@ export async function createSnapshot(
     }
   }
 
+  const gitHash = await getCurrentGitHash(resolvedRoot);
+  const now = new Date().toISOString();
+
   if (filesWithContent.length === 0) {
-    const gitHash = await getCurrentGitHash(resolvedRoot);
-    const now = new Date().toISOString();
-    return { version: 1, createdAt: now, updatedAt: now, gitHash, files: [] };
+    return {
+      version: 2,
+      createdAt: now,
+      updatedAt: now,
+      gitHash,
+      features: {},
+      flows: {},
+    };
   }
 
-  // Call LLM to summarize
+  // Call LLM to build concept map
   const userMessage = buildSnapshotPrompt(filesWithContent);
   const result = await callLLM(config, userMessage, SNAPSHOT_SYSTEM_PROMPT);
 
-  if (result.type === "prompt") {
+  const resultText =
+    typeof result === "string" ? result : result.type === "text" ? result.text : "";
+
+  if (!resultText) {
     throw new Error(
       "No CLI or API key available for this provider. Use claude or ollama (no key needed), or provide an API key."
     );
   }
 
-  const summaries = parseLLMResponse(result.text);
-  const gitHash = await getCurrentGitHash(resolvedRoot);
-  const now = new Date().toISOString();
-
-  const files: FileSummary[] = summaries.map((s) => ({
-    path: s.path,
-    summary: s.summary,
-    role: s.role ?? "unknown",
-    dependencies: s.dependencies ?? [],
-    lastUpdated: now,
-    gitHash,
-  }));
+  const { features, flows } = parseSnapshotResponse(resultText);
 
   const snapshot: Snapshot = {
-    version: 1,
+    version: 2,
     createdAt: now,
     updatedAt: now,
     gitHash,
-    files,
+    features,
+    flows,
   };
 
   await saveSnapshot(resolvedRoot, snapshot);
@@ -168,13 +172,18 @@ export async function createSnapshot(
 export async function updateSnapshot(
   rootDir: string,
   config: MasonConfig
-): Promise<{ added: number; updated: number; removed: number }> {
+): Promise<{ status: string; details: string }> {
   const resolvedRoot = path.resolve(rootDir);
   const existing = await loadSnapshot(resolvedRoot);
 
   if (!existing) {
     const snapshot = await createSnapshot(rootDir, config);
-    return { added: snapshot.files.length, updated: 0, removed: 0 };
+    const featureCount = Object.keys(snapshot.features).length;
+    const flowCount = Object.keys(snapshot.flows).length;
+    return {
+      status: "created",
+      details: `New snapshot: ${featureCount} features, ${flowCount} flows`,
+    };
   }
 
   // Find files changed since last snapshot
@@ -190,125 +199,85 @@ export async function updateSnapshot(
       .split("\n")
       .filter((f) => f.length > 0);
   } catch {
-    // If git diff fails (e.g., hash no longer exists), do a full rebuild
+    // Full rebuild if git diff fails
     const snapshot = await createSnapshot(rootDir, config);
-    return { added: snapshot.files.length, updated: 0, removed: 0 };
+    const featureCount = Object.keys(snapshot.features).length;
+    return { status: "rebuilt", details: `${featureCount} features` };
   }
 
   if (changedFiles.length === 0) {
-    return { added: 0, updated: 0, removed: 0 };
+    return { status: "up-to-date", details: "No changes since last snapshot" };
   }
 
-  // Categorize changes
-  const existingPaths = new Set(existing.files.map((f) => f.path));
-  const filesToUpdate: string[] = [];
-  const filesToRemove: string[] = [];
-
-  for (const file of changedFiles) {
-    if (existingPaths.has(file)) {
-      filesToUpdate.push(file);
-    }
-  }
-
-  // Check if any snapshot files were deleted
-  for (const file of existing.files) {
-    try {
-      await fs.access(path.join(resolvedRoot, file.path));
-    } catch {
-      filesToRemove.push(file.path);
-    }
-  }
-
-  // Check for new architecturally important files among the changes
+  // Check which changed files are architecturally relevant
   const sampled = await sampleFiles(resolvedRoot, 30);
   const sampledPaths = new Set(sampled.map((s) => s.path));
-  const newArchFiles = changedFiles.filter(
-    (f) => sampledPaths.has(f) && !existingPaths.has(f)
+
+  // Also check which changed files are referenced in the existing snapshot
+  const snapshotFiles = new Set<string>();
+  for (const feature of Object.values(existing.features)) {
+    for (const f of feature.files) snapshotFiles.add(f);
+    for (const t of feature.tests ?? []) snapshotFiles.add(t);
+  }
+  for (const flow of Object.values(existing.flows)) {
+    for (const f of flow.chain) snapshotFiles.add(f);
+  }
+
+  const relevantChanges = changedFiles.filter(
+    (f) => sampledPaths.has(f) || snapshotFiles.has(f)
   );
 
-  const allFilesToProcess = [...new Set([...filesToUpdate, ...newArchFiles])];
+  if (relevantChanges.length === 0) {
+    // Changes don't affect snapshot files
+    existing.gitHash = await getCurrentGitHash(resolvedRoot);
+    existing.updatedAt = new Date().toISOString();
+    await saveSnapshot(resolvedRoot, existing);
+    return {
+      status: "unchanged",
+      details: `${changedFiles.length} files changed but none affect the concept map`,
+    };
+  }
 
-  let added = 0;
-  let updated = 0;
-  const removed = filesToRemove.length;
-
-  if (allFilesToProcess.length > 0) {
-    // Read full content of files to process
-    const filesWithContent: Array<{ path: string; content: string }> = [];
-    for (const filePath of allFilesToProcess) {
-      const full = await readFullFile(resolvedRoot, filePath);
-      if (full) {
-        filesWithContent.push({ path: full.path, content: full.content });
-      }
-    }
-
-    if (filesWithContent.length > 0) {
-      // Get existing summaries for context
-      const existingSummaries = existing.files
-        .filter((f) => !allFilesToProcess.includes(f.path))
-        .map((f) => ({ path: f.path, summary: f.summary, role: f.role }));
-
-      const userMessage = buildIncrementalPrompt(
-        filesWithContent,
-        existingSummaries
-      );
-      const llmResult = await callLLM(
-        config,
-        userMessage,
-        SNAPSHOT_SYSTEM_PROMPT
-      );
-
-      if (llmResult.type === "prompt") {
-        throw new Error(
-          "No CLI or API key available for this provider."
-        );
-      }
-
-      const newSummaries = parseLLMResponse(llmResult.text);
-      const gitHash = await getCurrentGitHash(resolvedRoot);
-      const now = new Date().toISOString();
-
-      // Merge: update existing, add new, remove deleted
-      const updatedFiles = existing.files
-        .filter(
-          (f) =>
-            !filesToRemove.includes(f.path) &&
-            !allFilesToProcess.includes(f.path)
-        );
-
-      for (const summary of newSummaries) {
-        const isNew = !existingPaths.has(summary.path);
-        if (isNew) added++;
-        else updated++;
-
-        updatedFiles.push({
-          path: summary.path,
-          summary: summary.summary,
-          role: summary.role ?? "unknown",
-          dependencies: summary.dependencies ?? [],
-          lastUpdated: now,
-          gitHash,
-        });
-      }
-
-      existing.files = updatedFiles;
-      existing.updatedAt = now;
-      existing.gitHash = gitHash;
+  // Read changed files and ask LLM to update the map
+  const filesWithContent: Array<{ path: string; content: string }> = [];
+  for (const filePath of relevantChanges) {
+    const full = await readFullFile(resolvedRoot, filePath);
+    if (full) {
+      filesWithContent.push({ path: full.path, content: full.content });
     }
   }
 
-  // Remove deleted files
-  if (filesToRemove.length > 0) {
-    existing.files = existing.files.filter(
-      (f) => !filesToRemove.includes(f.path)
-    );
+  if (filesWithContent.length === 0) {
+    return { status: "unchanged", details: "Changed files could not be read" };
   }
 
+  const userMessage = buildIncrementalPrompt(filesWithContent, {
+    features: existing.features,
+    flows: existing.flows,
+  });
+
+  const result = await callLLM(config, userMessage, SNAPSHOT_SYSTEM_PROMPT);
+  const resultText =
+    typeof result === "string" ? result : result.type === "text" ? result.text : "";
+
+  if (!resultText) {
+    throw new Error("No CLI or API key available for this provider.");
+  }
+
+  const { features, flows } = parseSnapshotResponse(resultText);
+  const gitHash = await getCurrentGitHash(resolvedRoot);
+
+  existing.features = features;
+  existing.flows = flows;
   existing.updatedAt = new Date().toISOString();
-  existing.gitHash = await getCurrentGitHash(resolvedRoot);
+  existing.gitHash = gitHash;
+
   await saveSnapshot(resolvedRoot, existing);
 
-  return { added, updated, removed };
+  return {
+    status: "updated",
+    details: `${Object.keys(features).length} features, ${Object.keys(flows).length} flows (${relevantChanges.length} files changed)`,
+  };
 }
 
 export async function installHook(rootDir: string): Promise<void> {
@@ -328,16 +297,13 @@ export async function installHook(rootDir: string): Promise<void> {
 mason snapshot-update "$(git rev-parse --show-toplevel)" &
 `;
 
-  // Check if hook already exists
   try {
     const existing = await fs.readFile(hookPath, "utf-8");
     if (existing.includes("mason snapshot-update")) {
       return; // Already installed
     }
-    // Append to existing hook
     await fs.appendFile(hookPath, "\n" + hookContent);
   } catch {
-    // No existing hook — create new
     await fs.writeFile(hookPath, hookContent, { mode: 0o755 });
   }
 }
