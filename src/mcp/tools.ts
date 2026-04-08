@@ -472,3 +472,12 @@ export async function configureProject(
   });
 }
 
+export async function getImpact(
+  dir: string,
+  files: string[]
+): Promise<string> {
+  const { analyzeImpact } = await import("../impact/impact.js");
+  const rootDir = path.resolve(dir);
+  const result = await analyzeImpact(rootDir, files);
+  return JSON.stringify(result, null, 2);
+}

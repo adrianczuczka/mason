@@ -307,6 +307,54 @@ export function createCLI(): Command {
     });
 
   program
+    .command("impact")
+    .description("Show files affected by changes to a given file")
+    .argument("<files...>", "File paths or names to analyze")
+    .option("-d, --dir <dir>", "Project directory", ".")
+    .action(async (files: string[], opts: { dir: string }) => {
+      const { analyzeImpact } = await import("./impact/impact.js");
+      const rootDir = path.resolve(opts.dir);
+
+      const spinner = ora("Analyzing impact...").start();
+      const result = await analyzeImpact(rootDir, files);
+      spinner.stop();
+
+      console.log(chalk.bold(`\nImpact analysis for: ${result.targetFiles.join(", ")}\n`));
+
+      if (result.cochange.length > 0) {
+        console.log(chalk.bold("  Co-change (files that historically change together):"));
+        for (const entry of result.cochange) {
+          const rate = chalk.gray(`${Math.round(entry.cochangeRate * 100)}%`);
+          console.log(`    ${rate} ${entry.file} ${chalk.gray(`(${entry.sharedCommits} shared commits)`)}`);
+        }
+        console.log();
+      }
+
+      if (result.references.length > 0) {
+        console.log(chalk.bold("  References (files that mention the target):"));
+        for (const entry of result.references) {
+          console.log(`    ${entry.file} ${chalk.gray(`[${entry.matches.join(", ")}]`)}`);
+        }
+        console.log();
+      }
+
+      if (result.tests.length > 0) {
+        console.log(chalk.bold("  Related tests:"));
+        for (const entry of result.tests) {
+          console.log(`    ${entry.file} ${chalk.gray(`(${entry.confidence})`)}`);
+        }
+        console.log();
+      }
+
+      const total = result.cochange.length + result.references.length + result.tests.length;
+      if (total === 0) {
+        log.info("No impact detected — this file may be independent.");
+      } else {
+        console.log(chalk.bold(`  ${total} related file(s) found`));
+      }
+    });
+
+  program
     .command("analyze")
     .description("Analyze the codebase and print findings")
     .argument("[dir]", "Directory to analyze", ".")

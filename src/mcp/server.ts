@@ -7,6 +7,7 @@ import {
   fullAnalysis,
   getCodeSamples,
   getFileContent,
+  getImpact,
   getProjectStructure,
   getSnapshot,
   getTestMap,
@@ -172,6 +173,25 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir, features, flows }) => {
       const result = await saveSnapshotData(dir, features, flows);
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    }
+  );
+
+  server.tool(
+    "get_impact",
+    "Analyze the impact of changing specific files. Returns three signals: git co-change (files that historically change together), references (files that mention the target by name), and related tests. Use this before editing a file to understand what else might need updating.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      files: z
+        .array(z.string())
+        .describe("File paths or names to analyze (e.g., ['WeatherRepository.kt'] or ['src/services/auth.ts'])"),
+    },
+    async ({ dir, files }) => {
+      const result = await getImpact(dir, files);
       return {
         content: [{ type: "text", text: result }],
       };
