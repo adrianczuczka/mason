@@ -146,7 +146,7 @@ export async function createSnapshot(
   const result = await callLLM(config, userMessage, SNAPSHOT_SYSTEM_PROMPT);
 
   const resultText =
-    typeof result === "string" ? result : result.type === "text" ? result.text : "";
+    typeof result === "string" ? result : result.type === "response" ? result.text : "";
 
   if (!resultText) {
     throw new Error(
@@ -258,7 +258,7 @@ export async function updateSnapshot(
 
   const result = await callLLM(config, userMessage, SNAPSHOT_SYSTEM_PROMPT);
   const resultText =
-    typeof result === "string" ? result : result.type === "text" ? result.text : "";
+    typeof result === "string" ? result : result.type === "response" ? result.text : "";
 
   if (!resultText) {
     throw new Error("No CLI or API key available for this provider.");
