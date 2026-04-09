@@ -16,8 +16,7 @@ Thumbs.db
 .env
 .env.*
 
-# Mason data (generated, user-specific)
-.mason/
+# Mason legacy cache
 .mason-cache.json
 .foreman-cache.json
 
