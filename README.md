@@ -66,7 +66,7 @@ Mason persists a concept-to-files map across conversations. Instead of the LLM e
 }
 ```
 
-**Measured result:** 66% token reduction on orientation queries ("tell me about the home flow") compared to exploring from scratch.
+**Measured result:** 66% token reduction on orientation queries ("tell me about the home flow") compared to exploring from scratch. This directly reduces cache creation tokens — the biggest driver of rate limit consumption — by eliminating exploratory file reads.
 
 **Via MCP:** Ask your AI assistant to "create a mason snapshot." It analyzes the codebase and calls `save_snapshot`. Next session, `get_snapshot` loads instantly.
 
