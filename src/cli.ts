@@ -224,6 +224,41 @@ export function createCLI(): Command {
         const outPath = path.join(claudeDir, "CLAUDE.md");
         await fs.writeFile(outPath, markdown, "utf-8");
         log.success(`Generated ${outPath}`);
+
+        // Auto-create concept map snapshot
+        try {
+          const { createSnapshot } = await import("./snapshot/snapshot.js");
+          const spinner2 = ora("Building concept map...").start();
+          const snapshot = await createSnapshot(rootDir, runConfig);
+          spinner2.stop();
+          const featureCount = Object.keys(snapshot.features).length;
+          const flowCount = Object.keys(snapshot.flows).length;
+          log.success(
+            `Concept map created: ${featureCount} features, ${flowCount} flows`
+          );
+        } catch {
+          // Non-fatal — snapshot is a bonus
+        }
+
+        // Suggest git hook if not installed
+        const hookPath = path.join(rootDir, ".git", "hooks", "post-commit");
+        try {
+          const hookContent = await fs.readFile(hookPath, "utf-8");
+          if (!hookContent.includes("mason snapshot-update")) {
+            console.log(
+              chalk.gray(
+                '\nTip: Run "mason snapshot --install-hook" to keep the concept map updated automatically.'
+              )
+            );
+          }
+        } catch {
+          // No hook file — suggest installing
+          console.log(
+            chalk.gray(
+              '\nTip: Run "mason snapshot --install-hook" to keep the concept map updated automatically.'
+            )
+          );
+        }
       } catch (err) {
         spinner.stop();
         log.error(
