@@ -119,56 +119,58 @@ async function callViaTempFile(
   }
 }
 
+function spawnWithStdin(
+  command: string,
+  args: string[],
+  input: string
+): Promise<string> {
+  const { spawn } = require("node:child_process") as typeof import("node:child_process");
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 300_000,
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    proc.stdout.on("data", (data: Buffer) => {
+      stdout += data.toString();
+    });
+    proc.stderr.on("data", (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    proc.on("close", (code: number | null) => {
+      if (code === 0) {
+        resolve(stdout.trim());
+      } else {
+        reject(new Error(`${command} exited with code ${code}: ${stderr}`));
+      }
+    });
+
+    proc.on("error", reject);
+
+    proc.stdin.write(input);
+    proc.stdin.end();
+  });
+}
+
 async function callClaudeCLI(
   system: string,
   userMessage: string
 ): Promise<string> {
-  // claude -p reads prompt from argument; use temp file to avoid shell length limits
-  const fs = await import("node:fs/promises");
-  const os = await import("node:os");
-  const path = await import("node:path");
-
   const prompt = `${system}\n\n${userMessage}`;
-  const tmpFile = path.join(os.tmpdir(), `mason-prompt-${Date.now()}.txt`);
-
-  try {
-    await fs.writeFile(tmpFile, prompt, "utf-8");
-    // Read from file and pipe to claude
-    const promptContent = await fs.readFile(tmpFile, "utf-8");
-    const { stdout } = await exec(
-      "sh",
-      ["-c", `cat "${tmpFile}" | claude -p`],
-      { maxBuffer: 10_000_000, timeout: 300_000 }
-    );
-    return stdout.trim();
-  } finally {
-    await fs.unlink(tmpFile).catch(() => {});
-  }
+  return spawnWithStdin("claude", ["-p"], prompt);
 }
 
 async function callGeminiCLI(
   system: string,
   userMessage: string
 ): Promise<string> {
-  const fs = await import("node:fs/promises");
-  const os = await import("node:os");
-  const path = await import("node:path");
-
   const prompt = `${system}\n\n${userMessage}`;
-  const tmpFile = path.join(os.tmpdir(), `mason-prompt-${Date.now()}.txt`);
-
-  try {
-    await fs.writeFile(tmpFile, prompt, "utf-8");
-    // gemini -p takes the prompt as an argument, but pipe from file for length
-    const { stdout } = await exec(
-      "sh",
-      ["-c", `cat "${tmpFile}" | gemini -p ""`],
-      { maxBuffer: 10_000_000, timeout: 300_000 }
-    );
-    return stdout.trim();
-  } finally {
-    await fs.unlink(tmpFile).catch(() => {});
-  }
+  return spawnWithStdin("gemini", ["-p", ""], prompt);
 }
 
 async function callOllamaCLI(

@@ -185,6 +185,9 @@ export async function sampleFiles(
   // 0. Always-include files from project config (highest priority)
   for (const filePath of projectConfig.alwaysInclude ?? []) {
     if (selected.size >= maxFiles) break;
+    // Validate path stays within project root
+    const resolvedPath = path.resolve(rootDir, filePath);
+    if (!resolvedPath.startsWith(path.resolve(rootDir))) continue;
     selected.set(filePath, "always-include (project config)");
   }
 
@@ -390,7 +393,9 @@ export async function sampleFiles(
   const results: SampledFile[] = [];
   for (const [filePath, reason] of selected) {
     try {
-      const fullPath = path.join(rootDir, filePath);
+      const fullPath = path.resolve(rootDir, filePath);
+      if (!fullPath.startsWith(path.resolve(rootDir))) continue;
+      if (isSensitiveFile(filePath)) continue;
       const stat = await fs.stat(fullPath);
       if (stat.size > 100_000) continue;
 
@@ -413,6 +418,27 @@ export async function sampleFiles(
   return results;
 }
 
+const SENSITIVE_PATTERNS = [
+  /^\.env$/,
+  /^\.env\./,
+  /\.pem$/,
+  /\.key$/,
+  /\.p12$/,
+  /\.pfx$/,
+  /\.jks$/,
+  /id_rsa/,
+  /id_ed25519/,
+  /credentials\./,
+  /secret/i,
+  /\.keystore$/,
+  /local\.properties$/,
+];
+
+function isSensitiveFile(filePath: string): boolean {
+  const basename = path.basename(filePath);
+  return SENSITIVE_PATTERNS.some((p) => p.test(basename));
+}
+
 export async function readFullFile(
   rootDir: string,
   filePath: string
@@ -420,6 +446,7 @@ export async function readFullFile(
   try {
     const fullPath = path.join(path.resolve(rootDir), filePath);
     if (!fullPath.startsWith(path.resolve(rootDir))) return null;
+    if (isSensitiveFile(filePath)) return null;
 
     const content = await fs.readFile(fullPath, "utf-8");
     return {
