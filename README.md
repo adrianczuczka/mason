@@ -1,6 +1,6 @@
-# Mason
+# Mason – the context builder for LLMs 👷
 
-Context engineering for AI coding assistants. Mason gives LLMs a persistent map of your codebase so they stop exploring from scratch every session.
+Mason gives LLMs a persistent map of your codebase so they stop exploring from scratch every session.
 
 **The problem:** Every time an LLM starts a new conversation about your code, it greps, reads files, and pieces together the architecture — burning tokens on context it already understood yesterday. On a 164-file project, answering "what features does this app have?" requires reading 8+ files across multiple tool calls.
 
