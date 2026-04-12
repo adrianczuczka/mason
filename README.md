@@ -61,7 +61,17 @@ Mason persists a concept-to-files map across conversations. Instead of the LLM e
 }
 ```
 
-**Measured result:** 66% token reduction on orientation queries ("tell me about the home flow") compared to exploring from scratch. This directly reduces cache creation tokens — the biggest driver of rate limit consumption — by eliminating exploratory file reads.
+**Benchmark results** (mcp-eval, Claude Sonnet, 164-file KMP project):
+
+| Level | Tests | Pass rate | What it measures |
+|---|---|---|---|
+| HIGH (architecture) | 2 | 2/2 | Can Mason explain modules, features, tech stack? |
+| MID (flows/impact) | 2 | 2/2 | Can Mason trace data flows and find affected files? |
+| LOW (code detail) | 3 | 1/3 | Can Mason help with function-level questions? |
+
+Mason is a navigation tool — it tells you where to look, not what the code says. HIGH and MID tasks pass because the snapshot provides the right context. LOW tasks fail when they require reading code the snapshot doesn't cover.
+
+Reproduce with `cd bench && PROJECT_DIR=/your/project mcp-eval run tests/` (see [bench/README.md](bench/README.md)).
 
 **Via MCP:** Ask your AI assistant to "create a mason snapshot." It analyzes the codebase and calls `save_snapshot`. Next session, `get_snapshot` loads instantly.
 
@@ -140,7 +150,7 @@ Mason picks ~25 representative files across these categories:
 - **Test examples** — diverse across languages (JVM, Swift, Python, Go, etc.)
 - **Directory representatives** — one source file per top-level directory for breadth
 
-All returned as previews (~60 lines). The LLM can drill into any file with `get_file_content`.
+All returned as previews (~60 lines). The LLM reads full files natively when it needs more detail.
 
 ### Custom patterns
 
@@ -155,7 +165,7 @@ If your project uses different naming conventions, configure per-project:
 }
 ```
 
-Or let the LLM configure it via the `configure_project` MCP tool.
+Or write this file directly — the LLM can create `.mason/config.json` using its native file writing.
 
 ## Language support
 
