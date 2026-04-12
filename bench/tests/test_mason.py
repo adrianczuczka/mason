@@ -69,50 +69,17 @@ def _read_files(paths: list[str]) -> str:
 
 QUESTIONS = [
     {
-        "id": "architecture",
-        "question": (
-            "What are the main modules, how do they depend on each other, "
-            "and what's the tech stack?"
-        ),
-        "criteria": (
-            "Names the main modules and their purposes, "
-            "describes dependency direction, identifies the tech stack, "
-            "and references actual module names."
-        ),
-        # Path A: snapshot + build/config files for detail
-        "a_files": [
-            "build.gradle.kts",
-            "settings.gradle.kts",
-            "shared/src/commonMain/kotlin/com/adrianczuczka/jacket/SharedModules.kt",
-        ],
-        # Path B: what you'd find via grep/glob — build files + key source files
-        "b_files": [
-            "build.gradle.kts",
-            "settings.gradle.kts",
-            "gradle/libs.versions.toml",
-            "shared/src/commonMain/kotlin/com/adrianczuczka/jacket/SharedModules.kt",
-            "shared/src/commonMain/kotlin/com/adrianczuczka/jacket/KoinHelper.kt",
-            "shared/src/commonMain/kotlin/com/adrianczuczka/jacket/NetworkModule.kt",
-            "androidApp/build.gradle.kts",
-            "server/build.gradle.kts",
-            "api/build.gradle.kts",
-            "shared/build.gradle.kts",
-        ],
-    },
-    {
         "id": "features",
         "question": "List every user-facing feature and the key files for each.",
         "criteria": (
             "Lists at least 3 distinct user-facing features "
             "with specific file paths for each."
         ),
-        # Path A: snapshot + a few UI files to confirm
+        # Path A: snapshot already lists features; read nav files for confirmation
         "a_files": [
             "androidApp/src/main/java/com/adrianczuczka/jacket/nav/JacketNavHost.kt",
-            "iosApp/iosApp/iOSApp.swift",
-            "androidApp/src/main/java/com/adrianczuczka/jacket/JacketActivity.kt",
         ],
-        # Path B: grep for screens/views + navigation
+        # Path B: without a feature map, you'd read every screen + navigation
         "b_files": [
             "androidApp/src/main/java/com/adrianczuczka/jacket/nav/JacketNavHost.kt",
             "androidApp/src/main/java/com/adrianczuczka/jacket/feature/home/HomeScreen.kt",
@@ -135,13 +102,12 @@ QUESTIONS = [
             "named in order, each with a description of its role. "
             "Should cover UI, domain, data, and server layers."
         ),
-        # Path A: snapshot has the flow chain; read 3 key files for detail
+        # Path A: snapshot has the flow chain; read 2 key files for detail
         "a_files": [
             "feature/home/presentation/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/home/presentation/HomeViewModel.kt",
             "feature/home/data/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/home/data/WeatherRepositoryImpl.kt",
-            "server/src/main/java/com/adrianczuczka/jacket/weather/WeatherServiceImpl.kt",
         ],
-        # Path B: grep for WeatherService/Repository + follow the chain
+        # Path B: without the flow chain, you'd read every file in the path
         "b_files": [
             "androidApp/src/main/java/com/adrianczuczka/jacket/feature/home/HomeScreen.kt",
             "feature/home/presentation/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/home/presentation/HomeViewModel.kt",
@@ -154,32 +120,49 @@ QUESTIONS = [
         ],
     },
     {
-        "id": "feature_lookup",
+        "id": "cross_platform",
         "question": (
-            "How does the location picker feature work? "
-            "Which files implement it and how do they relate?"
+            "How is the home screen implemented on both Android and iOS? "
+            "What are the differences?"
         ),
         "criteria": (
-            "Identifies the location picker feature, lists the files that "
-            "implement it with their roles (ViewModel, Repository, UI), "
-            "and describes the data flow between them."
+            "Identifies both platform implementations (Compose + SwiftUI), "
+            "names the specific files, describes shared vs platform-specific "
+            "code, and notes at least one difference."
         ),
-        # Path A: snapshot maps "location picker" -> files; read 2 key ones
+        # Path A: snapshot points to both files; read the shared ViewModel
         "a_files": [
-            "feature/location/presentation/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/location/presentation/LocationPickerViewModel.kt",
-            "feature/location/domain/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/location/domain/GetCitiesUseCase.kt",
-            "androidApp/src/main/java/com/adrianczuczka/jacket/feature/locationpicker/LocationPickerScreen.kt",
+            "feature/home/presentation/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/home/presentation/HomeViewModel.kt",
         ],
-        # Path B: grep for "location" + "city" + follow imports
+        # Path B: you'd need to find and read both large UI files
         "b_files": [
+            "androidApp/src/main/java/com/adrianczuczka/jacket/feature/home/HomeScreen.kt",
+            "iosApp/iosApp/ContentView.swift",
+            "feature/home/presentation/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/home/presentation/HomeViewModel.kt",
+        ],
+    },
+    {
+        "id": "onboarding_flow",
+        "question": (
+            "What happens when a new user opens the app for the first time? "
+            "Trace the navigation flow from launch to the home screen."
+        ),
+        "criteria": (
+            "Describes the first-launch flow including calibration, location "
+            "selection, and how the app decides which screen to show. "
+            "Names specific files and navigation logic."
+        ),
+        # Path A: snapshot has the startup flow; read the nav file for detail
+        "a_files": [
+            "androidApp/src/main/java/com/adrianczuczka/jacket/nav/JacketNavHost.kt",
+        ],
+        # Path B: you'd read the app entry, nav, and all onboarding screens
+        "b_files": [
+            "androidApp/src/main/java/com/adrianczuczka/jacket/JacketApp.kt",
+            "androidApp/src/main/java/com/adrianczuczka/jacket/nav/JacketNavHost.kt",
+            "androidApp/src/main/java/com/adrianczuczka/jacket/feature/personalization/InitialCalibrationScreen.kt",
             "androidApp/src/main/java/com/adrianczuczka/jacket/feature/locationpicker/LocationPickerScreen.kt",
-            "androidApp/src/main/java/com/adrianczuczka/jacket/feature/locationpicker/LocationSearchScreen.kt",
-            "feature/location/presentation/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/location/presentation/LocationPickerViewModel.kt",
-            "feature/location/domain/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/location/domain/GetCitiesUseCase.kt",
-            "feature/location/domain/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/location/domain/CityListRepository.kt",
-            "feature/location/data/src/commonMain/kotlin/com/adrianczuczka/jacket/feature/location/data/CityListRepositoryImpl.kt",
-            "iosApp/iosApp/LocationPickerView.swift",
-            "iosApp/iosApp/LocationSearchView.swift",
+            "iosApp/iosApp/iOSApp.swift",
         ],
     },
 ]
@@ -222,45 +205,72 @@ def ask_claude(context: str, question: str) -> tuple[str, int, int]:
 # Mason MCP server definition (for MCPUseMetric)
 # ---------------------------------------------------------------------------
 
+from mcp.types import Tool, CallToolResult, TextContent
+
 mason_server = MCPServer(
     server_name="mason",
     transport="stdio",
     available_tools=[
-        {
-            "name": "get_snapshot",
-            "description": "Get the project's concept map — maps features/flows to files",
-            "inputSchema": {
+        Tool(
+            name="get_snapshot",
+            description="Get the project's concept map — maps features/flows to files",
+            inputSchema={
                 "type": "object",
                 "properties": {"dir": {"type": "string"}},
                 "required": ["dir"],
             },
-        },
+        ),
     ],
 )
 
 snapshot_call = MCPToolCall(
     name="get_snapshot",
     args={"dir": PROJECT},
-    result=SNAPSHOT_JSON,
+    result=CallToolResult(
+        content=[TextContent(type="text", text=SNAPSHOT_JSON)],
+    ),
 )
 
 # ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
 
-judge_model = AnthropicModel(model=MODEL)
+JUDGE_MODEL = os.environ.get("BENCH_JUDGE_MODEL", "claude-haiku-4-5-20251001")
+judge_model = AnthropicModel(model=JUDGE_MODEL)
 mcp_use = MCPUseMetric(threshold=0.5, model=judge_model)
 
 # ---------------------------------------------------------------------------
 # Generate responses upfront
 # ---------------------------------------------------------------------------
 
+CACHE_PATH = os.path.join(os.path.dirname(__file__), ".responses_cache.json")
+
+
+def _load_cache() -> dict:
+    try:
+        with open(CACHE_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_cache(cache: dict):
+    with open(CACHE_PATH, "w") as f:
+        json.dump(cache, f, indent=2)
+
+
 print("\n=== Generating responses ===\n")
 
+cache = _load_cache()
 RESULTS: dict[str, dict] = {}
 
 for q in QUESTIONS:
     qid = q["id"]
+
+    if qid in cache:
+        print(f"  {qid} [cached]")
+        RESULTS[qid] = cache[qid]
+        continue
 
     # Path A: snapshot + targeted reads
     a_context = (
@@ -278,7 +288,7 @@ for q in QUESTIONS:
     print(f"{b_in} tokens")
 
     saving = round((b_in - a_in) / b_in * 100) if b_in > 0 else 0
-    print(f"  {qid} saving: {saving}% ({a_in} vs {b_in})\n")
+    print(f"  {qid} saving: {saving}%\n")
 
     RESULTS[qid] = {
         "a_response": a_resp,
@@ -288,8 +298,12 @@ for q in QUESTIONS:
         "saving_pct": saving,
     }
 
+    # Save after each question so partial runs are cached
+    cache[qid] = RESULTS[qid]
+    _save_cache(cache)
+
 # Print summary
-print("=== Token Savings Summary ===\n")
+print("=== Token Savings ===\n")
 print(f"{'Question':<20} {'A (Mason)':>12} {'B (no Mason)':>14} {'Saving':>8}")
 print("-" * 56)
 for q in QUESTIONS:

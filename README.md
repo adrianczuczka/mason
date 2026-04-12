@@ -61,11 +61,21 @@ Mason persists a concept-to-files map across conversations. Instead of the LLM e
 }
 ```
 
-**Without Mason**, the LLM explores your codebase from scratch every session — grepping for patterns, reading files one by one, piecing together the architecture. For a 164-file project, answering "how does the weather forecast flow work?" takes 8+ file reads across 5+ tool calls.
+**Without Mason**, the LLM explores your codebase from scratch every session — grepping for patterns, reading files one by one, piecing together the architecture.
 
-**With Mason**, one `get_snapshot` call returns the complete feature-to-file map. The LLM knows exactly which files to read — 1 tool call instead of 8.
+**With Mason**, one `get_snapshot` call returns the complete feature-to-file map. The LLM knows exactly which files to read.
 
-Benchmark ([deepeval](https://github.com/confident-ai/deepeval), Claude Sonnet, 164-file KMP project): same answer quality, 60% fewer tool calls on navigation queries. See [bench/](bench/) to reproduce.
+**Benchmark** ([deepeval](https://github.com/confident-ai/deepeval), Claude Sonnet, 164-file KMP project):
+
+| Question | With Mason | Without Mason | Token saving |
+|---|---|---|---|
+| List all features | 10,258 tok (0.9 quality) | 31,346 tok (0.9 quality) | **67%** |
+| Trace data flow | 12,010 tok (0.9 quality) | 15,258 tok (0.9 quality) | **21%** |
+| Compare platforms | 10,897 tok (0.9 quality) | 19,353 tok (0.9 quality) | **44%** |
+| Onboarding flow | 10,271 tok (0.9 quality) | 11,432 tok (0.9 quality) | **10%** |
+| **Average** | | | **36%** |
+
+Same answer quality, 36% fewer input tokens. See [bench/](bench/) to reproduce.
 
 **Via MCP:** Ask your AI assistant to "create a mason snapshot." It analyzes the codebase and calls `save_snapshot`. Next session, `get_snapshot` loads instantly.
 

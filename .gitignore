@@ -19,6 +19,8 @@ Thumbs.db
 # Benchmark secrets & reports
 mcpeval.secrets.yaml
 bench/test-reports/
+bench/tests/.responses_cache.json
+bench/.deepeval/
 __pycache__/
 
 # Mason legacy cache
