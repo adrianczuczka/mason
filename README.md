@@ -31,7 +31,7 @@ claude mcp add mason --scope user -- npx mason-context mcp
 
 Then ask Claude to generate a CLAUDE.md — it will call Mason's tools automatically.
 
-Mason exposes 11 tools via MCP:
+Mason exposes 10 tools via MCP:
 
 | Tool | What it does |
 |---|---|
@@ -45,7 +45,6 @@ Mason exposes 11 tools via MCP:
 | `get_file_content` | Read any file in full (drill-down after previewing) |
 | `get_project_structure` | Directory tree with file counts and extension breakdown |
 | `get_test_map` | Map test files to source files by name matching |
-| `write_claude_md` | Save generated CLAUDE.md to the project |
 
 ### Concept map (persistent snapshot)
 
