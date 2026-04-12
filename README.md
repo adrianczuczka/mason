@@ -31,20 +31,16 @@ claude mcp add mason --scope user -- npx mason-context mcp
 
 Then ask Claude to generate a CLAUDE.md — it will call Mason's tools automatically.
 
-Mason exposes 10 tools via MCP:
+Mason exposes 6 tools via MCP:
 
 | Tool | What it does |
 |---|---|
-| `full_analysis` | All-in-one: git stats + project structure + code samples + test map + concept map |
 | `get_snapshot` | Load persistent concept map — maps features/flows to implementing files |
 | `save_snapshot` | Save concept map for future sessions (no API key needed) |
 | `get_impact` | Change impact analysis — co-change history, references, and related tests |
-| `configure_project` | Customize sampling — add patterns, always-include files, ignore paths |
 | `analyze_project` | Git history stats (commit patterns, stale dirs, hot files) |
+| `full_analysis` | All-in-one: git stats + project structure + code samples + test map + concept map |
 | `get_code_samples` | Smart file previews — config, entry points, architectural patterns, tests |
-| `get_file_content` | Read any file in full (drill-down after previewing) |
-| `get_project_structure` | Directory tree with file counts and extension breakdown |
-| `get_test_map` | Map test files to source files by name matching |
 
 ### Concept map (persistent snapshot)
 

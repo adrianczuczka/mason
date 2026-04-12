@@ -7,7 +7,7 @@ import fg from "fast-glob";
 const exec = promisify(execFile);
 import { runAll } from "../analyzers/index.js";
 import { isGitRepo } from "../utils/git.js";
-import { sampleFiles, readFullFile } from "./sampler.js";
+import { sampleFiles } from "./sampler.js";
 import {
   loadSnapshot,
   saveSnapshot,
@@ -166,20 +166,6 @@ export async function getCodeSamples(
   };
 
   return JSON.stringify(output, null, 2);
-}
-
-export async function getFileContent(
-  dir: string,
-  filePath: string
-): Promise<string> {
-  const rootDir = path.resolve(dir);
-  const result = await readFullFile(rootDir, filePath);
-
-  if (!result) {
-    return JSON.stringify({ error: `Could not read file: ${filePath}` });
-  }
-
-  return JSON.stringify(result, null, 2);
 }
 
 export async function getProjectStructure(dir: string): Promise<string> {

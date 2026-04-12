@@ -3,14 +3,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   analyzeProject,
-  configureProject,
   fullAnalysis,
   getCodeSamples,
-  getFileContent,
   getImpact,
-  getProjectStructure,
   getSnapshot,
-  getTestMap,
   saveSnapshotData,
 } from "./tools.js";
 
@@ -22,13 +18,13 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool. Always call get_snapshot before using Explore agents, Glob, or Grep to understand the codebase. The snapshot is a concept map that maps features and flows to their implementing files — it eliminates the need to search. This applies to ANY question about architecture, features, flows, how things work, cross-feature interactions, or bug investigation. Workflow: 1) Call get_snapshot first. 2) If no snapshot, call full_analysis and then save_snapshot to create one. 3) If the snapshot is stale, tell the user and offer to update it. 4) Use get_file_content to read files the snapshot points to. 5) Before modifying a file, call get_impact to check what else might be affected. 6) After making significant changes (new features, refactors, architecture changes), call save_snapshot to update the concept map.",
+        "Mason is a context engineering tool. Always call get_snapshot before using Explore agents, Glob, or Grep to understand the codebase. The snapshot is a concept map that maps features and flows to their implementing files — it eliminates the need to search. This applies to ANY question about architecture, features, flows, how things work, cross-feature interactions, or bug investigation. Workflow: 1) Call get_snapshot first. 2) If no snapshot, call full_analysis and then save_snapshot to create one. 3) If the snapshot is stale, tell the user and offer to update it. 4) Use your native file reading tool to read files the snapshot points to. 5) Before modifying a file, call get_impact to check what else might be affected. 6) After making significant changes (new features, refactors, architecture changes), call save_snapshot to update the concept map.",
     }
   );
 
   server.tool(
     "full_analysis",
-    "Run a complete project analysis in one call. Returns git history stats, project structure with file counts, curated code sample previews (~60 lines each), and test-to-source file mapping. This is the recommended starting point — call this first, then use get_file_content to read specific files in full.",
+    "Run a complete project analysis in one call. Returns git history stats, project structure with file counts, curated code sample previews (~60 lines each), and test-to-source file mapping. This is the recommended starting point — call this first, then read specific files natively for full content.",
     {
       dir: z
         .string()
@@ -60,7 +56,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_code_samples",
-    "Get previews (first ~60 lines) of representative source files from the codebase. Includes entry points, config files, hot files (frequently changed), test examples, and one file per directory for breadth. Use get_file_content to read the full content of any file that looks interesting.",
+    "Get previews (first ~60 lines) of representative source files from the codebase. Includes entry points, config files, hot files (frequently changed), test examples, and one file per directory for breadth. Read files natively for full content.",
     {
       dir: z
         .string()
@@ -73,57 +69,6 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir, count }) => {
       const result = await getCodeSamples(dir, count);
-      return {
-        content: [{ type: "text", text: result }],
-      };
-    }
-  );
-
-  server.tool(
-    "get_file_content",
-    "Read the full content of a specific file. Use this after get_code_samples to drill into files you want to understand fully.",
-    {
-      dir: z
-        .string()
-        .describe("Absolute path to the project root directory"),
-      file_path: z
-        .string()
-        .describe("Relative path to the file within the project (e.g., 'src/main.ts')"),
-    },
-    async ({ dir, file_path }) => {
-      const result = await getFileContent(dir, file_path);
-      return {
-        content: [{ type: "text", text: result }],
-      };
-    }
-  );
-
-  server.tool(
-    "get_project_structure",
-    "Get the directory structure of a project with file counts and extension breakdown per directory. Shows top-level files and annotated directory listing up to 2 levels deep. Useful for understanding project layout before diving into code.",
-    {
-      dir: z
-        .string()
-        .describe("Absolute path to the project root directory"),
-    },
-    async ({ dir }) => {
-      const result = await getProjectStructure(dir);
-      return {
-        content: [{ type: "text", text: result }],
-      };
-    }
-  );
-
-  server.tool(
-    "get_test_map",
-    "Map test files to their corresponding source files by name matching. Shows which source files have tests and which don't. Useful for understanding test coverage patterns and test organization conventions.",
-    {
-      dir: z
-        .string()
-        .describe("Absolute path to the project root directory"),
-    },
-    async ({ dir }) => {
-      const result = await getTestMap(dir);
       return {
         content: [{ type: "text", text: result }],
       };
@@ -192,38 +137,6 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir, files }) => {
       const result = await getImpact(dir, files);
-      return {
-        content: [{ type: "text", text: result }],
-      };
-    }
-  );
-
-  server.tool(
-    "configure_project",
-    "Configure Mason for this project. Add custom file patterns to sample, files to always include, or paths to ignore. Saved to .mason/config.json. Use this when the default architectural patterns miss important files in the project.",
-    {
-      dir: z
-        .string()
-        .describe("Absolute path to the project root directory"),
-      patterns: z
-        .array(z.string())
-        .optional()
-        .describe("Custom glob patterns for architecturally important files (e.g., '**/*Gateway.*', '**/*Bloc.*')"),
-      alwaysInclude: z
-        .array(z.string())
-        .optional()
-        .describe("Specific file paths to always include in samples (e.g., 'src/core/config.ts')"),
-      ignore: z
-        .array(z.string())
-        .optional()
-        .describe("Additional glob patterns to ignore (e.g., '**/fixtures/**')"),
-    },
-    async ({ dir, patterns, alwaysInclude, ignore }) => {
-      const result = await configureProject(dir, {
-        patterns,
-        alwaysInclude,
-        ignore,
-      });
       return {
         content: [{ type: "text", text: result }],
       };
