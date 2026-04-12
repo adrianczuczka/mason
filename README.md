@@ -1,181 +1,98 @@
 # Mason
 
-A context engineering tool that helps LLMs understand your codebase. Mason handles the expensive parts — aggregating git history, selecting architecturally important files, mapping dependencies, and persisting project knowledge — so the LLM can focus on thinking.
+Context engineering for AI coding assistants. Mason gives LLMs a persistent map of your codebase so they stop exploring from scratch every session.
 
-Works as an **MCP server** (for Claude Code, Cursor, etc.) or as a **standalone CLI** with any LLM provider.
+**The problem:** Every time an LLM starts a new conversation about your code, it greps, reads files, and pieces together the architecture — burning tokens on context it already understood yesterday.
+
+**Mason's fix:** A concept map that persists across sessions. One tool call returns a feature-to-file lookup table. The LLM knows exactly where to look.
+
+**Measured result** ([deepeval](https://github.com/confident-ai/deepeval), Claude Sonnet, 164-file KMP project):
+
+| Question | With Mason | Without Mason | Token saving |
+|---|---|---|---|
+| List all features | 10,258 tok | 31,346 tok | **67%** |
+| Trace data flow | 12,010 tok | 15,258 tok | **21%** |
+| Compare platforms | 10,897 tok | 19,353 tok | **44%** |
+| Onboarding flow | 10,271 tok | 11,432 tok | **10%** |
+| **Average** | | | **36%** |
+
+Same answer quality (0.9/1.0 on all tests, both paths). Reproduce: [bench/](bench/).
 
 ## Quick start
-
-```bash
-npx mason-context mcp                    # start MCP server
-claude mcp add mason -- npx mason-context mcp   # register with Claude Code
-```
-
-Restart Claude Code, then ask: "use mason to analyze this project and generate a CLAUDE.md."
-
-## Install
-
-```bash
-npm install -g mason-context
-```
-
-## Usage
-
-### As an MCP server (recommended)
-
-Register with Claude Code:
 
 ```bash
 claude mcp add mason --scope user -- npx mason-context mcp
 ```
 
-Then ask Claude to generate a CLAUDE.md — it will call Mason's tools automatically.
+Restart Claude Code, then: *"use mason to analyze this project and create a snapshot."*
 
-Mason exposes 6 tools via MCP:
+## How it works
 
-| Tool | What it does |
-|---|---|
-| `get_snapshot` | Load persistent concept map — maps features/flows to implementing files |
-| `save_snapshot` | Save concept map for future sessions (no API key needed) |
-| `get_impact` | Change impact analysis — co-change history, references, and related tests |
-| `analyze_project` | Git history stats (commit patterns, stale dirs, hot files) |
-| `full_analysis` | All-in-one: git stats + project structure + code samples + test map + concept map |
-| `get_code_samples` | Smart file previews — config, entry points, architectural patterns, tests |
+### Concept map
 
-### Concept map (persistent snapshot)
-
-Mason persists a concept-to-files map across conversations. Instead of the LLM exploring your codebase from scratch every session, the concept map tells it exactly which files implement each feature and how data flows through the system.
+Mason persists a feature-to-file map in `.mason/snapshot.json`. Instead of exploring, the LLM looks up which files implement each feature:
 
 ```json
 {
   "features": {
     "home screen": {
-      "files": ["HomeScreen.kt", "HomeViewModel.kt", "HomeModule.kt"]
+      "files": ["HomeScreen.kt", "HomeViewModel.kt", "GetWeatherDataUseCase.kt"]
     }
   },
   "flows": {
     "weather fetch": {
-      "chain": ["HomeViewModel.kt", "GetWeatherDataUseCase.kt", "WeatherRepositoryImpl.kt"]
+      "chain": ["HomeViewModel.kt", "WeatherRepositoryImpl.kt", "WeatherServiceImpl.kt"]
     }
   }
 }
 ```
 
-**Without Mason**, the LLM explores your codebase from scratch every session — grepping for patterns, reading files one by one, piecing together the architecture.
-
-**With Mason**, one `get_snapshot` call returns the complete feature-to-file map. The LLM knows exactly which files to read.
-
-**Benchmark** ([deepeval](https://github.com/confident-ai/deepeval), Claude Sonnet, 164-file KMP project):
-
-| Question | With Mason | Without Mason | Token saving |
-|---|---|---|---|
-| List all features | 10,258 tok (0.9 quality) | 31,346 tok (0.9 quality) | **67%** |
-| Trace data flow | 12,010 tok (0.9 quality) | 15,258 tok (0.9 quality) | **21%** |
-| Compare platforms | 10,897 tok (0.9 quality) | 19,353 tok (0.9 quality) | **44%** |
-| Onboarding flow | 10,271 tok (0.9 quality) | 11,432 tok (0.9 quality) | **10%** |
-| **Average** | | | **36%** |
-
-Same answer quality, 36% fewer input tokens. See [bench/](bench/) to reproduce.
-
-**Via MCP:** Ask your AI assistant to "create a mason snapshot." It analyzes the codebase and calls `save_snapshot`. Next session, `get_snapshot` loads instantly.
-
-**Via CLI:**
+Create one by asking your AI assistant to *"create a mason snapshot"*, or via CLI:
 
 ```bash
-mason set-llm gemini                   # configure a provider (no API key needed)
-mason snapshot ~/my-project            # generate concept map
-mason snapshot --install-hook          # auto-update on every commit
+mason set-llm gemini          # configure a provider (no API key needed)
+mason snapshot ~/my-project   # generate concept map
+mason snapshot --install-hook # auto-update on every commit
 ```
 
 ### Change impact analysis
 
-Before editing a file, see what else might be affected:
+Before editing a file, see what else might break:
 
-```bash
+```
 mason impact WeatherRepository.kt -d ~/my-project
 ```
 
-Returns three signals:
-- **Co-change** — files that historically change together in git commits
-- **References** — files that mention the target by name (imports, usage)
-- **Tests** — test files paired to the target
+Returns: files that historically change together, files that reference the target, and related tests.
 
-Also available as the `get_impact` MCP tool.
+### Git history analysis
 
-### Standalone CLI
+Aggregates hundreds of commits into actionable stats — frequently changed files, stale directories, commit conventions. The kind of analysis that would take dozens of `git log` calls.
 
-Configure an LLM provider once:
+## MCP tools
 
-```bash
-mason set-llm claude                   # uses Claude CLI (no API key needed)
-mason set-llm gemini                   # uses Gemini CLI (no API key needed)
-mason set-llm ollama                   # local Ollama (no API key needed)
-mason set-llm openai sk-xxx           # OpenAI API (needs key)
-```
+| Tool | What it does |
+|---|---|
+| `get_snapshot` | Load the concept map — maps features/flows to files |
+| `save_snapshot` | Persist the concept map for future sessions |
+| `get_impact` | Change impact: co-change history, references, related tests |
+| `analyze_project` | Git history: commit patterns, hot files, stale dirs |
+| `full_analysis` | All-in-one first visit: git stats + structure + code samples + test map |
+| `get_code_samples` | Smart file previews by architectural role |
 
-Then generate:
-
-```bash
-mason generate                         # analyze + LLM → CLAUDE.md
-mason generate ~/my-project
-mason generate --model claude-haiku-4-5-20251001
-```
-
-### Just analyze (no LLM needed)
+## CLI usage
 
 ```bash
-mason analyze                          # print git history findings
+mason generate                # analyze + LLM -> CLAUDE.md
+mason analyze                 # git stats only (no LLM needed)
+mason impact File.kt          # change impact analysis
+mason snapshot                # create/update concept map
+mason set-llm claude|gemini|ollama|openai  # configure provider
 ```
-
-## How it works
-
-Mason's philosophy: **the LLM is smart, Mason is fast.** Mason does what LLMs can't do cheaply:
-
-1. **Aggregate stats** across hundreds of commits — stale directories, hot files, commit conventions
-2. **Select the right files** — architecturally important files based on naming patterns (ViewModel, Repository, Service, Module, UseCase, etc.)
-3. **Pair interfaces with implementations** — surfaces both `WeatherRepository.kt` and `WeatherRepositoryImpl.kt`
-4. **Include module build files** — so the LLM can infer the dependency graph itself
-5. **Map tests to source** — structural test coverage analysis
-6. **Persist knowledge** — concept maps survive across conversations, eliminating cold-start token waste
-7. **Analyze change impact** — co-change history and reference scanning to find affected files
-
-The LLM does all the interpretation. Mason makes sure it sees the right files.
-
-## Smart file sampling
-
-Mason picks ~25 representative files across these categories:
-
-- **Config files** — build configs, linter configs, version catalogs
-- **Module build files** — subdirectory build files that reveal dependency graphs
-- **Entry points** — main files, app entry points
-- **Hot files** — most frequently changed in the last 3 months (from git)
-- **Architectural files** — ViewModels, Repositories, Services, DI Modules, UseCases, Mappers, Controllers, Middleware
-- **Both interfaces and implementations** — `*Repository.*` and `*RepositoryImpl.*`
-- **Test examples** — diverse across languages (JVM, Swift, Python, Go, etc.)
-- **Directory representatives** — one source file per top-level directory for breadth
-
-All returned as previews (~60 lines). The LLM reads full files natively when it needs more detail.
-
-### Custom patterns
-
-If your project uses different naming conventions, configure per-project:
-
-```json
-// .mason/config.json
-{
-  "patterns": ["**/*Gateway.*", "**/*Bloc.*", "**/*Cubit.*"],
-  "alwaysInclude": ["src/core/config.ts", "lib/injection.dart"],
-  "ignore": ["**/fixtures/**", "**/mocks/**"]
-}
-```
-
-Or write this file directly — the LLM can create `.mason/config.json` using its native file writing.
 
 ## Language support
 
-Mason is completely language-agnostic. No language-specific parsing — it works with any project that has source files and a git history:
-
-TypeScript, JavaScript, Kotlin, Java, Python, Go, Rust, Swift, Ruby, C#, C++, Dart, and more.
+Language-agnostic. Works with any project that has source files and git history — TypeScript, Kotlin, Python, Go, Rust, Swift, Java, and more.
 
 ## License
 
