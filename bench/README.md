@@ -28,23 +28,17 @@ The target project must have a Mason snapshot (`.mason/snapshot.json`).
 
 ## What it tests
 
-7 tests across 3 zoom levels:
+8 tests across 4 categories:
 
-| Level | Test | What it measures |
+| Category | Test | What it measures |
 |---|---|---|
-| **HIGH** | architecture | Can Mason explain the project structure? |
-| **HIGH** | features | Can Mason list all features with files? |
-| **MID** | data_flow | Can Mason trace a flow end-to-end? |
-| **MID** | impact | Does get_impact find affected files? |
-| **LOW** | function_detail | Can Mason + code reading describe function internals? |
-| **LOW** | blind_spot | Can the agent find files NOT in the snapshot? |
-| **LOW** | git_analysis | Does analyze_project return useful git stats? |
-
-### Expected results
-
-- **HIGH**: should pass — this is what the snapshot is designed for
-- **MID**: should pass — snapshot navigates, agent reads files
-- **LOW**: mixed — tests Mason's limitations honestly
+| **Orientation** | architecture | Can Mason explain modules, dependencies, tech stack? |
+| **Orientation** | features | Can Mason list features with implementing files? |
+| **Navigation** | data_flow | Does the snapshot trace data flows correctly? |
+| **Navigation** | feature_lookup | Can Mason find a feature's files, then drill in? |
+| **Efficiency** | fast_answer | Can Mason answer architecture questions in <4 iterations? |
+| **Analysis** | git_stats | Does analyze_project surface commit patterns and hot files? |
+| **Analysis** | impact | Does get_impact find affected files before a change? |
 
 ## Configuration
 

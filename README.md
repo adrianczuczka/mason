@@ -61,17 +61,16 @@ Mason persists a concept-to-files map across conversations. Instead of the LLM e
 }
 ```
 
-**Benchmark results** (mcp-eval, Claude Sonnet, 164-file KMP project):
+**Benchmark results** ([mcp-eval](https://mcp-eval.ai/), Claude Sonnet, 164-file KMP project):
 
-| Level | Tests | Pass rate | What it measures |
+| Category | Tests | Pass rate | What it measures |
 |---|---|---|---|
-| HIGH (architecture) | 2 | 2/2 | Can Mason explain modules, features, tech stack? |
-| MID (flows/impact) | 2 | 2/2 | Can Mason trace data flows and find affected files? |
-| LOW (code detail) | 3 | 1/3 | Can Mason help with function-level questions? |
+| Orientation | 2 | 2/2 | Architecture, feature listing |
+| Navigation | 2 | 2/2 | Data flow tracing, feature file lookup |
+| Analysis | 2 | 2/2 | Git stats, change impact |
+| Efficiency | 1 | 1/1 | Architecture answers in <4 iterations |
 
-Mason is a navigation tool — it tells you where to look, not what the code says. HIGH and MID tasks pass because the snapshot provides the right context. LOW tasks fail when they require reading code the snapshot doesn't cover.
-
-Reproduce with `cd bench && PROJECT_DIR=/your/project mcp-eval run tests/` (see [bench/README.md](bench/README.md)).
+Reproduce: `cd bench && PROJECT_DIR=/your/project mcp-eval run tests/` (see [bench/README.md](bench/README.md)).
 
 **Via MCP:** Ask your AI assistant to "create a mason snapshot." It analyzes the codebase and calls `save_snapshot`. Next session, `get_snapshot` loads instantly.
 

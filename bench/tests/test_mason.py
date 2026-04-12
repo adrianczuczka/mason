@@ -1,15 +1,14 @@
 """
 Mason MCP Server Benchmark
 
-Tests Mason's tools across three zoom levels:
-  HIGH  — architecture/orientation (snapshot should suffice)
-  MID   — patterns/flows (snapshot + native file reads)
-  LOW   — implementation detail (snapshot alone should fail)
+Tests Mason's value proposition: does it help LLMs understand codebases
+faster and more accurately?
 
-Each test checks:
-  1. Tool usage — did the agent call the right Mason tools?
-  2. Quality — is the answer factually correct? (LLM judge)
-  3. Efficiency — did it solve the task in reasonable steps?
+Test categories:
+  ORIENTATION  — Can Mason give correct high-level understanding?
+  NAVIGATION   — Does the snapshot point to the right files?
+  EFFICIENCY   — Does Mason reduce tool calls / iterations?
+  ANALYSIS     — Do git stats and impact analysis surface useful info?
 
 Prerequisites:
   - Target project must have a Mason snapshot (.mason/snapshot.json)
@@ -48,12 +47,12 @@ def configure():
 
 
 # ---------------------------------------------------------------------------
-# HIGH LEVEL — snapshot should be enough
+# ORIENTATION — Does Mason give correct high-level understanding?
 # ---------------------------------------------------------------------------
 
 
-@task("Explain the project architecture using Mason")
-async def test_high_architecture(agent: TestAgent, session: TestSession):
+@task("Explain the project architecture")
+async def test_orientation_architecture(agent: TestAgent, session: TestSession):
     response = await agent.generate_str(
         f"Use Mason to understand the project at {PROJECT}. "
         "What are the main modules, how do they depend on each other, "
@@ -77,12 +76,12 @@ async def test_high_architecture(agent: TestAgent, session: TestSession):
 
     await session.assert_that(
         Expect.performance.max_iterations(6),
-        name="efficient",
+        name="under_6_iterations",
     )
 
 
-@task("List all features using Mason")
-async def test_high_features(agent: TestAgent, session: TestSession):
+@task("List all features with implementing files")
+async def test_orientation_features(agent: TestAgent, session: TestSession):
     response = await agent.generate_str(
         f"Use Mason to analyze {PROJECT}. "
         "List every user-facing feature and name the key files for each."
@@ -92,7 +91,8 @@ async def test_high_features(agent: TestAgent, session: TestSession):
         Expect.judge.llm(
             rubric=(
                 "The response should list at least 3 distinct user-facing features "
-                "with specific file paths for each. Must not fabricate file paths."
+                "with specific file paths for each. Must not fabricate file paths "
+                "that don't exist in the project."
             ),
             min_score=0.7,
         ),
@@ -102,14 +102,14 @@ async def test_high_features(agent: TestAgent, session: TestSession):
 
 
 # ---------------------------------------------------------------------------
-# MID LEVEL — snapshot points to files, agent reads them
+# NAVIGATION — Does the snapshot point to the right files?
 # ---------------------------------------------------------------------------
 
 
-@task("Trace a data flow end-to-end")
-async def test_mid_data_flow(agent: TestAgent, session: TestSession):
+@task("Trace a data flow end-to-end using the snapshot")
+async def test_navigation_data_flow(agent: TestAgent, session: TestSession):
     response = await agent.generate_str(
-        f"Use Mason on {PROJECT}. Pick the main data flow in the snapshot "
+        f"Use Mason on {PROJECT}. Pick the main data flow from the snapshot "
         "and trace it end-to-end. Name every file in the chain and explain "
         "what each does."
     )
@@ -123,8 +123,8 @@ async def test_mid_data_flow(agent: TestAgent, session: TestSession):
         Expect.judge.llm(
             rubric=(
                 "The response should trace a complete data flow with at least 3 files "
-                "named in order. Each file should have a description of its role in the flow. "
-                "Must reference actual file paths from the project."
+                "named in order. Each file should have a description of its role. "
+                "The flow should make logical sense (e.g., UI -> logic -> data -> network)."
             ),
             min_score=0.7,
         ),
@@ -133,86 +133,72 @@ async def test_mid_data_flow(agent: TestAgent, session: TestSession):
     )
 
 
-@task("Analyze impact of changing a core file")
-async def test_mid_impact(agent: TestAgent, session: TestSession):
+@task("Navigate to a specific feature's files")
+async def test_navigation_feature_lookup(agent: TestAgent, session: TestSession):
     response = await agent.generate_str(
-        f"Use Mason on {PROJECT}. Pick a core file from the snapshot "
-        "and use get_impact to find what else would be affected if it changed."
+        f"Use Mason on {PROJECT}. I want to understand how the main feature works. "
+        "Use the snapshot to find which files implement it, then read the most "
+        "important one and summarize what it does."
     )
 
     await session.assert_that(
-        Expect.tools.was_called("get_impact"),
-        name="used_get_impact",
+        Expect.tools.was_called("get_snapshot"),
+        name="used_snapshot",
     )
 
     await session.assert_that(
         Expect.judge.llm(
             rubric=(
-                "The response should identify files affected by the change, "
-                "including co-changed files, files that reference the target, "
-                "or related tests. Must list actual file paths."
+                "The response should: "
+                "1) Identify the feature and its implementing files from the snapshot "
+                "2) Show evidence of reading at least one file (specific function names, "
+                "   code patterns, or implementation details) "
+                "3) Provide a useful summary of what the file does"
             ),
             min_score=0.7,
         ),
-        name="impact_quality",
+        name="lookup_quality",
         response=response,
     )
 
 
 # ---------------------------------------------------------------------------
-# LOW LEVEL — requires reading actual code, snapshot alone fails
+# EFFICIENCY — Does Mason reduce the work needed?
 # ---------------------------------------------------------------------------
 
 
-@task("Describe a specific file's internals (requires code reading)")
-async def test_low_function_detail(agent: TestAgent, session: TestSession):
+@task("Answer an architecture question in under 4 iterations")
+async def test_efficiency_fast_answer(agent: TestAgent, session: TestSession):
     response = await agent.generate_str(
-        f"Use Mason on {PROJECT} to find the most important file in the "
-        "project (e.g., the main ViewModel or entry point), then read it. "
-        "Describe its main functions: what parameters they take, "
-        "what they return, and the core logic of each."
+        f"Use Mason on {PROJECT}. How many modules does this project have "
+        "and what languages does it use? Be concise."
+    )
+
+    await session.assert_that(
+        Expect.performance.max_iterations(4),
+        name="under_4_iterations",
     )
 
     await session.assert_that(
         Expect.judge.llm(
             rubric=(
-                "The response must describe specific functions with their actual "
-                "parameter names, return types, and implementation details. "
-                "Generic descriptions without specific code references score 0. "
-                "Must reference real function signatures from the source code."
+                "The response should correctly state the number of modules "
+                "and the programming languages used. Must be factually correct."
             ),
             min_score=0.7,
         ),
-        name="detail_quality",
+        name="answer_quality",
         response=response,
     )
 
 
-@task("Find a file not in the snapshot (blind spot test)")
-async def test_low_blind_spot(agent: TestAgent, session: TestSession):
-    response = await agent.generate_str(
-        f"Use Mason on {PROJECT}. Find a source file in the project that is "
-        "NOT referenced in the snapshot. Read it and describe what it does, "
-        "its key functions, and how it fits into the project."
-    )
-
-    await session.assert_that(
-        Expect.judge.llm(
-            rubric=(
-                "The response should describe a specific file with its actual "
-                "functions and logic. Must reference real code, not generic advice. "
-                "If the agent could not find any file outside the snapshot, "
-                "score 0.3 maximum."
-            ),
-            min_score=0.5,
-        ),
-        name="blind_spot_quality",
-        response=response,
-    )
+# ---------------------------------------------------------------------------
+# ANALYSIS — Do git stats and impact analysis surface useful info?
+# ---------------------------------------------------------------------------
 
 
-@task("Identify git history patterns")
-async def test_low_git_analysis(agent: TestAgent, session: TestSession):
+@task("Identify frequently changed files from git history")
+async def test_analysis_git_stats(agent: TestAgent, session: TestSession):
     response = await agent.generate_str(
         f"Use Mason's analyze_project tool on {PROJECT}. "
         "What are the commit conventions and which files change most often?"
@@ -227,12 +213,39 @@ async def test_low_git_analysis(agent: TestAgent, session: TestSession):
         Expect.judge.llm(
             rubric=(
                 "The response should report: "
-                "1) The commit convention pattern (conventional commits or otherwise) "
-                "2) The most frequently changed files with commit counts "
-                "Must cite specific files and numbers from the analysis."
+                "1) The commit convention pattern used in the project "
+                "2) At least 3 frequently changed files with their commit counts "
+                "Must cite specific files and numbers, not generic advice."
             ),
             min_score=0.7,
         ),
-        name="git_analysis_quality",
+        name="git_stats_quality",
+        response=response,
+    )
+
+
+@task("Find files affected by a change using impact analysis")
+async def test_analysis_impact(agent: TestAgent, session: TestSession):
+    response = await agent.generate_str(
+        f"Use Mason on {PROJECT}. Pick a core file from the snapshot "
+        "and use get_impact to find what else would be affected if it changed."
+    )
+
+    await session.assert_that(
+        Expect.tools.was_called("get_impact"),
+        name="used_get_impact",
+    )
+
+    await session.assert_that(
+        Expect.judge.llm(
+            rubric=(
+                "The response should identify files affected by the change, "
+                "including at least one of: co-changed files from git history, "
+                "files that reference the target, or related test files. "
+                "Must list actual file paths from the project."
+            ),
+            min_score=0.7,
+        ),
+        name="impact_quality",
         response=response,
     )
