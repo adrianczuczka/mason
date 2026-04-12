@@ -61,14 +61,14 @@ Mason persists a concept-to-files map across conversations. Instead of the LLM e
 }
 ```
 
-**Benchmark results** ([mcp-eval](https://mcp-eval.ai/), Claude Sonnet, 164-file KMP project):
+**Benchmark: 7/7 passing** ([mcp-eval](https://mcp-eval.ai/), Claude Sonnet, 164-file KMP project):
 
-| Category | Tests | Pass rate | What it measures |
-|---|---|---|---|
-| Orientation | 2 | 2/2 | Architecture, feature listing |
-| Navigation | 2 | 2/2 | Data flow tracing, feature file lookup |
-| Analysis | 2 | 2/2 | Git stats, change impact |
-| Efficiency | 1 | 1/1 | Architecture answers in <4 iterations |
+| Category | Tests | What it measures |
+|---|---|---|
+| Orientation | 2/2 | Architecture understanding, feature listing |
+| Navigation | 2/2 | Data flow tracing, feature-to-file lookup |
+| Analysis | 2/2 | Git history stats, change impact analysis |
+| Efficiency | 1/1 | Architecture answers in <4 tool iterations |
 
 Reproduce: `cd bench && PROJECT_DIR=/your/project mcp-eval run tests/` (see [bench/README.md](bench/README.md)).
 
