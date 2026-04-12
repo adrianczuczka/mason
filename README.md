@@ -61,16 +61,11 @@ Mason persists a concept-to-files map across conversations. Instead of the LLM e
 }
 ```
 
-**Benchmark: 7/7 passing** ([mcp-eval](https://mcp-eval.ai/), Claude Sonnet, 164-file KMP project):
+**Without Mason**, the LLM explores your codebase from scratch every session — grepping for patterns, reading files one by one, piecing together the architecture. For a 164-file project, answering "how does the weather forecast flow work?" takes 8+ file reads across 5+ tool calls.
 
-| Category | Tests | What it measures |
-|---|---|---|
-| Orientation | 2/2 | Architecture understanding, feature listing |
-| Navigation | 2/2 | Data flow tracing, feature-to-file lookup |
-| Analysis | 2/2 | Git history stats, change impact analysis |
-| Efficiency | 1/1 | Architecture answers in <4 tool iterations |
+**With Mason**, one `get_snapshot` call returns the complete feature-to-file map. The LLM knows exactly which files to read — 1 tool call instead of 8.
 
-Reproduce: `cd bench && PROJECT_DIR=/your/project mcp-eval run tests/` (see [bench/README.md](bench/README.md)).
+Benchmark ([deepeval](https://github.com/confident-ai/deepeval), Claude Sonnet, 164-file KMP project): same answer quality, 60% fewer tool calls on navigation queries. See [bench/](bench/) to reproduce.
 
 **Via MCP:** Ask your AI assistant to "create a mason snapshot." It analyzes the codebase and calls `save_snapshot`. Next session, `get_snapshot` loads instantly.
 
