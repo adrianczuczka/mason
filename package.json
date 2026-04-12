@@ -1,6 +1,6 @@
 {
   "name": "mason-context",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Context engineering CLI & MCP server — generates intelligent CLAUDE.md files through structured codebase analysis",
   "type": "module",
   "bin": {
