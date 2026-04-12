@@ -1,47 +1,44 @@
 # Mason Benchmark
 
-Uses [mcp-eval](https://mcp-eval.ai/) to test Mason's MCP tools against a real codebase.
+Uses [deepeval](https://github.com/confident-ai/deepeval) to measure Mason's token savings and answer quality.
+
+## What it does
+
+For each question, calls Claude twice with realistic context:
+- **Path A** — Mason snapshot + 3 targeted file reads (the real Mason workflow)
+- **Path B** — 8-10 files an agent would find via grep (realistic no-Mason)
+
+Both answers are scored with the same quality rubric (GEval + MCPUseMetric).
 
 ## Setup
 
 ```bash
-# Install mcp-eval
-pip install mcpevals
-# or: uv tool install mcpevals
-
-# Build Mason
-cd .. && npm run build && cd bench
+uv tool install deepeval --with anthropic
+# or: pip install deepeval anthropic
 ```
 
 ## Run
 
 ```bash
-# Set required env vars
-export ANTHROPIC_API_KEY=sk-ant-...
-export PROJECT_DIR=/path/to/project/with/mason/snapshot
-
-# Run the benchmark
-mcp-eval run tests/
+cd bench
+PROJECT_DIR=/path/to/project ANTHROPIC_API_KEY=sk-... deepeval test run tests/test_mason.py
 ```
 
 The target project must have a Mason snapshot (`.mason/snapshot.json`).
 
 ## What it tests
 
-8 tests across 4 categories:
+4 questions, each as A/B pair (8 tests total):
 
-| Category | Test | What it measures |
+| Question | Path A context | Path B context |
 |---|---|---|
-| **Orientation** | architecture | Can Mason explain modules, dependencies, tech stack? |
-| **Orientation** | features | Can Mason list features with implementing files? |
-| **Navigation** | data_flow | Does the snapshot trace data flows correctly? |
-| **Navigation** | feature_lookup | Can Mason find a feature's files, then drill in? |
-| **Efficiency** | fast_answer | Can Mason answer architecture questions in <4 iterations? |
-| **Analysis** | git_stats | Does analyze_project surface commit patterns and hot files? |
-| **Analysis** | impact | Does get_impact find affected files before a change? |
+| Architecture | snapshot + 3 build files | 10 build/config files |
+| Features | snapshot + 3 nav/entry files | 8 screen files |
+| Data flow | snapshot + 3 key chain files | 8 flow chain files |
+| Feature lookup | snapshot + 3 location files | 8 location files |
 
-## Configuration
+## Output
 
-- Edit `mcpeval.yaml` to change the model or provider
-- Create `mcpeval.secrets.yaml` with your API key (not committed)
-- The server path in `mcpeval.yaml` assumes you run from the `bench/` directory
+1. **Token savings table** — shows input tokens for A vs B per question
+2. **Quality scores** — deepeval GEval (0-1) for both paths
+3. **MCP Use score** — did the snapshot provide relevant info?

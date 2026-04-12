@@ -330,23 +330,36 @@ export async function getSnapshot(dir: string): Promise<string> {
   const currentHash = await getCurrentGitHash(rootDir);
   const isStale = snapshot.gitHash !== currentHash && snapshot.gitHash !== "unknown";
 
+  // Return compact format: feature/flow names -> file lists only.
+  // Descriptions and metadata stay in the full snapshot on disk.
+  // Deduplicate files that appear in multiple features.
+  const seenFiles = new Set<string>();
+  const compactFeatures: Record<string, string[]> = {};
+  for (const [name, feat] of Object.entries(snapshot.features)) {
+    const unique = feat.files.filter((f) => !seenFiles.has(f));
+    if (unique.length === 0) continue; // Skip fully duplicate features
+    for (const f of unique) seenFiles.add(f);
+    compactFeatures[name] = unique;
+  }
+
+  const compactFlows: Record<string, string[]> = {};
+  for (const [name, flow] of Object.entries(snapshot.flows)) {
+    compactFlows[name] = flow.chain; // Flows keep all files (order matters)
+  }
+
   const output: Record<string, unknown> = {
     exists: true,
-    createdAt: snapshot.createdAt,
-    updatedAt: snapshot.updatedAt,
-    featureCount: Object.keys(snapshot.features).length,
-    flowCount: Object.keys(snapshot.flows).length,
-    features: snapshot.features,
-    flows: snapshot.flows,
+    features: compactFeatures,
+    flows: compactFlows,
     stale: isStale,
   };
 
   if (isStale) {
     output.message =
-      "Snapshot is behind HEAD. Some features/flows may reference changed files. Run 'mason snapshot-update' or call save_snapshot to refresh.";
+      "Snapshot is behind HEAD. Run 'mason snapshot-update' or call save_snapshot to refresh.";
   }
 
-  return JSON.stringify(output, null, 2);
+  return JSON.stringify(output);
 }
 
 export async function fullAnalysis(dir: string): Promise<string> {
