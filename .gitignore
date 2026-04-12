@@ -16,6 +16,11 @@ Thumbs.db
 .env
 .env.*
 
+# Benchmark secrets & reports
+mcpeval.secrets.yaml
+bench/test-reports/
+__pycache__/
+
 # Mason legacy cache
 .mason-cache.json
 .foreman-cache.json

@@ -16,7 +16,7 @@ cd .. && npm run build && cd bench
 ## Run
 
 ```bash
-# Set your API key and target project
+# Set required env vars
 export ANTHROPIC_API_KEY=sk-ant-...
 export PROJECT_DIR=/path/to/project/with/mason/snapshot
 
