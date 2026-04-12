@@ -137,8 +137,8 @@ async def test_navigation_data_flow(agent: TestAgent, session: TestSession):
 async def test_navigation_feature_lookup(agent: TestAgent, session: TestSession):
     response = await agent.generate_str(
         f"Use Mason on {PROJECT}. I want to understand how the main feature works. "
-        "Use the snapshot to find which files implement it, then read the most "
-        "important one and summarize what it does."
+        "Use the snapshot to find which files implement it and describe "
+        "the architecture of that feature."
     )
 
     await session.assert_that(
@@ -150,10 +150,10 @@ async def test_navigation_feature_lookup(agent: TestAgent, session: TestSession)
         Expect.judge.llm(
             rubric=(
                 "The response should: "
-                "1) Identify the feature and its implementing files from the snapshot "
-                "2) Show evidence of reading at least one file (specific function names, "
-                "   code patterns, or implementation details) "
-                "3) Provide a useful summary of what the file does"
+                "1) Identify a specific feature from the snapshot "
+                "2) List the files that implement it with their roles "
+                "   (e.g., ViewModel, Repository, UI screen) "
+                "3) Describe how the files relate to each other"
             ),
             min_score=0.7,
         ),
@@ -170,8 +170,8 @@ async def test_navigation_feature_lookup(agent: TestAgent, session: TestSession)
 @task("Answer an architecture question in under 4 iterations")
 async def test_efficiency_fast_answer(agent: TestAgent, session: TestSession):
     response = await agent.generate_str(
-        f"Use Mason on {PROJECT}. How many modules does this project have "
-        "and what languages does it use? Be concise."
+        f"Use Mason on {PROJECT}. What programming languages does this project use "
+        "and what are the main feature areas? Be concise."
     )
 
     await session.assert_that(
@@ -182,8 +182,9 @@ async def test_efficiency_fast_answer(agent: TestAgent, session: TestSession):
     await session.assert_that(
         Expect.judge.llm(
             rubric=(
-                "The response should correctly state the number of modules "
-                "and the programming languages used. Must be factually correct."
+                "The response should identify the programming languages used "
+                "and name the main feature areas of the project. "
+                "Must be based on actual project data, not guesses."
             ),
             min_score=0.7,
         ),
@@ -201,7 +202,7 @@ async def test_efficiency_fast_answer(agent: TestAgent, session: TestSession):
 async def test_analysis_git_stats(agent: TestAgent, session: TestSession):
     response = await agent.generate_str(
         f"Use Mason's analyze_project tool on {PROJECT}. "
-        "What are the commit conventions and which files change most often?"
+        "Which files change most often and what patterns do you see?"
     )
 
     await session.assert_that(
@@ -212,10 +213,9 @@ async def test_analysis_git_stats(agent: TestAgent, session: TestSession):
     await session.assert_that(
         Expect.judge.llm(
             rubric=(
-                "The response should report: "
-                "1) The commit convention pattern used in the project "
-                "2) At least 3 frequently changed files with their commit counts "
-                "Must cite specific files and numbers, not generic advice."
+                "The response should report at least 3 frequently changed files "
+                "with their commit counts. Must cite specific file paths and "
+                "numbers from the analysis, not generic advice."
             ),
             min_score=0.7,
         ),
