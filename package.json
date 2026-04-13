@@ -19,8 +19,16 @@
     "ai",
     "cli"
   ],
-  "author": "",
+  "author": "Adrian Czuczka",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adrianczuczka/mason.git"
+  },
+  "homepage": "https://github.com/adrianczuczka/mason",
+  "bugs": {
+    "url": "https://github.com/adrianczuczka/mason/issues"
+  },
   "files": [
     "dist",
     "README.md"

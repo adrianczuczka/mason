@@ -6,7 +6,7 @@ Mason is a context engineering CLI & MCP server that generates intelligent CLAUD
 
 **Tech stack:** TypeScript, Node 20+, ESM modules
 **Build:** tsup (bundler), vitest (testing)
-**Package:** `mason-ai` on npm
+**Package:** `mason-context` on npm
 
 ## Architecture
 
