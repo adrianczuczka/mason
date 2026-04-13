@@ -130,6 +130,12 @@ function spawnWithStdin(
       timeout: 300_000,
     });
 
+    // ora puts stdin into raw mode, which means Ctrl+C is emitted as
+    // process.emit("SIGINT") rather than a real signal to the process
+    // group. Forward it to the child so it can terminate.
+    const onSigint = () => proc.kill("SIGINT");
+    process.on("SIGINT", onSigint);
+
     let stdout = "";
     let stderr = "";
 
@@ -141,6 +147,7 @@ function spawnWithStdin(
     });
 
     proc.on("close", (code: number | null) => {
+      process.off("SIGINT", onSigint);
       if (code === 0) {
         resolve(stdout.trim());
       } else {
@@ -148,7 +155,10 @@ function spawnWithStdin(
       }
     });
 
-    proc.on("error", reject);
+    proc.on("error", (err) => {
+      process.off("SIGINT", onSigint);
+      reject(err);
+    });
 
     proc.stdin.write(input);
     proc.stdin.end();

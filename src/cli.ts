@@ -192,7 +192,7 @@ export function createCLI(): Command {
       const rootDir = path.resolve(dir);
       const runConfig = opts.model ? { ...config, model: opts.model } : config;
 
-      const spinner = ora("Analyzing codebase...").start();
+      const spinner = ora({ discardStdin: false, text: "Analyzing codebase..." }).start();
       const analysisData = await fullAnalysis(rootDir);
       spinner.text = `Generating CLAUDE.md with ${runConfig.provider}...`;
 
@@ -233,7 +233,7 @@ export function createCLI(): Command {
         // Auto-create concept map snapshot
         try {
           const { createSnapshot } = await import("./snapshot/snapshot.js");
-          const spinner2 = ora("Building concept map...").start();
+          const spinner2 = ora({ discardStdin: false, text: "Building concept map..." }).start();
           const snapshot = await createSnapshot(rootDir, runConfig);
           spinner2.stop();
           const featureCount = Object.keys(snapshot.features).length;
@@ -306,7 +306,7 @@ export function createCLI(): Command {
         process.exit(1);
       }
 
-      const spinner = ora("Building project snapshot...").start();
+      const spinner = ora({ discardStdin: false, text: "Building project snapshot..." }).start();
       try {
         const snapshot = await createSnapshot(rootDir, config);
         spinner.stop();
@@ -355,7 +355,7 @@ export function createCLI(): Command {
       const { analyzeImpact } = await import("./impact/impact.js");
       const rootDir = path.resolve(opts.dir);
 
-      const spinner = ora("Analyzing impact...").start();
+      const spinner = ora({ discardStdin: false, text: "Analyzing impact..." }).start();
       const result = await analyzeImpact(rootDir, files);
       spinner.stop();
 
@@ -400,7 +400,7 @@ export function createCLI(): Command {
     .argument("[dir]", "Directory to analyze", ".")
     .action(async (dir: string) => {
       const rootDir = path.resolve(dir);
-      const spinner = ora("Analyzing codebase...").start();
+      const spinner = ora({ discardStdin: false, text: "Analyzing codebase..." }).start();
 
       const context = await buildContext(rootDir);
       const results = await runAll(context);
