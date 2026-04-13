@@ -114,6 +114,14 @@ mason snapshot                # create/update concept map
 
 Most providers work without an API key — `claude`, `gemini`, and `ollama` all use their respective CLIs directly.
 
+## Security
+
+**What the snapshot contains:** Feature names, relative file paths, and flow descriptions. No source code, secrets, or business logic.
+
+**What it doesn't touch:** Mason respects `.gitignore` (via `git ls-files`) and has a deny-list that blocks `.env`, `.pem`, `.key`, credentials, and other sensitive files from being sampled. Path traversal protection ensures all file access stays within the project root.
+
+**LLM data flow:** When generating a snapshot via CLI (`mason generate`, `mason snapshot`), Mason sends sampled file contents to your configured LLM provider. If you're using `claude`, `openai`, or `gemini`, this means source code is sent to an external API. Use `ollama` for fully local generation. The MCP server tools (`get_snapshot`, `get_impact`, etc.) do not send data to any LLM — they only read local files.
+
 ## Language support
 
 Mason is completely language-agnostic. It uses file naming patterns and git history rather than language-specific parsing, so it works with any project that has source files and a git repository — TypeScript, Kotlin, Python, Go, Rust, Swift, Java, C#, Dart, and more.

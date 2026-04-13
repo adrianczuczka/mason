@@ -315,6 +315,16 @@ export async function fullAnalysis(dir: string): Promise<string> {
   return JSON.stringify(output, null, 2);
 }
 
+function sanitizePaths(
+  rootDir: string,
+  files: string[]
+): string[] {
+  return files.filter((f) => {
+    const resolved = path.resolve(rootDir, f);
+    return resolved.startsWith(rootDir) && !f.startsWith("/") && !f.includes("..");
+  });
+}
+
 export async function saveSnapshotData(
   dir: string,
   features: Record<string, { description: string; files: string[]; tests?: string[] }>,
@@ -323,6 +333,15 @@ export async function saveSnapshotData(
   const rootDir = path.resolve(dir);
   const gitHash = await getCurrentGitHash(rootDir);
   const now = new Date().toISOString();
+
+  // Sanitize all file paths to prevent path traversal
+  for (const feat of Object.values(features)) {
+    feat.files = sanitizePaths(rootDir, feat.files);
+    if (feat.tests) feat.tests = sanitizePaths(rootDir, feat.tests);
+  }
+  for (const flow of Object.values(flows)) {
+    flow.chain = sanitizePaths(rootDir, flow.chain);
+  }
 
   const existing = await loadSnapshot(rootDir);
 
