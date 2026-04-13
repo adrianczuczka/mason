@@ -18,6 +18,8 @@ import { fullAnalysis } from "./mcp/tools.js";
 import * as log from "./utils/logger.js";
 import type { AnalyzerContext } from "./types.js";
 
+declare const PKG_VERSION: string;
+
 async function buildContext(dir: string): Promise<AnalyzerContext> {
   return {
     rootDir: dir,
@@ -77,7 +79,7 @@ export function createCLI(): Command {
     .description(
       "Context engineering CLI & MCP server — generates intelligent CLAUDE.md files"
     )
-    .version("0.1.0");
+    .version(PKG_VERSION);
 
   program
     .command("setup")
