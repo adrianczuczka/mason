@@ -1,5 +1,11 @@
 # Mason – the context builder for LLMs 👷
 
+[![npm version](https://img.shields.io/npm/v/mason-context)](https://www.npmjs.com/package/mason-context)
+[![CI](https://img.shields.io/github/actions/workflow/status/adrianczuczka/mason/ci.yml?branch=main)](https://github.com/adrianczuczka/mason/actions/workflows/ci.yml)
+[![npm downloads](https://img.shields.io/npm/dm/mason-context)](https://www.npmjs.com/package/mason-context)
+[![license](https://img.shields.io/github/license/adrianczuczka/mason)](https://github.com/adrianczuczka/mason/blob/main/LICENSE)
+[![issues](https://img.shields.io/github/issues/adrianczuczka/mason)](https://github.com/adrianczuczka/mason/issues)
+
 Mason gives LLMs a persistent map of your codebase so they stop exploring from scratch every session.
 
 **The problem:** Every time an LLM starts a new conversation about your code, it greps, reads files, and pieces together the architecture — burning tokens on context it already understood yesterday. On a 164-file project, answering "what features does this app have?" requires reading 8+ files across multiple tool calls.
