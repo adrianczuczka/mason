@@ -72,6 +72,9 @@ function extractMarkdown(raw: string): string {
 }
 
 export function createCLI(): Command {
+  // Ensure Ctrl+C always exits cleanly, even during long-running child processes
+  process.on("SIGINT", () => process.exit(130));
+
   const program = new Command();
 
   program
