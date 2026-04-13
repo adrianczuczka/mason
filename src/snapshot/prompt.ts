@@ -43,7 +43,8 @@ Rules:
 - Cover ALL the files you're given — don't skip any`;
 
 export function buildSnapshotPrompt(
-  files: Array<{ path: string; content: string }>
+  files: Array<{ path: string; content: string }>,
+  testPairs?: Array<{ test: string; source: string; confidence: string }>
 ): string {
   const fileBlocks = files
     .map(
@@ -52,7 +53,16 @@ export function buildSnapshotPrompt(
     )
     .join("\n\n");
 
-  return `Create a concept-to-files map for this codebase. Here are the key source files:\n\n${fileBlocks}`;
+  let prompt = `Create a concept-to-files map for this codebase. Here are the key source files:\n\n${fileBlocks}`;
+
+  if (testPairs && testPairs.length > 0) {
+    const testBlock = testPairs
+      .map((p) => `${p.test} → ${p.source}`)
+      .join("\n");
+    prompt += `\n\nHere are the test-to-source file mappings. Use these to populate the "tests" field for each feature:\n\n${testBlock}`;
+  }
+
+  return prompt;
 }
 
 export function buildIncrementalPrompt(

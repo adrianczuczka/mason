@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import type { MasonConfig } from "./config.js";
 import { getDefaultModel } from "./config.js";
@@ -124,8 +124,6 @@ function spawnWithStdin(
   args: string[],
   input: string
 ): Promise<string> {
-  const { spawn } = require("node:child_process") as typeof import("node:child_process");
-
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       stdio: ["pipe", "pipe", "pipe"],

@@ -225,93 +225,9 @@ export async function getProjectStructure(dir: string): Promise<string> {
 }
 
 export async function getTestMap(dir: string): Promise<string> {
-  const rootDir = path.resolve(dir);
-
-  // Find all test files
-  const testPatterns = [
-    "**/*.test.*", "**/*.spec.*",
-    "**/*Test.kt", "**/*Test.java", "**/*Tests.kt", "**/*Tests.java",
-    "**/test_*.py", "**/*_test.py",
-    "**/*_test.go",
-    "**/*Tests.swift", "**/*Test.swift",
-    "**/*_test.rs",
-  ];
-  const testFiles = await fg(testPatterns, { cwd: rootDir, ignore: IGNORE });
-
-  // Find all source files
-  const sourceFiles = await fg(
-    "**/*.{ts,tsx,js,jsx,kt,kts,java,py,go,rs,swift,rb,cs,cpp,dart}",
-    { cwd: rootDir, ignore: IGNORE }
-  );
-
-  // Build source file index by base name (without extension)
-  const sourceByBaseName = new Map<string, string[]>();
-  for (const file of sourceFiles) {
-    if (testFiles.includes(file)) continue; // Skip test files
-    const baseName = path.basename(file).replace(/\.[^.]+$/, "");
-    const existing = sourceByBaseName.get(baseName) ?? [];
-    existing.push(file);
-    sourceByBaseName.set(baseName, existing);
-  }
-
-  // Match test files to source files by name
-  const pairs: Array<{ test: string; source: string | null; confidence: string }> = [];
-  const unmatched: string[] = [];
-
-  for (const testFile of testFiles) {
-    const testBaseName = path.basename(testFile).replace(/\.[^.]+$/, "");
-
-    // Strip test suffixes/prefixes to get the source name
-    const sourceName = testBaseName
-      .replace(/Test$|Tests$|Spec$|\.test$|\.spec$/, "")
-      .replace(/^test_|_test$/, "");
-
-    if (!sourceName) {
-      unmatched.push(testFile);
-      continue;
-    }
-
-    const candidates = sourceByBaseName.get(sourceName);
-    if (candidates && candidates.length > 0) {
-      // If multiple candidates, prefer one in a similar directory path
-      const testDir = path.dirname(testFile);
-      const bestMatch = candidates.reduce((best, candidate) => {
-        const candidateDir = path.dirname(candidate);
-        const bestDir = path.dirname(best);
-        // Prefer candidates that share more path segments
-        const candidateOverlap = commonSegments(testDir, candidateDir);
-        const bestOverlap = commonSegments(testDir, bestDir);
-        return candidateOverlap > bestOverlap ? candidate : best;
-      });
-
-      pairs.push({
-        test: testFile,
-        source: bestMatch,
-        confidence: candidates.length === 1 ? "exact" : "best-guess",
-      });
-    } else {
-      unmatched.push(testFile);
-    }
-  }
-
-  const output = {
-    totalTestFiles: testFiles.length,
-    paired: pairs,
-    unmatched,
-  };
-
-  return JSON.stringify(output, null, 2);
-}
-
-function commonSegments(pathA: string, pathB: string): number {
-  const segsA = pathA.split("/");
-  const segsB = pathB.split("/");
-  let count = 0;
-  for (let i = 0; i < Math.min(segsA.length, segsB.length); i++) {
-    if (segsA[i] === segsB[i]) count++;
-    else break;
-  }
-  return count;
+  const { buildTestMap } = await import("../test-map.js");
+  const result = await buildTestMap(dir);
+  return JSON.stringify(result, null, 2);
 }
 
 export async function getSnapshot(dir: string): Promise<string> {
@@ -334,12 +250,16 @@ export async function getSnapshot(dir: string): Promise<string> {
   // Descriptions and metadata stay in the full snapshot on disk.
   // Deduplicate files that appear in multiple features.
   const seenFiles = new Set<string>();
-  const compactFeatures: Record<string, string[]> = {};
+  const compactFeatures: Record<string, { files: string[]; tests?: string[] }> = {};
   for (const [name, feat] of Object.entries(snapshot.features)) {
     const unique = feat.files.filter((f) => !seenFiles.has(f));
     if (unique.length === 0) continue; // Skip fully duplicate features
     for (const f of unique) seenFiles.add(f);
-    compactFeatures[name] = unique;
+    const entry: { files: string[]; tests?: string[] } = { files: unique };
+    if (feat.tests && feat.tests.length > 0) {
+      entry.tests = feat.tests;
+    }
+    compactFeatures[name] = entry;
   }
 
   const compactFlows: Record<string, string[]> = {};
@@ -349,6 +269,7 @@ export async function getSnapshot(dir: string): Promise<string> {
 
   const output: Record<string, unknown> = {
     exists: true,
+    updatedAt: snapshot.updatedAt,
     features: compactFeatures,
     flows: compactFlows,
     stale: isStale,

@@ -9,6 +9,7 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   splitting: false,
+  external: ["@anthropic-ai/sdk", "openai"],
   define: {
     PKG_VERSION: JSON.stringify(pkg.version),
   },

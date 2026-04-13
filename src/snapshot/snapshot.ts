@@ -3,6 +3,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { sampleFiles, readFullFile } from "../mcp/sampler.js";
+import { buildTestMap } from "../test-map.js";
 import { callLLM } from "../llm/providers.js";
 import type { MasonConfig } from "../llm/config.js";
 import {
@@ -141,8 +142,11 @@ export async function createSnapshot(
     };
   }
 
+  // Get test-to-source mappings so the LLM can include tests in features
+  const testMap = await buildTestMap(resolvedRoot);
+
   // Call LLM to build concept map
-  const userMessage = buildSnapshotPrompt(filesWithContent);
+  const userMessage = buildSnapshotPrompt(filesWithContent, testMap.paired);
   const result = await callLLM(config, userMessage, SNAPSHOT_SYSTEM_PROMPT);
 
   const resultText =
