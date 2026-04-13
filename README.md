@@ -120,7 +120,7 @@ Most providers work without an API key — `claude`, `gemini`, and `ollama` all 
 
 **What it doesn't touch:** Mason respects `.gitignore` (via `git ls-files`) and has a deny-list that blocks `.env`, `.pem`, `.key`, credentials, and other sensitive files from being sampled. Path traversal protection ensures all file access stays within the project root.
 
-**LLM data flow:** When generating a snapshot via CLI (`mason generate`, `mason snapshot`), Mason sends sampled file contents to your configured LLM provider. If you're using `claude`, `openai`, or `gemini`, this means source code is sent to an external API. Use `ollama` for fully local generation. The MCP server tools (`get_snapshot`, `get_impact`, etc.) do not send data to any LLM — they only read local files.
+**LLM data flow:** Generating a snapshot via CLI sends sampled file contents to your configured LLM provider — the same way any AI coding assistant reads your code. Use `ollama` for fully local generation. The MCP server tools (`get_snapshot`, `get_impact`, etc.) only read local files.
 
 ## Language support
 
