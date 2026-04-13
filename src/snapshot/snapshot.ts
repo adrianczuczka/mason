@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import fg from "fast-glob";
 import { sampleFiles, readFullFile } from "../mcp/sampler.js";
 import { buildTestMap } from "../test-map.js";
 import { callLLM } from "../llm/providers.js";
@@ -116,8 +117,23 @@ export async function createSnapshot(
 ): Promise<Snapshot> {
   const resolvedRoot = path.resolve(rootDir);
 
+  // Scale sample count with codebase size: ~15% of source files, clamped to [20, 80]
+  const allFiles = await fg(
+    "**/*.{ts,tsx,js,jsx,kt,kts,java,py,go,rs,swift,rb,cs,cpp,c,dart}",
+    {
+      cwd: resolvedRoot,
+      ignore: [
+        "**/node_modules/**", "**/dist/**", "**/build/**", "**/.gradle/**",
+        "**/target/**", "**/.git/**", "**/vendor/**", "**/__pycache__/**",
+        "**/venv/**", "**/.venv/**", "**/*.min.*", "**/*.map",
+        "**/generated/**", "**/R.java", "**/BuildConfig.java",
+      ],
+    }
+  );
+  const sampleCount = Math.min(80, Math.max(20, Math.round(allFiles.length * 0.15)));
+
   // Use sampler to pick key files
-  const sampled = await sampleFiles(resolvedRoot, 25);
+  const sampled = await sampleFiles(resolvedRoot, sampleCount);
 
   // Read full content of each sampled file
   const filesWithContent: Array<{ path: string; content: string }> = [];

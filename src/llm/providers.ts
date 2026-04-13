@@ -169,15 +169,14 @@ async function callClaudeCLI(
   system: string,
   userMessage: string
 ): Promise<string> {
-  const prompt = `${system}\n\n${userMessage}`;
-  return spawnWithStdin("claude", ["-p"], prompt);
+  return spawnWithStdin("claude", ["-p", "--system-prompt", system], userMessage);
 }
 
 async function callGeminiCLI(
   system: string,
   userMessage: string
 ): Promise<string> {
-  const prompt = `${system}\n\n${userMessage}`;
+  const prompt = `<system>\n${system}\n</system>\n\n${userMessage}`;
   return spawnWithStdin("gemini", ["-p", ""], prompt);
 }
 
