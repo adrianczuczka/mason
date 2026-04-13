@@ -10,11 +10,13 @@ import {
   saveSnapshotData,
 } from "./tools.js";
 
+declare const PKG_VERSION: string;
+
 export function createMcpServer(): McpServer {
   const server = new McpServer(
     {
       name: "mason",
-      version: "0.2.0",
+      version: PKG_VERSION,
     },
     {
       instructions:
