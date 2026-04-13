@@ -1,11 +1,12 @@
 {
   "name": "mason-context",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Context engineering CLI & MCP server — generates intelligent CLAUDE.md files through structured codebase analysis",
   "type": "module",
   "bin": {
     "mason": "dist/bin/mason.js",
-    "mason-mcp": "dist/bin/mason-mcp.js"
+    "mason-mcp": "dist/bin/mason-mcp.js",
+    "mason-context": "dist/bin/mason.js"
   },
   "scripts": {
     "build": "tsup",
@@ -23,7 +24,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/adrianczuczka/mason.git"
+    "url": "git+https://github.com/adrianczuczka/mason.git"
   },
   "homepage": "https://github.com/adrianczuczka/mason",
   "bugs": {

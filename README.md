@@ -27,7 +27,7 @@ Same answer quality (0.9/1.0 on all tests, both paths). Reproduce: [bench/](benc
 ## Quick start
 
 ```bash
-claude mcp add mason --scope user -- npx mason-context mcp
+claude mcp add mason --scope user -- npx -p mason-context mason-mcp
 ```
 
 Restart Claude Code, then ask: *"use mason to analyze this project and create a snapshot."*
