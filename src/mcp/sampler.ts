@@ -174,6 +174,18 @@ async function loadProjectConfig(
   }
 }
 
+async function getTrackedFiles(rootDir: string): Promise<Set<string> | null> {
+  try {
+    const { stdout } = await exec("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+      cwd: rootDir,
+      maxBuffer: 10_000_000,
+    });
+    return new Set(stdout.trim().split("\n").filter(Boolean));
+  } catch {
+    return null; // Not a git repo — skip filtering
+  }
+}
+
 export async function sampleFiles(
   rootDir: string,
   maxFiles: number = 25
@@ -181,6 +193,7 @@ export async function sampleFiles(
   const selected = new Map<string, string>(); // path -> reason
   const projectConfig = await loadProjectConfig(rootDir);
   const ignorePatterns = [...IGNORE_PATTERNS, ...(projectConfig.ignore ?? [])];
+  const trackedFiles = await getTrackedFiles(rootDir);
 
   // 0. Always-include files from project config (highest priority)
   for (const filePath of projectConfig.alwaysInclude ?? []) {
@@ -396,6 +409,7 @@ export async function sampleFiles(
       const fullPath = path.resolve(rootDir, filePath);
       if (!fullPath.startsWith(path.resolve(rootDir))) continue;
       if (isSensitiveFile(filePath)) continue;
+      if (trackedFiles && !trackedFiles.has(filePath)) continue; // respect .gitignore
       const stat = await fs.stat(fullPath);
       if (stat.size > 100_000) continue;
 
