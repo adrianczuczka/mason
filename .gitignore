@@ -16,6 +16,9 @@ Thumbs.db
 .env
 .env.*
 
+# Signing keys (MCP registry DNS auth)
+*.pem
+
 # Benchmark secrets & reports
 mcpeval.secrets.yaml
 bench/test-reports/

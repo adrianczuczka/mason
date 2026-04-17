@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.adrianczuczka/mason",
+  "description": "Context engineering MCP server — generates CLAUDE.md files via structured codebase analysis",
+  "repository": {
+    "url": "https://github.com/adrianczuczka/mason",
+    "source": "github"
+  },
+  "version": "0.3.6",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "mason-context",
+      "version": "0.3.6",
+      "runtimeHint": "npx",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-p",
+          "value": "mason-context"
+        },
+        {
+          "type": "positional",
+          "value": "mason-mcp"
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
