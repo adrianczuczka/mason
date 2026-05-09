@@ -21,3 +21,19 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: NODE_AUTH_TOKEN="" npm publish --provenance --access public
+
+  smithery:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run pack:mcpb
+      - run: npx -y @smithery/cli@latest mcp publish ./mason.mcpb -n adrianczuczka/mason
+        env:
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}

@@ -1,0 +1,50 @@
+{
+  "manifest_version": "0.3",
+  "name": "mason",
+  "display_name": "Mason",
+  "version": "0.0.0",
+  "description": "Context engineering MCP server — concept maps for codebases so LLMs stop re-exploring every session.",
+  "long_description": "Mason persists a feature-to-file concept map in `.mason/snapshot.json` so AI assistants can answer architecture questions without grepping the codebase from scratch. Also exposes change impact analysis (co-change history, references, related tests) and git history aggregation (hot files, stale dirs, commit patterns).",
+  "author": {
+    "name": "Adrian Czuczka",
+    "url": "https://github.com/adrianczuczka"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adrianczuczka/mason"
+  },
+  "homepage": "https://github.com/adrianczuczka/mason",
+  "support": "https://github.com/adrianczuczka/mason/issues",
+  "license": "MIT",
+  "keywords": [
+    "context-engineering",
+    "claude",
+    "claude-md",
+    "mcp",
+    "code-analysis",
+    "snapshot",
+    "concept-map"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/bin/mason-mcp.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/bin/mason-mcp.js"]
+    }
+  },
+  "tools": [
+    { "name": "get_snapshot", "description": "Load the concept map — maps features and flows to files." },
+    { "name": "save_snapshot", "description": "Persist the concept map for future sessions." },
+    { "name": "get_impact", "description": "Change impact analysis: co-change history, references, related tests." },
+    { "name": "analyze_project", "description": "Git history aggregation: commit patterns, hot files, stale dirs." },
+    { "name": "full_analysis", "description": "All-in-one first visit: git stats, structure, code samples, test map." },
+    { "name": "get_code_samples", "description": "Smart file previews selected by architectural role." }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "linux", "win32"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}

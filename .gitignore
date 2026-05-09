@@ -2,6 +2,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# MCPB bundle artifacts
+*.mcpb
+.mcpb-bundle/
+
 # OS
 .DS_Store
 Thumbs.db
