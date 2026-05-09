@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.github
+.claude
+test
+bench
+*.pem
+*.key
+.env
+.env.*
+.foreman-cache.json
+.mason-cache.json
+.mason

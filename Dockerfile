@@ -1,5 +1,10 @@
 FROM node:20-alpine
 
-RUN npm install -g mason-context@0.3.6
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build && npm link
 
 ENTRYPOINT ["mason-mcp"]
