@@ -17,8 +17,15 @@
     "pack:mcpb": "node scripts/pack-mcpb.mjs"
   },
   "keywords": [
-    "context-engineering",
+    "mcp",
+    "model-context-protocol",
     "claude",
+    "claude-code",
+    "claude-md",
+    "context-engineering",
+    "code-analysis",
+    "concept-map",
+    "snapshot",
     "ai",
     "cli"
   ],
