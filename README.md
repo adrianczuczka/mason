@@ -34,6 +34,81 @@ Restart Claude Code, then ask: *"use mason to analyze this project and create a 
 
 That's it — Mason will analyze your codebase and create a concept map. Next session, it loads the map instead of re-exploring everything.
 
+### Using a different assistant?
+
+Mason's MCP server is client-agnostic — any MCP-compatible client can use it. Or, if you'd rather skip MCP entirely, run Mason as a standalone CLI against any supported LLM (OpenAI, Gemini, Ollama, Claude).
+
+#### Cursor
+
+Add to `~/.cursor/mcp.json` (or `.cursor/mcp.json` in your project):
+
+```json
+{
+  "mcpServers": {
+    "mason": {
+      "command": "npx",
+      "args": ["-p", "mason-context", "mason-mcp"]
+    }
+  }
+}
+```
+
+#### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mason": {
+      "command": "npx",
+      "args": ["-p", "mason-context", "mason-mcp"]
+    }
+  }
+}
+```
+
+#### OpenAI Codex CLI
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.mason]
+command = "npx"
+args = ["-p", "mason-context", "mason-mcp"]
+```
+
+#### VS Code
+
+Add to your VS Code settings (`settings.json`):
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "mason": {
+        "command": "npx",
+        "args": ["-p", "mason-context", "mason-mcp"]
+      }
+    }
+  }
+}
+```
+
+#### OpenAI / Gemini / Ollama / Claude (CLI, no MCP)
+
+Run Mason directly against any supported LLM — no MCP client needed:
+
+```bash
+npm install -g mason-context
+mason set-llm openai           # or: gemini | ollama | claude
+export OPENAI_API_KEY=...      # only needed for openai
+mason snapshot ~/my-project    # generate concept map
+mason generate ~/my-project    # generate CLAUDE.md
+```
+
+`gemini` and `ollama` use their CLIs and need no API key; `claude` works with either the CLI or an `ANTHROPIC_API_KEY`.
+
 ## How it works
 
 ### Concept map
