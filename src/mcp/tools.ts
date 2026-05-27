@@ -7,12 +7,18 @@ import fg from "fast-glob";
 const exec = promisify(execFile);
 import { runAll } from "../analyzers/index.js";
 import { isGitRepo } from "../utils/git.js";
-import { sampleFiles } from "./sampler.js";
+import { sampleFiles, readFullFile } from "./sampler.js";
 import {
   loadSnapshot,
   saveSnapshot,
   getCurrentGitHash,
+  getChangedFilesSince,
+  prepareSnapshotInput,
 } from "../snapshot/snapshot.js";
+import {
+  SNAPSHOT_SYSTEM_PROMPT,
+  buildSnapshotPrompt,
+} from "../snapshot/prompt.js";
 import type { Snapshot } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
 
@@ -230,6 +236,28 @@ export async function getTestMap(dir: string): Promise<string> {
   return JSON.stringify(result, null, 2);
 }
 
+const STALE_DIFF_PREVIEW_LINES = 60;
+const STALE_DIFF_MAX_FILES = 25;
+
+async function buildChangedFilePreviews(
+  rootDir: string,
+  changedFiles: string[]
+): Promise<Array<{ path: string; totalLines: number; preview: string }>> {
+  const capped = changedFiles.slice(0, STALE_DIFF_MAX_FILES);
+  const previews: Array<{ path: string; totalLines: number; preview: string }> = [];
+  for (const filePath of capped) {
+    const full = await readFullFile(rootDir, filePath);
+    if (!full) continue;
+    const lines = full.content.split("\n");
+    previews.push({
+      path: full.path,
+      totalLines: full.totalLines,
+      preview: lines.slice(0, STALE_DIFF_PREVIEW_LINES).join("\n"),
+    });
+  }
+  return previews;
+}
+
 export async function getSnapshot(dir: string): Promise<string> {
   const rootDir = path.resolve(dir);
   const snapshot = await loadSnapshot(rootDir);
@@ -237,8 +265,7 @@ export async function getSnapshot(dir: string): Promise<string> {
   if (!snapshot) {
     return JSON.stringify({
       exists: false,
-      message:
-        "No concept map found. Run 'mason snapshot' to create one, or call save_snapshot with features and flows.",
+      hint: "No concept map yet. You MUST call generate_snapshot next, then save_snapshot to persist the result. The map is a granular feature-to-file index that prose overviews (like CLAUDE.md) do not provide — even when CLAUDE.md exists, the map indexes what the prose summarizes. Skip generate_snapshot ONLY if the user has already named a specific file path AND reading just that file is sufficient. Do not generalize this exception to 'I have other context' or 'CLAUDE.md is enough' — those are not valid reasons to skip.",
     });
   }
 
@@ -276,11 +303,51 @@ export async function getSnapshot(dir: string): Promise<string> {
   };
 
   if (isStale) {
-    output.message =
-      "Snapshot is behind HEAD. Run 'mason snapshot-update' or call save_snapshot to refresh.";
+    const changedFiles = await getChangedFilesSince(rootDir, snapshot.gitHash);
+    if (changedFiles && changedFiles.length > 0) {
+      const samples = await buildChangedFilePreviews(rootDir, changedFiles);
+      output.diff = {
+        changedFiles,
+        samples,
+        truncated: changedFiles.length > STALE_DIFF_MAX_FILES,
+      };
+      output.hint =
+        "Snapshot is behind HEAD. Use the `diff` to update affected features/flows and call save_snapshot — only entries that touch the changed files need to be re-sent.";
+    } else {
+      output.hint =
+        "Snapshot is behind HEAD but the diff could not be computed. Call save_snapshot to refresh.";
+    }
   }
 
   return JSON.stringify(output);
+}
+
+export async function generateSnapshot(dir: string): Promise<string> {
+  const { filesWithContent, testPairs } = await prepareSnapshotInput(dir);
+
+  if (filesWithContent.length === 0) {
+    return JSON.stringify(
+      {
+        task: "Build a concept-to-files map for this project.",
+        instructions: SNAPSHOT_SYSTEM_PROMPT,
+        prompt: "(No source files found to map.)",
+        next: "No source files were found, so there is nothing to map. Do not call save_snapshot.",
+      },
+      null,
+      2
+    );
+  }
+
+  return JSON.stringify(
+    {
+      task: "Build a concept-to-files map for this project.",
+      instructions: SNAPSHOT_SYSTEM_PROMPT,
+      prompt: buildSnapshotPrompt(filesWithContent, testPairs),
+      next: "Follow `instructions` to derive features and flows from `prompt`, then call save_snapshot(dir, features, flows) to persist them.",
+    },
+    null,
+    2
+  );
 }
 
 export async function fullAnalysis(dir: string): Promise<string> {

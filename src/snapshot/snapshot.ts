@@ -78,6 +78,26 @@ export async function getCurrentGitHash(rootDir: string): Promise<string> {
   }
 }
 
+export async function getChangedFilesSince(
+  rootDir: string,
+  gitHash: string
+): Promise<string[] | null> {
+  if (!gitHash || gitHash === "unknown") return null;
+  try {
+    const { stdout } = await exec(
+      "git",
+      ["diff", "--name-only", gitHash, "HEAD"],
+      { cwd: rootDir }
+    );
+    return stdout
+      .trim()
+      .split("\n")
+      .filter((f) => f.length > 0);
+  } catch {
+    return null;
+  }
+}
+
 function parseSnapshotResponse(raw: string): {
   features: Record<string, FeatureEntry>;
   flows: Record<string, FlowEntry>;
@@ -111,10 +131,12 @@ function parseSnapshotResponse(raw: string): {
   }
 }
 
-export async function createSnapshot(
-  rootDir: string,
-  config: MasonConfig
-): Promise<Snapshot> {
+export async function prepareSnapshotInput(
+  rootDir: string
+): Promise<{
+  filesWithContent: Array<{ path: string; content: string }>;
+  testPairs: Array<{ test: string; source: string; confidence: string }>;
+}> {
   const resolvedRoot = path.resolve(rootDir);
 
   // Scale sample count with codebase size: ~15% of source files, clamped to [20, 80]
@@ -132,10 +154,8 @@ export async function createSnapshot(
   );
   const sampleCount = Math.min(80, Math.max(20, Math.round(allFiles.length * 0.15)));
 
-  // Use sampler to pick key files
   const sampled = await sampleFiles(resolvedRoot, sampleCount);
 
-  // Read full content of each sampled file
   const filesWithContent: Array<{ path: string; content: string }> = [];
   for (const sample of sampled) {
     const full = await readFullFile(resolvedRoot, sample.path);
@@ -143,6 +163,18 @@ export async function createSnapshot(
       filesWithContent.push({ path: full.path, content: full.content });
     }
   }
+
+  const testMap = await buildTestMap(resolvedRoot);
+
+  return { filesWithContent, testPairs: testMap.paired };
+}
+
+export async function createSnapshot(
+  rootDir: string,
+  config: MasonConfig
+): Promise<Snapshot> {
+  const resolvedRoot = path.resolve(rootDir);
+  const { filesWithContent, testPairs } = await prepareSnapshotInput(rootDir);
 
   const gitHash = await getCurrentGitHash(resolvedRoot);
   const now = new Date().toISOString();
@@ -158,11 +190,8 @@ export async function createSnapshot(
     };
   }
 
-  // Get test-to-source mappings so the LLM can include tests in features
-  const testMap = await buildTestMap(resolvedRoot);
-
   // Call LLM to build concept map
-  const userMessage = buildSnapshotPrompt(filesWithContent, testMap.paired);
+  const userMessage = buildSnapshotPrompt(filesWithContent, testPairs);
   const result = await callLLM(config, userMessage, SNAPSHOT_SYSTEM_PROMPT);
 
   const resultText =
@@ -207,23 +236,14 @@ export async function updateSnapshot(
   }
 
   // Find files changed since last snapshot
-  let changedFiles: string[] = [];
-  try {
-    const { stdout } = await exec(
-      "git",
-      ["diff", "--name-only", existing.gitHash, "HEAD"],
-      { cwd: resolvedRoot }
-    );
-    changedFiles = stdout
-      .trim()
-      .split("\n")
-      .filter((f) => f.length > 0);
-  } catch {
+  const changed = await getChangedFilesSince(resolvedRoot, existing.gitHash);
+  if (changed === null) {
     // Full rebuild if git diff fails
     const snapshot = await createSnapshot(rootDir, config);
     const featureCount = Object.keys(snapshot.features).length;
     return { status: "rebuilt", details: `${featureCount} features` };
   }
+  const changedFiles = changed;
 
   if (changedFiles.length === 0) {
     return { status: "up-to-date", details: "No changes since last snapshot" };

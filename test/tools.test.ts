@@ -1,11 +1,24 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   analyzeProject,
   getProjectStructure,
   getCodeSamples,
   fullAnalysis,
+  generateSnapshot,
+  getSnapshot,
 } from "../src/mcp/tools.js";
 import { fixturePath } from "./helpers.js";
+
+const exec = promisify(execFile);
+
+async function git(args: string[], cwd: string): Promise<void> {
+  await exec("git", args, { cwd });
+}
 
 describe("MCP tools", () => {
   describe("analyzeProject", () => {
@@ -142,6 +155,105 @@ describe("MCP tools", () => {
       expect(data.structure.totalFiles).toBe(0);
       expect(data.codeSamples.files).toEqual([]);
       expect(data.testMap.totalTestFiles).toBe(0);
+    });
+  });
+
+  describe("getSnapshot", () => {
+    let tmpDir: string;
+
+    beforeEach(async () => {
+      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mason-snapshot-test-"));
+      await git(["init"], tmpDir);
+      await git(["config", "user.email", "test@test.com"], tmpDir);
+      await git(["config", "user.name", "Test"], tmpDir);
+    });
+
+    afterEach(async () => {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it("returns exists:false with a hint pointing to generate_snapshot", async () => {
+      const raw = await getSnapshot(tmpDir);
+      const data = JSON.parse(raw);
+
+      expect(data.exists).toBe(false);
+      expect(typeof data.hint).toBe("string");
+      expect(data.hint).toMatch(/generate_snapshot/i);
+      // Reads stay pure — no .mason directory should appear
+      await expect(
+        fs.access(path.join(tmpDir, ".mason"))
+      ).rejects.toBeTruthy();
+    });
+
+    it("returns diff payload when snapshot is stale", async () => {
+      // First commit: create src/a.ts and snapshot referencing it
+      await fs.mkdir(path.join(tmpDir, "src"));
+      await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+      await git(["add", "."], tmpDir);
+      await git(["commit", "-m", "feat: add a"], tmpDir);
+      const { stdout: firstHash } = await exec("git", ["rev-parse", "HEAD"], {
+        cwd: tmpDir,
+      });
+
+      // Write snapshot pinned to the first commit
+      const snapshotDir = path.join(tmpDir, ".mason");
+      await fs.mkdir(snapshotDir);
+      const snapshot = {
+        version: 2,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        gitHash: firstHash.trim(),
+        features: {
+          core: { description: "core math", files: ["src/a.ts"] },
+        },
+        flows: {},
+      };
+      await fs.writeFile(
+        path.join(snapshotDir, "snapshot.json"),
+        JSON.stringify(snapshot)
+      );
+
+      // Second commit: modify a.ts so HEAD differs from snapshot.gitHash
+      await fs.writeFile(
+        path.join(tmpDir, "src", "a.ts"),
+        "export const a = 2;\n"
+      );
+      await git(["add", "."], tmpDir);
+      await git(["commit", "-m", "fix: bump a"], tmpDir);
+
+      const raw = await getSnapshot(tmpDir);
+      const data = JSON.parse(raw);
+
+      expect(data.exists).toBe(true);
+      expect(data.stale).toBe(true);
+      expect(data.diff).toBeDefined();
+      expect(data.diff.changedFiles).toContain("src/a.ts");
+      expect(data.diff.samples.length).toBeGreaterThanOrEqual(1);
+      expect(data.diff.samples[0]).toHaveProperty("preview");
+      expect(typeof data.hint).toBe("string");
+    });
+  });
+
+  describe("generateSnapshot", () => {
+    it("returns the system prompt and a prompt body with file content", async () => {
+      const raw = await generateSnapshot(fixturePath("node-react"));
+      const data = JSON.parse(raw);
+
+      expect(typeof data.task).toBe("string");
+      expect(typeof data.instructions).toBe("string");
+      expect(data.instructions).toMatch(/concept-to-files map/i);
+      expect(typeof data.prompt).toBe("string");
+      expect(data.prompt.length).toBeGreaterThan(0);
+      expect(data.next).toMatch(/save_snapshot/);
+    });
+
+    it("handles empty projects without erroring", async () => {
+      const raw = await generateSnapshot(fixturePath("empty"));
+      const data = JSON.parse(raw);
+
+      expect(typeof data.instructions).toBe("string");
+      expect(data.prompt).toBe("(No source files found to map.)");
+      expect(data.next).toMatch(/Do not call save_snapshot/);
     });
   });
 });

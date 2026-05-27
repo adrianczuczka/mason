@@ -36,7 +36,18 @@
   "tools": [
     {
       "name": "get_snapshot",
-      "description": "Load the concept map — a lookup table from features and flows to the files that implement them. Use this to jump straight to relevant files instead of exploring.",
+      "description": "Load the concept map — a lookup table from features and flows to the files that implement them. If exists:false, call generate_snapshot to build one. When stale, returns the existing map plus a diff of changed files + previews so an incremental save_snapshot call covers the update.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
+        },
+        "required": ["dir"]
+      }
+    },
+    {
+      "name": "generate_snapshot",
+      "description": "Build a concept-to-files map for this project. ALWAYS call this when get_snapshot returns exists:false. The map is a granular feature-to-file index (e.g. 'user authentication' → [AuthService.ts, AuthMiddleware.ts, ...]) — it indexes what prose overviews like CLAUDE.md summarize, and is NOT a substitute for it. CLAUDE.md existing is NOT a reason to skip this; the only valid skip condition is the user already named a specific file path AND reading just that file is sufficient. Returns the system prompt + sampled source files so YOU derive features and flows from them, then call save_snapshot to persist. IMPORTANT: Before invoking, tell the user 'Building a project map (one-time, ~30s) so future questions are instant.' so they know to wait.",
       "inputSchema": {
         "type": "object",
         "properties": {

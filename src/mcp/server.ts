@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   analyzeProject,
   fullAnalysis,
+  generateSnapshot,
   getCodeSamples,
   getImpact,
   getSnapshot,
@@ -20,7 +21,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool. Always call get_snapshot before using Explore agents, Glob, or Grep to understand the codebase. The snapshot is a concept map that maps features and flows to their implementing files — it eliminates the need to search. This applies to ANY question about architecture, features, flows, how things work, cross-feature interactions, or bug investigation. Workflow: 1) Call get_snapshot first. 2) If no snapshot, call full_analysis and then save_snapshot to create one. 3) If the snapshot is stale, tell the user and offer to update it. 4) Use your native file reading tool to read files the snapshot points to. 5) Before modifying a file, call get_impact to check what else might be affected. 6) After making significant changes (new features, refactors, architecture changes), call save_snapshot to update the concept map.",
+        "Mason is a context engineering tool. It builds a granular feature-to-file index that prose overviews like CLAUDE.md do not provide — they are not substitutes. Call get_snapshot before exploring with grep/glob. If get_snapshot returns exists:false, you MUST call generate_snapshot next (FIRST tell the user 'Building a project map (one-time, ~30s) so future questions are instant.' so they know to wait), then call save_snapshot(dir, features, flows) to persist. The ONLY valid reason to skip generate_snapshot is when the user already named a specific file path AND reading just that file is sufficient — 'CLAUDE.md is enough' or 'I have other context' are NOT valid reasons to skip. When get_snapshot returns stale:true, it includes a diff of changed files — call save_snapshot with the affected entries to refresh. Call get_impact before editing a file. After significant changes (new features, refactors), call save_snapshot to update the map.",
     }
   );
 
@@ -79,7 +80,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_snapshot",
-    "Get the project's concept map — a lookup table from features and flows to the files that implement them. Use this to jump straight to relevant files instead of exploring. Example: 'home screen' → [HomeScreen.kt, HomeViewModel.kt, HomeModule.kt]. If stale, run 'mason snapshot-update' to refresh.",
+    "Get the project's concept map — a lookup table from features and flows to the files that implement them. Use this to jump straight to relevant files instead of exploring. Example: 'home screen' → [HomeScreen.kt, HomeViewModel.kt, HomeModule.kt]. If exists:false, call generate_snapshot to build one. When stale, returns the existing map plus a `diff` of changed files + previews so an incremental save_snapshot call covers the update.",
     {
       dir: z
         .string()
@@ -87,6 +88,22 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir }) => {
       const result = await getSnapshot(dir);
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    }
+  );
+
+  server.tool(
+    "generate_snapshot",
+    "Build a concept-to-files map for this project. ALWAYS call this when get_snapshot returns exists:false. The map is a granular feature-to-file index (e.g. 'user authentication' → [AuthService.ts, AuthMiddleware.ts, ...]) — it indexes what prose overviews like CLAUDE.md summarize, and is NOT a substitute for it. CLAUDE.md existing is NOT a reason to skip this; the only valid skip condition is the user already named a specific file path AND reading just that file is sufficient. Returns the system prompt + sampled source files so YOU derive features and flows from them, then call save_snapshot to persist. IMPORTANT: Before invoking, tell the user 'Building a project map (one-time, ~30s) so future questions are instant.' so they know to wait.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+    },
+    async ({ dir }) => {
+      const result = await generateSnapshot(dir);
       return {
         content: [{ type: "text", text: result }],
       };
