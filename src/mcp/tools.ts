@@ -13,12 +13,21 @@ import {
   saveSnapshot,
   getCurrentGitHash,
   getChangedFilesSince,
-  prepareSnapshotInput,
+  prepareSnapshotBatch,
+  DEFAULT_BATCH_SIZE,
 } from "../snapshot/snapshot.js";
 import {
-  SNAPSHOT_SYSTEM_PROMPT,
-  buildSnapshotPrompt,
+  BATCH_SYSTEM_PROMPT,
+  REDUCE_SYSTEM_PROMPT,
+  buildBatchPrompt,
+  buildReducePrompt,
 } from "../snapshot/prompt.js";
+import {
+  batchIdFor,
+  clearAllPartials,
+  loadAllPartials,
+  savePartial,
+} from "../snapshot/partials.js";
 import type { Snapshot } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
 import {
@@ -335,16 +344,103 @@ export async function getSnapshot(dir: string): Promise<string> {
   return JSON.stringify(output);
 }
 
-export async function generateSnapshot(dir: string): Promise<string> {
-  const { filesWithContent, testPairs } = await prepareSnapshotInput(dir);
+export async function generateSnapshotBatch(
+  dir: string,
+  offset: number = 0,
+  batchSize: number = DEFAULT_BATCH_SIZE
+): Promise<string> {
+  const batch = await prepareSnapshotBatch(dir, offset, batchSize);
 
-  if (filesWithContent.length === 0) {
+  if (batch.totalFiles === 0) {
     return JSON.stringify(
       {
-        task: "Build a concept-to-files map for this project.",
-        instructions: SNAPSHOT_SYSTEM_PROMPT,
+        task: "Build a concept-to-files map for this project (batch step).",
+        offset: 0,
+        nextOffset: null,
+        totalFiles: 0,
+        batchId: batchIdFor(0),
+        instructions: BATCH_SYSTEM_PROMPT,
         prompt: "(No source files found to map.)",
-        next: "No source files were found, so there is nothing to map. Do not call save_snapshot.",
+        next: "No source files were found. Skip the rest of the playbook and call mason_complete_init.",
+      },
+      null,
+      2
+    );
+  }
+
+  const batchId = batchIdFor(batch.offset);
+
+  return JSON.stringify(
+    {
+      task: "Build a concept-to-files map for this project (batch step).",
+      offset: batch.offset,
+      nextOffset: batch.nextOffset,
+      totalFiles: batch.totalFiles,
+      batchId,
+      batchSize: batch.batchSize,
+      filesInBatch: batch.skeletons.length,
+      instructions: BATCH_SYSTEM_PROMPT,
+      prompt: buildBatchPrompt(batch),
+      next:
+        batch.nextOffset === null
+          ? `Derive partial features/flows for this batch and call save_partial_snapshot(dir, batchId="${batchId}", features, flows). This is the last batch — after saving, proceed to reduce_snapshot.`
+          : `Derive partial features/flows for this batch and call save_partial_snapshot(dir, batchId="${batchId}", features, flows). Then call generate_snapshot_batch(dir, offset=${batch.nextOffset}) to continue.`,
+    },
+    null,
+    2
+  );
+}
+
+export async function saveSnapshotPartial(
+  dir: string,
+  batchId: string,
+  offset: number,
+  features: Record<string, { description: string; files: string[]; tests?: string[] }>,
+  flows: Record<string, { description: string; chain: string[] }>
+): Promise<string> {
+  const rootDir = path.resolve(dir);
+
+  // Sanitize all file paths to prevent path traversal in stored partials
+  for (const feat of Object.values(features)) {
+    feat.files = sanitizePaths(rootDir, feat.files);
+    if (feat.tests) feat.tests = sanitizePaths(rootDir, feat.tests);
+  }
+  for (const flow of Object.values(flows)) {
+    flow.chain = sanitizePaths(rootDir, flow.chain);
+  }
+
+  await savePartial(rootDir, {
+    batchId,
+    offset,
+    features,
+    flows,
+    savedAt: new Date().toISOString(),
+  });
+
+  const all = await loadAllPartials(rootDir);
+  return JSON.stringify(
+    {
+      status: "stored",
+      batchId,
+      partialsStored: all.length,
+      hint:
+        "Partial saved. Continue with the next generate_snapshot_batch call, or proceed to reduce_snapshot when nextOffset is null.",
+    },
+    null,
+    2
+  );
+}
+
+export async function reduceSnapshot(dir: string): Promise<string> {
+  const rootDir = path.resolve(dir);
+  const partials = await loadAllPartials(rootDir);
+
+  if (partials.length === 0) {
+    return JSON.stringify(
+      {
+        status: "error",
+        error:
+          "No partial snapshots found. Run generate_snapshot_batch and save_partial_snapshot at least once before calling reduce_snapshot.",
       },
       null,
       2
@@ -353,10 +449,11 @@ export async function generateSnapshot(dir: string): Promise<string> {
 
   return JSON.stringify(
     {
-      task: "Build a concept-to-files map for this project.",
-      instructions: SNAPSHOT_SYSTEM_PROMPT,
-      prompt: buildSnapshotPrompt(filesWithContent, testPairs),
-      next: "Follow `instructions` to derive features and flows from `prompt`, then call save_snapshot(dir, features, flows) to persist them.",
+      task: "Merge partial concept maps into one unified map.",
+      partialsCount: partials.length,
+      instructions: REDUCE_SYSTEM_PROMPT,
+      prompt: buildReducePrompt(partials),
+      next: "Follow `instructions` to produce the unified features/flows, then call save_snapshot(dir, features, flows). Partial files will be cleaned up automatically after save_snapshot succeeds. Finish with mason_complete_init(dir).",
     },
     null,
     2
@@ -432,6 +529,7 @@ export async function saveSnapshotData(
     existing.updatedAt = now;
     existing.gitHash = gitHash;
     await saveSnapshot(rootDir, existing);
+    await clearAllPartials(rootDir);
     return JSON.stringify({
       status: "updated",
       features: Object.keys(existing.features).length,
@@ -449,6 +547,7 @@ export async function saveSnapshotData(
   };
 
   await saveSnapshot(rootDir, snapshot);
+  await clearAllPartials(rootDir);
   return JSON.stringify({
     status: "created",
     features: Object.keys(features).length,

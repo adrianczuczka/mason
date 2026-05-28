@@ -131,6 +131,99 @@ function parseSnapshotResponse(raw: string): {
   }
 }
 
+const SOURCE_GLOB =
+  "**/*.{ts,tsx,js,jsx,kt,kts,java,py,go,rs,swift,rb,cs,cpp,c,dart}";
+const SOURCE_IGNORE = [
+  "**/node_modules/**", "**/dist/**", "**/build/**", "**/.gradle/**",
+  "**/target/**", "**/.git/**", "**/vendor/**", "**/__pycache__/**",
+  "**/venv/**", "**/.venv/**", "**/*.min.*", "**/*.map",
+  "**/generated/**", "**/R.java", "**/BuildConfig.java",
+];
+
+export const DEFAULT_BATCH_SIZE = 50;
+const SKELETON_CHARS = 500;
+const DEEP_SAMPLE_CHARS = 1500;
+const DEEP_SAMPLES_PER_BATCH = 3;
+
+export interface SnapshotBatch {
+  offset: number;
+  batchSize: number;
+  nextOffset: number | null;
+  totalFiles: number;
+  skeletons: Array<{ path: string; content: string }>;
+  samples: Array<{ path: string; content: string }>;
+  testPairs: Array<{ test: string; source: string; confidence: string }>;
+}
+
+async function listSourceFiles(resolvedRoot: string): Promise<string[]> {
+  const all = await fg(SOURCE_GLOB, {
+    cwd: resolvedRoot,
+    ignore: SOURCE_IGNORE,
+  });
+  // Deterministic order so the same offset always returns the same batch.
+  return [...all].sort();
+}
+
+export async function prepareSnapshotBatch(
+  rootDir: string,
+  offset: number,
+  batchSize: number = DEFAULT_BATCH_SIZE
+): Promise<SnapshotBatch> {
+  const resolvedRoot = path.resolve(rootDir);
+  const allFiles = await listSourceFiles(resolvedRoot);
+  const totalFiles = allFiles.length;
+  const safeOffset = Math.max(0, Math.min(offset, totalFiles));
+  const batchPaths = allFiles.slice(safeOffset, safeOffset + batchSize);
+
+  const skeletons: Array<{ path: string; content: string }> = [];
+  for (const filePath of batchPaths) {
+    const full = await readFullFile(resolvedRoot, filePath);
+    if (full) {
+      skeletons.push({
+        path: full.path,
+        content: full.content.slice(0, SKELETON_CHARS),
+      });
+    }
+  }
+
+  // Pick a few files from this batch to read deeply for grounding. Spread
+  // evenly across the batch so the deep samples represent the batch's range.
+  const samples: Array<{ path: string; content: string }> = [];
+  if (skeletons.length > 0) {
+    const step = Math.max(1, Math.floor(skeletons.length / DEEP_SAMPLES_PER_BATCH));
+    for (let i = 0; i < skeletons.length && samples.length < DEEP_SAMPLES_PER_BATCH; i += step) {
+      const full = await readFullFile(resolvedRoot, skeletons[i].path);
+      if (full) {
+        samples.push({
+          path: full.path,
+          content: full.content.slice(0, DEEP_SAMPLE_CHARS),
+        });
+      }
+    }
+  }
+
+  // Only include test pairs that involve files in this batch — keeps the
+  // appendix relevant and small.
+  const batchPathSet = new Set(batchPaths);
+  const allTestPairs = (await buildTestMap(resolvedRoot)).paired;
+  const testPairs = allTestPairs.filter(
+    (p) => batchPathSet.has(p.test) || batchPathSet.has(p.source)
+  );
+
+  const nextOffset =
+    safeOffset + batchSize >= totalFiles ? null : safeOffset + batchSize;
+
+  return {
+    offset: safeOffset,
+    batchSize,
+    nextOffset,
+    totalFiles,
+    skeletons,
+    samples,
+    testPairs,
+  };
+}
+
 export async function prepareSnapshotInput(
   rootDir: string
 ): Promise<{

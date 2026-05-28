@@ -9,10 +9,13 @@ import {
   getProjectStructure,
   getCodeSamples,
   fullAnalysis,
-  generateSnapshot,
+  generateSnapshotBatch,
   getSnapshot,
   masonInit,
   masonCompleteInit,
+  reduceSnapshot,
+  saveSnapshotData,
+  saveSnapshotPartial,
 } from "../src/mcp/tools.js";
 import { fixturePath } from "./helpers.js";
 
@@ -259,28 +262,133 @@ describe("MCP tools", () => {
     });
   });
 
-  describe("generateSnapshot", () => {
-    // generate_snapshot and save_snapshot are intentionally not gated on init —
-    // they're invoked by the init playbook itself.
-    it("returns the system prompt and a prompt body with file content", async () => {
-      const raw = await generateSnapshot(fixturePath("node-react"));
+  describe("generateSnapshotBatch", () => {
+    it("returns batch metadata and prompt body for the first batch", async () => {
+      const raw = await generateSnapshotBatch(fixturePath("node-react"));
       const data = JSON.parse(raw);
 
-      expect(typeof data.task).toBe("string");
+      expect(data.offset).toBe(0);
+      expect(typeof data.batchId).toBe("string");
+      expect(data.batchId).toMatch(/^batch-/);
+      expect(typeof data.totalFiles).toBe("number");
+      expect(data.totalFiles).toBeGreaterThan(0);
       expect(typeof data.instructions).toBe("string");
-      expect(data.instructions).toMatch(/concept-to-files map/i);
+      expect(data.instructions).toMatch(/Map-Reduce/);
       expect(typeof data.prompt).toBe("string");
       expect(data.prompt.length).toBeGreaterThan(0);
-      expect(data.next).toMatch(/save_snapshot/);
     });
 
     it("handles empty projects without erroring", async () => {
-      const raw = await generateSnapshot(fixturePath("empty"));
+      const raw = await generateSnapshotBatch(fixturePath("empty"));
       const data = JSON.parse(raw);
 
-      expect(typeof data.instructions).toBe("string");
+      expect(data.totalFiles).toBe(0);
+      expect(data.nextOffset).toBeNull();
       expect(data.prompt).toBe("(No source files found to map.)");
-      expect(data.next).toMatch(/Do not call save_snapshot/);
+      expect(data.next).toMatch(/mason_complete_init/);
+    });
+
+    it("paginates: every file is visited exactly once across batches", async () => {
+      // node-react fixture should fit in 2-3 small batches with batchSize=2
+      const seen = new Set<string>();
+      let offset: number | null = 0;
+      let totalFiles = 0;
+      let batches = 0;
+
+      while (offset !== null) {
+        const raw = await generateSnapshotBatch(
+          fixturePath("node-react"),
+          offset,
+          2
+        );
+        const data = JSON.parse(raw);
+        totalFiles = data.totalFiles;
+        batches++;
+
+        // Extract file paths from the prompt — each appears as "--- path ---"
+        const matches = (data.prompt as string).matchAll(/^--- (.+?) ---$/gm);
+        for (const m of matches) seen.add(m[1]);
+
+        offset = data.nextOffset;
+        if (batches > 50) throw new Error("Runaway pagination");
+      }
+
+      // Every file appeared in some batch, exactly once
+      expect(seen.size).toBe(totalFiles);
+      expect(batches).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe("MapReduce flow: partials + reduce + save", () => {
+    let tmpDir: string;
+
+    beforeEach(async () => {
+      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mason-mapred-test-"));
+    });
+
+    afterEach(async () => {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it("save_partial_snapshot persists; reduce_snapshot returns all partials", async () => {
+      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
+        Auth: { description: "login", files: ["src/auth.ts"] },
+      }, {});
+      await saveSnapshotPartial(tmpDir, "batch-000050", 50, {
+        Home: { description: "home", files: ["src/home.ts"] },
+      }, {});
+
+      const raw = await reduceSnapshot(tmpDir);
+      const data = JSON.parse(raw);
+
+      expect(data.partialsCount).toBe(2);
+      expect(typeof data.instructions).toBe("string");
+      expect(data.instructions).toMatch(/merging partial concept maps/i);
+      // Reduce prompt body contains both batches' feature names
+      expect(data.prompt).toMatch(/Auth/);
+      expect(data.prompt).toMatch(/Home/);
+    });
+
+    it("reduce_snapshot returns error when no partials exist", async () => {
+      const raw = await reduceSnapshot(tmpDir);
+      const data = JSON.parse(raw);
+      expect(data.status).toBe("error");
+      expect(data.error).toMatch(/No partial snapshots/i);
+    });
+
+    it("save_snapshot clears partial-snapshots directory", async () => {
+      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
+        Auth: { description: "login", files: ["src/auth.ts"] },
+      }, {});
+
+      const partialsDir = path.join(tmpDir, ".mason", "partial-snapshots");
+      await expect(fs.access(partialsDir)).resolves.toBeUndefined();
+
+      await saveSnapshotData(tmpDir, {
+        Auth: { description: "user login flow", files: ["src/auth.ts"] },
+      }, {});
+
+      await expect(fs.access(partialsDir)).rejects.toBeTruthy();
+      // Final snapshot still exists
+      await expect(
+        fs.access(path.join(tmpDir, ".mason", "snapshot.json"))
+      ).resolves.toBeUndefined();
+    });
+
+    it("save_partial_snapshot sanitizes path-traversal attempts", async () => {
+      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
+        Bad: {
+          description: "x",
+          files: ["src/ok.ts", "../escape.ts", "/etc/passwd"],
+        },
+      }, {});
+
+      const raw = await reduceSnapshot(tmpDir);
+      const data = JSON.parse(raw);
+      // The escape attempts should have been filtered out
+      expect(data.prompt).toContain("src/ok.ts");
+      expect(data.prompt).not.toContain("../escape.ts");
+      expect(data.prompt).not.toContain("/etc/passwd");
     });
   });
 
@@ -301,7 +409,8 @@ describe("MCP tools", () => {
 
       expect(data.initialized).toBe(false);
       expect(typeof data.playbook).toBe("string");
-      expect(data.playbook).toMatch(/SECTION 1 — concept map/);
+      expect(data.playbook).toMatch(/PHASE 1 — Map/);
+      expect(data.playbook).toMatch(/PHASE 2 — Reduce/);
       expect(data.playbook).toMatch(/mason_complete_init/);
     });
 

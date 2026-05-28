@@ -4,13 +4,15 @@ import { z } from "zod";
 import {
   analyzeProject,
   fullAnalysis,
-  generateSnapshot,
+  generateSnapshotBatch,
   getCodeSamples,
   getImpact,
   getSnapshot,
   masonCompleteInit,
   masonInit,
+  reduceSnapshot,
   saveSnapshotData,
+  saveSnapshotPartial,
 } from "./tools.js";
 
 declare const PKG_VERSION: string;
@@ -23,7 +25,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool. Start every project with `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup, calling `generate_snapshot` and `save_snapshot` inside the playbook, then finish with `mason_complete_init`. Once initialized, `get_snapshot` returns the feature-to-file map, `get_impact` shows what other files an edit affects, and you can re-run `generate_snapshot` / `save_snapshot` any time to refresh. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and never need init. Mason has no CLI; everything happens through these tools.",
+        "Mason is a context engineering tool. Start every project with `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup. Setup is a Map-Reduce loop: repeatedly call `generate_snapshot_batch` + `save_partial_snapshot` until every batch is processed, then `reduce_snapshot` to produce the unified map, then `save_snapshot`, then `mason_complete_init`. Once initialized, `get_snapshot` returns the feature-to-file map and `get_impact` shows what other files an edit affects. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and never need init. Mason has no CLI; everything happens through these tools.",
     }
   );
 
@@ -125,15 +127,81 @@ export function createMcpServer(): McpServer {
   );
 
   server.tool(
-    "generate_snapshot",
-    "Build a concept-to-files map for this project. ALWAYS call this when get_snapshot returns exists:false. The map is a granular feature-to-file index (e.g. 'user authentication' → [AuthService.ts, AuthMiddleware.ts, ...]) — it indexes what prose overviews like CLAUDE.md summarize, and is NOT a substitute for it. CLAUDE.md existing is NOT a reason to skip this; the only valid skip condition is the user already named a specific file path AND reading just that file is sufficient. Returns the system prompt + sampled source files so YOU derive features and flows from them, then call save_snapshot to persist. IMPORTANT: Before invoking, tell the user 'Building a project map (one-time, ~30s) so future questions are instant.' so they know to wait.",
+    "generate_snapshot_batch",
+    "Map step of the concept-map build. Returns one batch of source files (skeletons of every file in the batch plus a few deeper-read bodies for grounding), along with a system prompt instructing you to derive features and flows for ONLY this batch. Call repeatedly with the returned `nextOffset` until it is null, calling `save_partial_snapshot` between each call. Use product-natural feature names so partials merge cleanly in the reduce step.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      offset: z
+        .number()
+        .int()
+        .optional()
+        .describe("0-indexed file offset to start the batch at. Omit on the first call; pass the `nextOffset` from the previous response for subsequent calls."),
+      batchSize: z
+        .number()
+        .int()
+        .optional()
+        .describe("Files per batch. Defaults to 50."),
+    },
+    async ({ dir, offset, batchSize }) => {
+      const result = await generateSnapshotBatch(dir, offset, batchSize);
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    }
+  );
+
+  server.tool(
+    "save_partial_snapshot",
+    "Persist the partial concept map you derived for one batch. Call this once per batch, with the `batchId` from the `generate_snapshot_batch` response. Partials accumulate in `.mason/partial-snapshots/` and are merged in the reduce step.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      batchId: z
+        .string()
+        .describe("The `batchId` returned by `generate_snapshot_batch`."),
+      offset: z
+        .number()
+        .int()
+        .describe("The `offset` returned by `generate_snapshot_batch`. Used to order partials in the reduce step."),
+      features: z
+        .record(
+          z.object({
+            description: z.string(),
+            files: z.array(z.string()),
+            tests: z.array(z.string()).optional(),
+          })
+        )
+        .describe("Partial features for this batch only — files outside the batch will be added by other partials."),
+      flows: z
+        .record(
+          z.object({
+            description: z.string(),
+            chain: z.array(z.string()),
+          })
+        )
+        .describe("Partial flows whose entire chain is in this batch. Cross-batch flows are reconstructed in reduce."),
+    },
+    async ({ dir, batchId, offset, features, flows }) => {
+      const result = await saveSnapshotPartial(dir, batchId, offset, features, flows);
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    }
+  );
+
+  server.tool(
+    "reduce_snapshot",
+    "Reduce step of the concept-map build. Returns every partial snapshot plus a system prompt asking you to merge them into one coherent project-wide map. Resolve platform variants into single product features, dedupe near-duplicates, and ensure no file is dropped. After producing the unified map, call `save_snapshot` to persist it (this also clears the partials).",
     {
       dir: z
         .string()
         .describe("Absolute path to the project root directory"),
     },
     async ({ dir }) => {
-      const result = await generateSnapshot(dir);
+      const result = await reduceSnapshot(dir);
       return {
         content: [{ type: "text", text: result }],
       };

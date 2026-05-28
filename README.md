@@ -67,17 +67,29 @@ Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/]
 
 | Tool | Purpose |
 |---|---|
-| `mason_init` | **Start here.** Returns a Q&A playbook the assistant walks you through. Idempotent. |
+| `mason_init` | **Start here.** Returns the Map-Reduce setup playbook. Idempotent. |
 | `mason_complete_init` | Marks the project as initialized once the playbook is done. |
-| `get_snapshot` | Load the concept map — feature → file lookup |
-| `generate_snapshot` | Build the map by analyzing the project |
-| `save_snapshot` | Persist the map for future sessions |
-| `get_impact` | Trace what's affected by changing a file — co-change history + references + related tests |
-| `analyze_project` | Git stats — hot files, stale dirs, commit conventions |
-| `full_analysis` | One-shot first visit: structure + samples + tests + git |
-| `get_code_samples` | Smart file previews selected by architectural role |
+| `generate_snapshot_batch` | Map step — returns one batch of files for the assistant to summarize. |
+| `save_partial_snapshot` | Persists the partial map for one batch. |
+| `reduce_snapshot` | Reduce step — returns every partial + instructions to merge into a unified map. |
+| `save_snapshot` | Persist the final unified map. Clears partials. |
+| `get_snapshot` | Load the concept map — feature → file lookup. |
+| `get_impact` | Trace what's affected by changing a file — co-change history + references + related tests. |
+| `analyze_project` | Git stats — hot files, stale dirs, commit conventions. |
+| `full_analysis` | One-shot first visit: structure + samples + tests + git. |
+| `get_code_samples` | Smart file previews selected by architectural role. |
 
 The init / write tools refuse to run until `mason_init` has completed. The read-only diagnostics (`analyze_project`, `full_analysis`, `get_code_samples`) work without init.
+
+### How the concept map is built
+
+To stay accurate on codebases of any size, Mason uses a **Map-Reduce** pattern instead of stuffing the whole codebase into one LLM call:
+
+- **Map**: `generate_snapshot_batch` returns ~50 files at a time (skeletons of every file in the batch plus a few deeper-read bodies for grounding). Your assistant produces a partial concept map for that batch and persists it with `save_partial_snapshot`. Repeat until every file in the project has been visited.
+- **Reduce**: `reduce_snapshot` returns all the partials plus instructions to merge them into one product-shaped catalog — combining platform variants ("home Android" + "home iOS" → "home screen"), deduplicating, and ensuring no file is dropped.
+- **Save**: `save_snapshot` persists the unified map and cleans up the partials.
+
+The result: every source file is represented exactly once in the final snapshot. A 200-file project takes ~5 batches; a 1000-file monorepo takes ~20.
 
 ## Change impact
 
