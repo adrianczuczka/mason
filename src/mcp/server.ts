@@ -23,7 +23,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool. Before any other Mason tool, call `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup (concept map), then call `mason_complete_init` to mark the project ready. After init, other tools work normally: `get_snapshot` for the feature-to-file map, `generate_snapshot` to refresh it, `save_snapshot` to persist, `get_impact` before editing a file. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and do not require init. Mason has no CLI; everything happens through these tools.",
+        "Mason is a context engineering tool. Start every project with `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup, calling `generate_snapshot` and `save_snapshot` inside the playbook, then finish with `mason_complete_init`. Once initialized, `get_snapshot` returns the feature-to-file map, `get_impact` shows what other files an edit affects, and you can re-run `generate_snapshot` / `save_snapshot` any time to refresh. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and never need init. Mason has no CLI; everything happens through these tools.",
     }
   );
 

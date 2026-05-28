@@ -260,56 +260,27 @@ describe("MCP tools", () => {
   });
 
   describe("generateSnapshot", () => {
-    let tmpDir: string;
-
-    beforeEach(async () => {
-      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mason-gen-test-"));
-    });
-
-    afterEach(async () => {
-      await fs.rm(tmpDir, { recursive: true, force: true });
-    });
-
-    it("refuses to run on un-initialized projects", async () => {
+    // generate_snapshot and save_snapshot are intentionally not gated on init —
+    // they're invoked by the init playbook itself.
+    it("returns the system prompt and a prompt body with file content", async () => {
       const raw = await generateSnapshot(fixturePath("node-react"));
       const data = JSON.parse(raw);
-      expect(data.initialized).toBe(false);
-      expect(data.hint).toMatch(/mason_init/);
+
+      expect(typeof data.task).toBe("string");
+      expect(typeof data.instructions).toBe("string");
+      expect(data.instructions).toMatch(/concept-to-files map/i);
+      expect(typeof data.prompt).toBe("string");
+      expect(data.prompt.length).toBeGreaterThan(0);
+      expect(data.next).toMatch(/save_snapshot/);
     });
 
-    it("returns the system prompt and a prompt body with file content", async () => {
-      // Copy a fixture into a temp dir and mark it initialized
-      const fixture = fixturePath("node-react");
-      // Initialize the fixture directly — tests run serially in this file
-      await markInitialized(fixture);
-      try {
-        const raw = await generateSnapshot(fixture);
-        const data = JSON.parse(raw);
+    it("handles empty projects without erroring", async () => {
+      const raw = await generateSnapshot(fixturePath("empty"));
+      const data = JSON.parse(raw);
 
-        expect(typeof data.task).toBe("string");
-        expect(typeof data.instructions).toBe("string");
-        expect(data.instructions).toMatch(/concept-to-files map/i);
-        expect(typeof data.prompt).toBe("string");
-        expect(data.prompt.length).toBeGreaterThan(0);
-        expect(data.next).toMatch(/save_snapshot/);
-      } finally {
-        await fs.rm(path.join(fixture, ".mason"), { recursive: true, force: true });
-      }
-    });
-
-    it("handles empty projects without erroring (once initialized)", async () => {
-      const fixture = fixturePath("empty");
-      await markInitialized(fixture);
-      try {
-        const raw = await generateSnapshot(fixture);
-        const data = JSON.parse(raw);
-
-        expect(typeof data.instructions).toBe("string");
-        expect(data.prompt).toBe("(No source files found to map.)");
-        expect(data.next).toMatch(/Do not call save_snapshot/);
-      } finally {
-        await fs.rm(path.join(fixture, ".mason"), { recursive: true, force: true });
-      }
+      expect(typeof data.instructions).toBe("string");
+      expect(data.prompt).toBe("(No source files found to map.)");
+      expect(data.next).toMatch(/Do not call save_snapshot/);
     });
   });
 

@@ -336,10 +336,6 @@ export async function getSnapshot(dir: string): Promise<string> {
 }
 
 export async function generateSnapshot(dir: string): Promise<string> {
-  const rootDir = path.resolve(dir);
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("building the concept map");
-  }
   const { filesWithContent, testPairs } = await prepareSnapshotInput(dir);
 
   if (filesWithContent.length === 0) {
@@ -415,9 +411,6 @@ export async function saveSnapshotData(
   flows: Record<string, { description: string; chain: string[] }>
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("saving the concept map");
-  }
   const gitHash = await getCurrentGitHash(rootDir);
   const now = new Date().toISOString();
 
