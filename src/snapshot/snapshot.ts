@@ -78,6 +78,26 @@ export async function getCurrentGitHash(rootDir: string): Promise<string> {
   }
 }
 
+export async function getChangedFilesSince(
+  rootDir: string,
+  gitHash: string
+): Promise<string[] | null> {
+  if (!gitHash || gitHash === "unknown") return null;
+  try {
+    const { stdout } = await exec(
+      "git",
+      ["diff", "--name-only", gitHash, "HEAD"],
+      { cwd: rootDir }
+    );
+    return stdout
+      .trim()
+      .split("\n")
+      .filter((f) => f.length > 0);
+  } catch {
+    return null;
+  }
+}
+
 function parseSnapshotResponse(raw: string): {
   features: Record<string, FeatureEntry>;
   flows: Record<string, FlowEntry>;
@@ -111,10 +131,105 @@ function parseSnapshotResponse(raw: string): {
   }
 }
 
-export async function createSnapshot(
+const SOURCE_GLOB =
+  "**/*.{ts,tsx,js,jsx,kt,kts,java,py,go,rs,swift,rb,cs,cpp,c,dart}";
+const SOURCE_IGNORE = [
+  "**/node_modules/**", "**/dist/**", "**/build/**", "**/.gradle/**",
+  "**/target/**", "**/.git/**", "**/vendor/**", "**/__pycache__/**",
+  "**/venv/**", "**/.venv/**", "**/*.min.*", "**/*.map",
+  "**/generated/**", "**/R.java", "**/BuildConfig.java",
+];
+
+export const DEFAULT_BATCH_SIZE = 50;
+const SKELETON_CHARS = 500;
+const DEEP_SAMPLE_CHARS = 1500;
+const DEEP_SAMPLES_PER_BATCH = 3;
+
+export interface SnapshotBatch {
+  offset: number;
+  batchSize: number;
+  nextOffset: number | null;
+  totalFiles: number;
+  skeletons: Array<{ path: string; content: string }>;
+  samples: Array<{ path: string; content: string }>;
+  testPairs: Array<{ test: string; source: string; confidence: string }>;
+}
+
+async function listSourceFiles(resolvedRoot: string): Promise<string[]> {
+  const all = await fg(SOURCE_GLOB, {
+    cwd: resolvedRoot,
+    ignore: SOURCE_IGNORE,
+  });
+  // Deterministic order so the same offset always returns the same batch.
+  return [...all].sort();
+}
+
+export async function prepareSnapshotBatch(
   rootDir: string,
-  config: MasonConfig
-): Promise<Snapshot> {
+  offset: number,
+  batchSize: number = DEFAULT_BATCH_SIZE
+): Promise<SnapshotBatch> {
+  const resolvedRoot = path.resolve(rootDir);
+  const allFiles = await listSourceFiles(resolvedRoot);
+  const totalFiles = allFiles.length;
+  const safeOffset = Math.max(0, Math.min(offset, totalFiles));
+  const batchPaths = allFiles.slice(safeOffset, safeOffset + batchSize);
+
+  const skeletons: Array<{ path: string; content: string }> = [];
+  for (const filePath of batchPaths) {
+    const full = await readFullFile(resolvedRoot, filePath);
+    if (full) {
+      skeletons.push({
+        path: full.path,
+        content: full.content.slice(0, SKELETON_CHARS),
+      });
+    }
+  }
+
+  // Pick a few files from this batch to read deeply for grounding. Spread
+  // evenly across the batch so the deep samples represent the batch's range.
+  const samples: Array<{ path: string; content: string }> = [];
+  if (skeletons.length > 0) {
+    const step = Math.max(1, Math.floor(skeletons.length / DEEP_SAMPLES_PER_BATCH));
+    for (let i = 0; i < skeletons.length && samples.length < DEEP_SAMPLES_PER_BATCH; i += step) {
+      const full = await readFullFile(resolvedRoot, skeletons[i].path);
+      if (full) {
+        samples.push({
+          path: full.path,
+          content: full.content.slice(0, DEEP_SAMPLE_CHARS),
+        });
+      }
+    }
+  }
+
+  // Only include test pairs that involve files in this batch — keeps the
+  // appendix relevant and small.
+  const batchPathSet = new Set(batchPaths);
+  const allTestPairs = (await buildTestMap(resolvedRoot)).paired;
+  const testPairs = allTestPairs.filter(
+    (p) => batchPathSet.has(p.test) || batchPathSet.has(p.source)
+  );
+
+  const nextOffset =
+    safeOffset + batchSize >= totalFiles ? null : safeOffset + batchSize;
+
+  return {
+    offset: safeOffset,
+    batchSize,
+    nextOffset,
+    totalFiles,
+    skeletons,
+    samples,
+    testPairs,
+  };
+}
+
+export async function prepareSnapshotInput(
+  rootDir: string
+): Promise<{
+  filesWithContent: Array<{ path: string; content: string }>;
+  testPairs: Array<{ test: string; source: string; confidence: string }>;
+}> {
   const resolvedRoot = path.resolve(rootDir);
 
   // Scale sample count with codebase size: ~15% of source files, clamped to [20, 80]
@@ -132,10 +247,8 @@ export async function createSnapshot(
   );
   const sampleCount = Math.min(80, Math.max(20, Math.round(allFiles.length * 0.15)));
 
-  // Use sampler to pick key files
   const sampled = await sampleFiles(resolvedRoot, sampleCount);
 
-  // Read full content of each sampled file
   const filesWithContent: Array<{ path: string; content: string }> = [];
   for (const sample of sampled) {
     const full = await readFullFile(resolvedRoot, sample.path);
@@ -143,6 +256,18 @@ export async function createSnapshot(
       filesWithContent.push({ path: full.path, content: full.content });
     }
   }
+
+  const testMap = await buildTestMap(resolvedRoot);
+
+  return { filesWithContent, testPairs: testMap.paired };
+}
+
+export async function createSnapshot(
+  rootDir: string,
+  config: MasonConfig
+): Promise<Snapshot> {
+  const resolvedRoot = path.resolve(rootDir);
+  const { filesWithContent, testPairs } = await prepareSnapshotInput(rootDir);
 
   const gitHash = await getCurrentGitHash(resolvedRoot);
   const now = new Date().toISOString();
@@ -158,11 +283,8 @@ export async function createSnapshot(
     };
   }
 
-  // Get test-to-source mappings so the LLM can include tests in features
-  const testMap = await buildTestMap(resolvedRoot);
-
   // Call LLM to build concept map
-  const userMessage = buildSnapshotPrompt(filesWithContent, testMap.paired);
+  const userMessage = buildSnapshotPrompt(filesWithContent, testPairs);
   const result = await callLLM(config, userMessage, SNAPSHOT_SYSTEM_PROMPT);
 
   const resultText =
@@ -207,23 +329,14 @@ export async function updateSnapshot(
   }
 
   // Find files changed since last snapshot
-  let changedFiles: string[] = [];
-  try {
-    const { stdout } = await exec(
-      "git",
-      ["diff", "--name-only", existing.gitHash, "HEAD"],
-      { cwd: resolvedRoot }
-    );
-    changedFiles = stdout
-      .trim()
-      .split("\n")
-      .filter((f) => f.length > 0);
-  } catch {
+  const changed = await getChangedFilesSince(resolvedRoot, existing.gitHash);
+  if (changed === null) {
     // Full rebuild if git diff fails
     const snapshot = await createSnapshot(rootDir, config);
     const featureCount = Object.keys(snapshot.features).length;
     return { status: "rebuilt", details: `${featureCount} features` };
   }
+  const changedFiles = changed;
 
   if (changedFiles.length === 0) {
     return { status: "up-to-date", details: "No changes since last snapshot" };
@@ -300,30 +413,3 @@ export async function updateSnapshot(
   };
 }
 
-export async function installHook(rootDir: string): Promise<void> {
-  const resolvedRoot = path.resolve(rootDir);
-  const hooksDir = path.join(resolvedRoot, ".git", "hooks");
-
-  try {
-    await fs.access(hooksDir);
-  } catch {
-    throw new Error("Not a git repository (no .git/hooks directory)");
-  }
-
-  const hookPath = path.join(hooksDir, "post-commit");
-  const hookContent = `#!/bin/sh
-# Mason: auto-update project snapshot after commit
-# Runs in background so it doesn't block your workflow
-mason snapshot-update "$(git rev-parse --show-toplevel)" &
-`;
-
-  try {
-    const existing = await fs.readFile(hookPath, "utf-8");
-    if (existing.includes("mason snapshot-update")) {
-      return; // Already installed
-    }
-    await fs.appendFile(hookPath, "\n" + hookContent);
-  } catch {
-    await fs.writeFile(hookPath, hookContent, { mode: 0o755 });
-  }
-}

@@ -2,8 +2,8 @@
   "manifest_version": "0.3",
   "name": "mason",
   "display_name": "Mason",
-  "version": "0.0.0",
-  "description": "Context engineering MCP server — concept maps for codebases so LLMs stop re-exploring every session.",
+  "version": "0.4.0",
+  "description": "Context engineering MCP server — concept maps for codebases and change impact, built via Map-Reduce for complete coverage. MCP-only.",
   "long_description": "Mason persists a feature-to-file concept map in `.mason/snapshot.json` so AI assistants can answer architecture questions without grepping the codebase from scratch. Also exposes change impact analysis (co-change history, references, related tests) and git history aggregation (hot files, stale dirs, commit patterns).",
   "author": {
     "name": "Adrian Czuczka",
@@ -27,16 +27,98 @@
   ],
   "server": {
     "type": "node",
-    "entry_point": "dist/bin/mason-mcp.js",
+    "entry_point": "dist/mason-mcp.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/dist/bin/mason-mcp.js"]
+      "args": ["${__dirname}/dist/mason-mcp.js"]
     }
   },
   "tools": [
     {
+      "name": "mason_init",
+      "description": "Start here. Checks if Mason is set up for this project. If not, returns a `playbook` of questions the assistant must walk the user through (concept map setup). Once the walkthrough is done, call `mason_complete_init`. Idempotent.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
+        },
+        "required": ["dir"]
+      }
+    },
+    {
+      "name": "mason_complete_init",
+      "description": "Mark the project as initialized. Call after walking the user through the playbook returned by mason_init. Writes .mason/project.json.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
+        },
+        "required": ["dir"]
+      }
+    },
+    {
       "name": "get_snapshot",
-      "description": "Load the concept map — a lookup table from features and flows to the files that implement them. Use this to jump straight to relevant files instead of exploring.",
+      "description": "Load the concept map — a lookup table from features and flows to the files that implement them. Requires init. When stale, returns the existing map plus a diff of changed files + previews so an incremental save_snapshot call covers the update.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
+        },
+        "required": ["dir"]
+      }
+    },
+    {
+      "name": "generate_snapshot_batch",
+      "description": "Map step of the concept-map build. Returns one batch of source files (skeletons of every file in the batch plus a few deeper-read bodies for grounding) and a system prompt instructing you to derive features and flows for ONLY this batch. Call repeatedly with the returned `nextOffset` until it is null, calling `save_partial_snapshot` between calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "offset": { "type": "number", "description": "0-indexed file offset to start the batch at. Omit on the first call." },
+          "batchSize": { "type": "number", "description": "Files per batch. Defaults to 50." }
+        },
+        "required": ["dir"]
+      }
+    },
+    {
+      "name": "save_partial_snapshot",
+      "description": "Persist the partial concept map you derived for one batch. Call once per batch with the `batchId` from `generate_snapshot_batch`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "batchId": { "type": "string", "description": "The batchId returned by generate_snapshot_batch" },
+          "offset": { "type": "number", "description": "The offset returned by generate_snapshot_batch" },
+          "features": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "description": { "type": "string" },
+                "files": { "type": "array", "items": { "type": "string" } },
+                "tests": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["description", "files"]
+            }
+          },
+          "flows": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "description": { "type": "string" },
+                "chain": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["description", "chain"]
+            }
+          }
+        },
+        "required": ["dir", "batchId", "offset", "features", "flows"]
+      }
+    },
+    {
+      "name": "reduce_snapshot",
+      "description": "Reduce step of the concept-map build. Returns every partial snapshot plus a system prompt asking you to merge them into one project-wide map. After producing the unified map, call save_snapshot.",
       "inputSchema": {
         "type": "object",
         "properties": {

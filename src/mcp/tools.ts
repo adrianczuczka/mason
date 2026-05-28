@@ -7,14 +7,37 @@ import fg from "fast-glob";
 const exec = promisify(execFile);
 import { runAll } from "../analyzers/index.js";
 import { isGitRepo } from "../utils/git.js";
-import { sampleFiles } from "./sampler.js";
+import { sampleFiles, readFullFile } from "./sampler.js";
 import {
   loadSnapshot,
   saveSnapshot,
   getCurrentGitHash,
+  getChangedFilesSince,
+  prepareSnapshotBatch,
+  DEFAULT_BATCH_SIZE,
 } from "../snapshot/snapshot.js";
+import {
+  BATCH_SYSTEM_PROMPT,
+  REDUCE_SYSTEM_PROMPT,
+  buildBatchPrompt,
+  buildReducePrompt,
+} from "../snapshot/prompt.js";
+import {
+  batchIdFor,
+  clearAllPartials,
+  loadAllPartials,
+  savePartial,
+} from "../snapshot/partials.js";
 import type { Snapshot } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
+import {
+  isInitialized,
+  loadProjectMarker,
+  saveProjectMarker,
+  setupPlaybook,
+  uninitializedResponse,
+  type ProjectMarker,
+} from "./init.js";
 
 const IGNORE = [
   "**/node_modules/**",
@@ -230,15 +253,41 @@ export async function getTestMap(dir: string): Promise<string> {
   return JSON.stringify(result, null, 2);
 }
 
+const STALE_DIFF_PREVIEW_LINES = 60;
+const STALE_DIFF_MAX_FILES = 25;
+
+async function buildChangedFilePreviews(
+  rootDir: string,
+  changedFiles: string[]
+): Promise<Array<{ path: string; totalLines: number; preview: string }>> {
+  const capped = changedFiles.slice(0, STALE_DIFF_MAX_FILES);
+  const previews: Array<{ path: string; totalLines: number; preview: string }> = [];
+  for (const filePath of capped) {
+    const full = await readFullFile(rootDir, filePath);
+    if (!full) continue;
+    const lines = full.content.split("\n");
+    previews.push({
+      path: full.path,
+      totalLines: full.totalLines,
+      preview: lines.slice(0, STALE_DIFF_PREVIEW_LINES).join("\n"),
+    });
+  }
+  return previews;
+}
+
 export async function getSnapshot(dir: string): Promise<string> {
   const rootDir = path.resolve(dir);
+
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("building the concept map");
+  }
+
   const snapshot = await loadSnapshot(rootDir);
 
   if (!snapshot) {
     return JSON.stringify({
       exists: false,
-      message:
-        "No concept map found. Run 'mason snapshot' to create one, or call save_snapshot with features and flows.",
+      hint: "Project is initialized but no concept map exists yet. Call generate_snapshot, then save_snapshot.",
     });
   }
 
@@ -276,11 +325,139 @@ export async function getSnapshot(dir: string): Promise<string> {
   };
 
   if (isStale) {
-    output.message =
-      "Snapshot is behind HEAD. Run 'mason snapshot-update' or call save_snapshot to refresh.";
+    const changedFiles = await getChangedFilesSince(rootDir, snapshot.gitHash);
+    if (changedFiles && changedFiles.length > 0) {
+      const samples = await buildChangedFilePreviews(rootDir, changedFiles);
+      output.diff = {
+        changedFiles,
+        samples,
+        truncated: changedFiles.length > STALE_DIFF_MAX_FILES,
+      };
+      output.hint =
+        "Snapshot is behind HEAD. Use the `diff` to update affected features/flows and call save_snapshot — only entries that touch the changed files need to be re-sent.";
+    } else {
+      output.hint =
+        "Snapshot is behind HEAD but the diff could not be computed. Call save_snapshot to refresh.";
+    }
   }
 
   return JSON.stringify(output);
+}
+
+export async function generateSnapshotBatch(
+  dir: string,
+  offset: number = 0,
+  batchSize: number = DEFAULT_BATCH_SIZE
+): Promise<string> {
+  const batch = await prepareSnapshotBatch(dir, offset, batchSize);
+
+  if (batch.totalFiles === 0) {
+    return JSON.stringify(
+      {
+        task: "Build a concept-to-files map for this project (batch step).",
+        offset: 0,
+        nextOffset: null,
+        totalFiles: 0,
+        batchId: batchIdFor(0),
+        instructions: BATCH_SYSTEM_PROMPT,
+        prompt: "(No source files found to map.)",
+        next: "No source files were found. Skip the rest of the playbook and call mason_complete_init.",
+      },
+      null,
+      2
+    );
+  }
+
+  const batchId = batchIdFor(batch.offset);
+
+  return JSON.stringify(
+    {
+      task: "Build a concept-to-files map for this project (batch step).",
+      offset: batch.offset,
+      nextOffset: batch.nextOffset,
+      totalFiles: batch.totalFiles,
+      batchId,
+      batchSize: batch.batchSize,
+      filesInBatch: batch.skeletons.length,
+      instructions: BATCH_SYSTEM_PROMPT,
+      prompt: buildBatchPrompt(batch),
+      next:
+        batch.nextOffset === null
+          ? `Derive partial features/flows for this batch and call save_partial_snapshot(dir, batchId="${batchId}", features, flows). This is the last batch — after saving, proceed to reduce_snapshot.`
+          : `Derive partial features/flows for this batch and call save_partial_snapshot(dir, batchId="${batchId}", features, flows). Then call generate_snapshot_batch(dir, offset=${batch.nextOffset}) to continue.`,
+    },
+    null,
+    2
+  );
+}
+
+export async function saveSnapshotPartial(
+  dir: string,
+  batchId: string,
+  offset: number,
+  features: Record<string, { description: string; files: string[]; tests?: string[] }>,
+  flows: Record<string, { description: string; chain: string[] }>
+): Promise<string> {
+  const rootDir = path.resolve(dir);
+
+  // Sanitize all file paths to prevent path traversal in stored partials
+  for (const feat of Object.values(features)) {
+    feat.files = sanitizePaths(rootDir, feat.files);
+    if (feat.tests) feat.tests = sanitizePaths(rootDir, feat.tests);
+  }
+  for (const flow of Object.values(flows)) {
+    flow.chain = sanitizePaths(rootDir, flow.chain);
+  }
+
+  await savePartial(rootDir, {
+    batchId,
+    offset,
+    features,
+    flows,
+    savedAt: new Date().toISOString(),
+  });
+
+  const all = await loadAllPartials(rootDir);
+  return JSON.stringify(
+    {
+      status: "stored",
+      batchId,
+      partialsStored: all.length,
+      hint:
+        "Partial saved. Continue with the next generate_snapshot_batch call, or proceed to reduce_snapshot when nextOffset is null.",
+    },
+    null,
+    2
+  );
+}
+
+export async function reduceSnapshot(dir: string): Promise<string> {
+  const rootDir = path.resolve(dir);
+  const partials = await loadAllPartials(rootDir);
+
+  if (partials.length === 0) {
+    return JSON.stringify(
+      {
+        status: "error",
+        error:
+          "No partial snapshots found. Run generate_snapshot_batch and save_partial_snapshot at least once before calling reduce_snapshot.",
+      },
+      null,
+      2
+    );
+  }
+
+  return JSON.stringify(
+    {
+      task: "Merge partial concept maps into one unified map.",
+      partialsCount: partials.length,
+      instructions: REDUCE_SYSTEM_PROMPT,
+      prompt: buildReducePrompt(partials),
+      next: "Follow `instructions` to produce the unified features/flows, then call save_snapshot(dir, features, flows). Partial files will be cleaned up automatically after save_snapshot succeeds. Finish with mason_complete_init(dir).",
+    },
+    null,
+    2
+  );
 }
 
 export async function fullAnalysis(dir: string): Promise<string> {
@@ -352,6 +529,7 @@ export async function saveSnapshotData(
     existing.updatedAt = now;
     existing.gitHash = gitHash;
     await saveSnapshot(rootDir, existing);
+    await clearAllPartials(rootDir);
     return JSON.stringify({
       status: "updated",
       features: Object.keys(existing.features).length,
@@ -369,6 +547,7 @@ export async function saveSnapshotData(
   };
 
   await saveSnapshot(rootDir, snapshot);
+  await clearAllPartials(rootDir);
   return JSON.stringify({
     status: "created",
     features: Object.keys(features).length,
@@ -415,8 +594,59 @@ export async function getImpact(
   dir: string,
   files: string[]
 ): Promise<string> {
-  const { analyzeImpact } = await import("../impact/impact.js");
   const rootDir = path.resolve(dir);
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("analyzing change impact");
+  }
+  const { analyzeImpact } = await import("../impact/impact.js");
   const result = await analyzeImpact(rootDir, files);
   return JSON.stringify(result, null, 2);
 }
+
+// ===== Init MCP tools =====
+
+export async function masonInit(dir: string): Promise<string> {
+  const rootDir = path.resolve(dir);
+  const marker = await loadProjectMarker(rootDir);
+
+  if (marker) {
+    return JSON.stringify(
+      {
+        initialized: true,
+        initializedAt: marker.initializedAt,
+        hint:
+          "This project is already set up for Mason. To refresh the concept map, call generate_snapshot.",
+      },
+      null,
+      2
+    );
+  }
+
+  return JSON.stringify(
+    {
+      initialized: false,
+      playbook: setupPlaybook(),
+    },
+    null,
+    2
+  );
+}
+
+export async function masonCompleteInit(dir: string): Promise<string> {
+  const rootDir = path.resolve(dir);
+  const marker: ProjectMarker = {
+    version: 1,
+    initializedAt: new Date().toISOString(),
+  };
+  await saveProjectMarker(rootDir, marker);
+  return JSON.stringify(
+    {
+      status: "initialized",
+      marker,
+      hint: "Setup complete. Future calls to other Mason tools will work normally.",
+    },
+    null,
+    2
+  );
+}
+
