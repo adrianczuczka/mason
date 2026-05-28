@@ -320,30 +320,3 @@ export async function updateSnapshot(
   };
 }
 
-export async function installHook(rootDir: string): Promise<void> {
-  const resolvedRoot = path.resolve(rootDir);
-  const hooksDir = path.join(resolvedRoot, ".git", "hooks");
-
-  try {
-    await fs.access(hooksDir);
-  } catch {
-    throw new Error("Not a git repository (no .git/hooks directory)");
-  }
-
-  const hookPath = path.join(hooksDir, "post-commit");
-  const hookContent = `#!/bin/sh
-# Mason: auto-update project snapshot after commit
-# Runs in background so it doesn't block your workflow
-mason snapshot-update "$(git rev-parse --show-toplevel)" &
-`;
-
-  try {
-    const existing = await fs.readFile(hookPath, "utf-8");
-    if (existing.includes("mason snapshot-update")) {
-      return; // Already installed
-    }
-    await fs.appendFile(hookPath, "\n" + hookContent);
-  } catch {
-    await fs.writeFile(hookPath, hookContent, { mode: 0o755 });
-  }
-}

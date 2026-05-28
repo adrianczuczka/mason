@@ -21,6 +21,14 @@ import {
 } from "../snapshot/prompt.js";
 import type { Snapshot } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
+import {
+  isInitialized,
+  loadProjectMarker,
+  saveProjectMarker,
+  setupPlaybook,
+  uninitializedResponse,
+  type ProjectMarker,
+} from "./init.js";
 
 const IGNORE = [
   "**/node_modules/**",
@@ -260,12 +268,17 @@ async function buildChangedFilePreviews(
 
 export async function getSnapshot(dir: string): Promise<string> {
   const rootDir = path.resolve(dir);
+
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("building the concept map");
+  }
+
   const snapshot = await loadSnapshot(rootDir);
 
   if (!snapshot) {
     return JSON.stringify({
       exists: false,
-      hint: "No concept map yet. You MUST call generate_snapshot next, then save_snapshot to persist the result. The map is a granular feature-to-file index that prose overviews (like CLAUDE.md) do not provide — even when CLAUDE.md exists, the map indexes what the prose summarizes. Skip generate_snapshot ONLY if the user has already named a specific file path AND reading just that file is sufficient. Do not generalize this exception to 'I have other context' or 'CLAUDE.md is enough' — those are not valid reasons to skip.",
+      hint: "Project is initialized but no concept map exists yet. Call generate_snapshot, then save_snapshot.",
     });
   }
 
@@ -323,6 +336,10 @@ export async function getSnapshot(dir: string): Promise<string> {
 }
 
 export async function generateSnapshot(dir: string): Promise<string> {
+  const rootDir = path.resolve(dir);
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("building the concept map");
+  }
   const { filesWithContent, testPairs } = await prepareSnapshotInput(dir);
 
   if (filesWithContent.length === 0) {
@@ -398,6 +415,9 @@ export async function saveSnapshotData(
   flows: Record<string, { description: string; chain: string[] }>
 ): Promise<string> {
   const rootDir = path.resolve(dir);
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("saving the concept map");
+  }
   const gitHash = await getCurrentGitHash(rootDir);
   const now = new Date().toISOString();
 
@@ -482,8 +502,59 @@ export async function getImpact(
   dir: string,
   files: string[]
 ): Promise<string> {
-  const { analyzeImpact } = await import("../impact/impact.js");
   const rootDir = path.resolve(dir);
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("analyzing change impact");
+  }
+  const { analyzeImpact } = await import("../impact/impact.js");
   const result = await analyzeImpact(rootDir, files);
   return JSON.stringify(result, null, 2);
 }
+
+// ===== Init MCP tools =====
+
+export async function masonInit(dir: string): Promise<string> {
+  const rootDir = path.resolve(dir);
+  const marker = await loadProjectMarker(rootDir);
+
+  if (marker) {
+    return JSON.stringify(
+      {
+        initialized: true,
+        initializedAt: marker.initializedAt,
+        hint:
+          "This project is already set up for Mason. To refresh the concept map, call generate_snapshot.",
+      },
+      null,
+      2
+    );
+  }
+
+  return JSON.stringify(
+    {
+      initialized: false,
+      playbook: setupPlaybook(),
+    },
+    null,
+    2
+  );
+}
+
+export async function masonCompleteInit(dir: string): Promise<string> {
+  const rootDir = path.resolve(dir);
+  const marker: ProjectMarker = {
+    version: 1,
+    initializedAt: new Date().toISOString(),
+  };
+  await saveProjectMarker(rootDir, marker);
+  return JSON.stringify(
+    {
+      status: "initialized",
+      marker,
+      hint: "Setup complete. Future calls to other Mason tools will work normally.",
+    },
+    null,
+    2
+  );
+}
+

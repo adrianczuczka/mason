@@ -8,15 +8,17 @@
 
 ### A persistent concept map for your AI coding assistant — so it stops re-exploring your codebase every session.
 
-**Up to 67% fewer tokens on architecture questions · same answer quality · zero LLM setup**
+**Up to 67% fewer tokens on architecture questions · same answer quality · MCP-only**
 
 ```bash
 claude mcp add mason --scope user -- npx -p mason-context mason-mcp
 ```
 
-Restart Claude Code, then ask: *"use mason to build a snapshot of this project."*
+Restart Claude Code, then ask: *"use mason to set up this project."* The assistant calls `mason_init`, walks you through a quick Q&A to build the concept map, and you're done.
 
-That's it. Next session, your assistant loads the map instead of grepping 8 files to figure out what your app does.
+Next session, your assistant loads the map instead of grepping 8 files to figure out what your app does.
+
+> **0.4.0 note:** Mason is MCP-only as of v0.4.0. The previous `mason <command>` CLI has been removed — everything runs through MCP tools, driven by your assistant. See [0.4.0 migration](#040-migration) below if you used the old CLI.
 
 ---
 
@@ -65,6 +67,8 @@ Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/]
 
 | Tool | Purpose |
 |---|---|
+| `mason_init` | **Start here.** Returns a Q&A playbook the assistant walks you through. Idempotent. |
+| `mason_complete_init` | Marks the project as initialized once the playbook is done. |
 | `get_snapshot` | Load the concept map — feature → file lookup |
 | `generate_snapshot` | Build the map by analyzing the project |
 | `save_snapshot` | Persist the map for future sessions |
@@ -72,6 +76,8 @@ Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/]
 | `analyze_project` | Git stats — hot files, stale dirs, commit conventions |
 | `full_analysis` | One-shot first visit: structure + samples + tests + git |
 | `get_code_samples` | Smart file previews selected by architectural role |
+
+The init / write tools refuse to run until `mason_init` has completed. The read-only diagnostics (`analyze_project`, `full_analysis`, `get_code_samples`) work without init.
 
 ## Change impact
 
@@ -81,7 +87,7 @@ Before editing a file, Mason tells you what else might be affected. Three signal
 - **References** — files that import or mention the target by name
 - **Related tests** — test files paired by naming convention
 
-Ask your assistant *"what would be affected if I changed WeatherRepository?"* — or run `mason impact <file>` from the CLI.
+Ask your assistant *"what would be affected if I changed WeatherRepository?"* and it'll call `get_impact` for you.
 
 ## Other clients
 
@@ -163,25 +169,20 @@ Language-agnostic. Mason works from file naming patterns and git history rather 
 - **Path traversal protection** keeps all file access inside the project root.
 - **MCP tools are local-only.** Generating a snapshot via MCP uses your assistant's existing LLM context — Mason itself makes no API calls.
 
-## Standalone CLI (optional)
+## 0.4.0 migration
 
-Skip MCP entirely and run Mason against any supported LLM:
+If you used Mason before v0.4.0, the standalone `mason <command>` CLI has been removed. Everything now runs through MCP tools, called by your assistant.
 
-```bash
-npm install -g mason-context
-mason set-llm gemini          # or: openai | ollama | claude (gemini, ollama, claude need no API key)
-mason snapshot ~/my-project   # build the concept map
-mason generate ~/my-project   # write a CLAUDE.md
-mason analyze ~/my-project    # git stats (no LLM needed)
-mason impact File.kt          # change impact
-```
+| Old CLI | New flow |
+|---|---|
+| `mason set-llm <provider>` | Not needed — your assistant *is* the LLM. |
+| `mason snapshot` | Ask your assistant: *"set up Mason here"* → it calls `mason_init` → `generate_snapshot` → `save_snapshot`. |
+| `mason generate` (CLAUDE.md) | Removed. Use your assistant directly. |
+| `mason analyze` | Ask your assistant: *"give me git stats for this repo"* — it calls `analyze_project`. |
+| `mason impact File.kt` | Ask your assistant: *"what would changing File.kt affect?"* — it calls `get_impact`. |
+| `mason snapshot --install-hook` | Removed. The map auto-refreshes when the assistant detects stale state. |
 
-Auto-update the map on every commit:
-
-```bash
-mason snapshot --install-hook
-```
-
+The npm package is still published, but only the `mason-mcp` binary is meaningful now. Running `mason` directly prints a migration message and exits.
 
 ## License
 

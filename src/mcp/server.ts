@@ -8,6 +8,8 @@ import {
   getCodeSamples,
   getImpact,
   getSnapshot,
+  masonCompleteInit,
+  masonInit,
   saveSnapshotData,
 } from "./tools.js";
 
@@ -21,7 +23,35 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool. It builds a granular feature-to-file index that prose overviews like CLAUDE.md do not provide — they are not substitutes. Call get_snapshot before exploring with grep/glob. If get_snapshot returns exists:false, you MUST call generate_snapshot next (FIRST tell the user 'Building a project map (one-time, ~30s) so future questions are instant.' so they know to wait), then call save_snapshot(dir, features, flows) to persist. The ONLY valid reason to skip generate_snapshot is when the user already named a specific file path AND reading just that file is sufficient — 'CLAUDE.md is enough' or 'I have other context' are NOT valid reasons to skip. When get_snapshot returns stale:true, it includes a diff of changed files — call save_snapshot with the affected entries to refresh. Call get_impact before editing a file. After significant changes (new features, refactors), call save_snapshot to update the map.",
+        "Mason is a context engineering tool. Before any other Mason tool, call `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup (concept map), then call `mason_complete_init` to mark the project ready. After init, other tools work normally: `get_snapshot` for the feature-to-file map, `generate_snapshot` to refresh it, `save_snapshot` to persist, `get_impact` before editing a file. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and do not require init. Mason has no CLI; everything happens through these tools.",
+    }
+  );
+
+  server.tool(
+    "mason_init",
+    "Start here. Checks if Mason is set up for this project. If not, returns a `playbook` of questions the assistant must walk the user through (concept map + optional Confluence sync). Once the walkthrough is done, call `mason_complete_init`. Idempotent: re-running on an already-initialized project just returns the current state.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+    },
+    async ({ dir }) => {
+      const result = await masonInit(dir);
+      return { content: [{ type: "text", text: result }] };
+    }
+  );
+
+  server.tool(
+    "mason_complete_init",
+    "Mark the project as initialized. Call this after walking the user through the playbook returned by `mason_init`. Writes `.mason/project.json` so future tool calls don't re-run the wizard.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+    },
+    async ({ dir }) => {
+      const result = await masonCompleteInit(dir);
+      return { content: [{ type: "text", text: result }] };
     }
   );
 

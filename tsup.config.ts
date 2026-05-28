@@ -2,7 +2,7 @@ import { defineConfig } from "tsup";
 import pkg from "./package.json";
 
 export default defineConfig({
-  entry: ["bin/mason.ts", "bin/mason-mcp.ts", "src/cli.ts"],
+  entry: ["bin/mason.ts", "bin/mason-mcp.ts"],
   format: ["esm"],
   target: "node20",
   outDir: "dist",

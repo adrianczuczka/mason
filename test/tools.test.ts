@@ -11,6 +11,8 @@ import {
   fullAnalysis,
   generateSnapshot,
   getSnapshot,
+  masonInit,
+  masonCompleteInit,
 } from "../src/mcp/tools.js";
 import { fixturePath } from "./helpers.js";
 
@@ -18,6 +20,18 @@ const exec = promisify(execFile);
 
 async function git(args: string[], cwd: string): Promise<void> {
   await exec("git", args, { cwd });
+}
+
+async function markInitialized(rootDir: string): Promise<void> {
+  const dir = path.join(rootDir, ".mason");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    path.join(dir, "project.json"),
+    JSON.stringify({
+      version: 1,
+      initializedAt: new Date().toISOString(),
+    })
+  );
 }
 
 describe("MCP tools", () => {
@@ -172,20 +186,32 @@ describe("MCP tools", () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
-    it("returns exists:false with a hint pointing to generate_snapshot", async () => {
+    it("refuses to run on un-initialized projects", async () => {
       const raw = await getSnapshot(tmpDir);
       const data = JSON.parse(raw);
 
-      expect(data.exists).toBe(false);
+      expect(data.initialized).toBe(false);
       expect(typeof data.hint).toBe("string");
-      expect(data.hint).toMatch(/generate_snapshot/i);
+      expect(data.hint).toMatch(/mason_init/);
       // Reads stay pure — no .mason directory should appear
       await expect(
         fs.access(path.join(tmpDir, ".mason"))
       ).rejects.toBeTruthy();
     });
 
+    it("returns exists:false when initialized but no snapshot exists yet", async () => {
+      await markInitialized(tmpDir);
+      const raw = await getSnapshot(tmpDir);
+      const data = JSON.parse(raw);
+
+      expect(data.exists).toBe(false);
+      expect(typeof data.hint).toBe("string");
+      expect(data.hint).toMatch(/generate_snapshot/);
+    });
+
     it("returns diff payload when snapshot is stale", async () => {
+      await markInitialized(tmpDir);
+
       // First commit: create src/a.ts and snapshot referencing it
       await fs.mkdir(path.join(tmpDir, "src"));
       await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
@@ -197,7 +223,6 @@ describe("MCP tools", () => {
 
       // Write snapshot pinned to the first commit
       const snapshotDir = path.join(tmpDir, ".mason");
-      await fs.mkdir(snapshotDir);
       const snapshot = {
         version: 2,
         createdAt: new Date().toISOString(),
@@ -235,25 +260,95 @@ describe("MCP tools", () => {
   });
 
   describe("generateSnapshot", () => {
-    it("returns the system prompt and a prompt body with file content", async () => {
-      const raw = await generateSnapshot(fixturePath("node-react"));
-      const data = JSON.parse(raw);
+    let tmpDir: string;
 
-      expect(typeof data.task).toBe("string");
-      expect(typeof data.instructions).toBe("string");
-      expect(data.instructions).toMatch(/concept-to-files map/i);
-      expect(typeof data.prompt).toBe("string");
-      expect(data.prompt.length).toBeGreaterThan(0);
-      expect(data.next).toMatch(/save_snapshot/);
+    beforeEach(async () => {
+      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mason-gen-test-"));
     });
 
-    it("handles empty projects without erroring", async () => {
-      const raw = await generateSnapshot(fixturePath("empty"));
+    afterEach(async () => {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it("refuses to run on un-initialized projects", async () => {
+      const raw = await generateSnapshot(fixturePath("node-react"));
+      const data = JSON.parse(raw);
+      expect(data.initialized).toBe(false);
+      expect(data.hint).toMatch(/mason_init/);
+    });
+
+    it("returns the system prompt and a prompt body with file content", async () => {
+      // Copy a fixture into a temp dir and mark it initialized
+      const fixture = fixturePath("node-react");
+      // Initialize the fixture directly — tests run serially in this file
+      await markInitialized(fixture);
+      try {
+        const raw = await generateSnapshot(fixture);
+        const data = JSON.parse(raw);
+
+        expect(typeof data.task).toBe("string");
+        expect(typeof data.instructions).toBe("string");
+        expect(data.instructions).toMatch(/concept-to-files map/i);
+        expect(typeof data.prompt).toBe("string");
+        expect(data.prompt.length).toBeGreaterThan(0);
+        expect(data.next).toMatch(/save_snapshot/);
+      } finally {
+        await fs.rm(path.join(fixture, ".mason"), { recursive: true, force: true });
+      }
+    });
+
+    it("handles empty projects without erroring (once initialized)", async () => {
+      const fixture = fixturePath("empty");
+      await markInitialized(fixture);
+      try {
+        const raw = await generateSnapshot(fixture);
+        const data = JSON.parse(raw);
+
+        expect(typeof data.instructions).toBe("string");
+        expect(data.prompt).toBe("(No source files found to map.)");
+        expect(data.next).toMatch(/Do not call save_snapshot/);
+      } finally {
+        await fs.rm(path.join(fixture, ".mason"), { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("masonInit / masonCompleteInit", () => {
+    let tmpDir: string;
+
+    beforeEach(async () => {
+      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mason-init-test-"));
+    });
+
+    afterEach(async () => {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it("returns the playbook on un-initialized projects", async () => {
+      const raw = await masonInit(tmpDir);
       const data = JSON.parse(raw);
 
-      expect(typeof data.instructions).toBe("string");
-      expect(data.prompt).toBe("(No source files found to map.)");
-      expect(data.next).toMatch(/Do not call save_snapshot/);
+      expect(data.initialized).toBe(false);
+      expect(typeof data.playbook).toBe("string");
+      expect(data.playbook).toMatch(/SECTION 1 — concept map/);
+      expect(data.playbook).toMatch(/mason_complete_init/);
+    });
+
+    it("returns initialized=true after masonCompleteInit", async () => {
+      await masonCompleteInit(tmpDir);
+      const raw = await masonInit(tmpDir);
+      const data = JSON.parse(raw);
+
+      expect(data.initialized).toBe(true);
+      expect(typeof data.initializedAt).toBe("string");
+    });
+
+    it("masonCompleteInit is idempotent", async () => {
+      await masonCompleteInit(tmpDir);
+      await masonCompleteInit(tmpDir);
+      const raw = await masonInit(tmpDir);
+      const data = JSON.parse(raw);
+      expect(data.initialized).toBe(true);
     });
   });
 });
