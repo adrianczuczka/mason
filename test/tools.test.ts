@@ -375,6 +375,60 @@ describe("MCP tools", () => {
       ).resolves.toBeUndefined();
     });
 
+    it("save_snapshot REPLACES when partials exist (consolidation case)", async () => {
+      // Simulate a botched earlier save_snapshot that wrote hallucinated entries.
+      await saveSnapshotData(tmpDir, {
+        Hallucinated: { description: "wrong", files: ["src/made-up.ts"] },
+      }, {});
+
+      // Now an MR run records partials.
+      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
+        Auth: { description: "x", files: ["src/auth.ts"] },
+      }, {});
+      await saveSnapshotPartial(tmpDir, "batch-000050", 50, {
+        Home: { description: "x", files: ["src/home.ts"] },
+      }, {});
+
+      // The reduce-step output is what should land — the hallucinated entry
+      // from before must be dropped, not merged in.
+      const raw = await saveSnapshotData(tmpDir, {
+        Auth: { description: "user login flow", files: ["src/auth.ts"] },
+        Home: { description: "home screen", files: ["src/home.ts"] },
+      }, {});
+      const data = JSON.parse(raw);
+      expect(data.status).toBe("replaced");
+      expect(data.mode).toBe("replaced-from-partials");
+      expect(data.features).toBe(2);
+
+      const onDisk = JSON.parse(
+        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8")
+      );
+      expect(Object.keys(onDisk.features).sort()).toEqual(["Auth", "Home"]);
+      expect(onDisk.features.Hallucinated).toBeUndefined();
+    });
+
+    it("save_snapshot still MERGES when no partials are present (incremental case)", async () => {
+      // First save sets a baseline.
+      await saveSnapshotData(tmpDir, {
+        Auth: { description: "user login", files: ["src/auth.ts"] },
+        Home: { description: "home", files: ["src/home.ts"] },
+      }, {});
+
+      // No partials around — this is an incremental refresh of one feature.
+      const raw = await saveSnapshotData(tmpDir, {
+        Auth: { description: "updated description", files: ["src/auth.ts", "src/auth2.ts"] },
+      }, {});
+      const data = JSON.parse(raw);
+      expect(data.status).toBe("updated");
+      expect(data.mode).toBe("merged");
+
+      const onDisk = JSON.parse(
+        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8")
+      );
+      expect(Object.keys(onDisk.features).sort()).toEqual(["Auth", "Home"]);
+      expect(onDisk.features.Auth.description).toBe("updated description");
+    });
+
     it("save_partial_snapshot sanitizes path-traversal attempts", async () => {
       await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
         Bad: {
