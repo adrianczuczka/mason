@@ -8,15 +8,29 @@ const exec = promisify(execFile);
 
 export type Provider = "claude" | "gemini" | "openai" | "ollama";
 
+export interface ConfluenceConfig {
+  baseUrl: string;
+  email: string;
+  apiToken: string;
+  spaceKey: string;
+  parentPageId?: string;
+}
+
 export interface MasonConfig {
   provider: Provider;
   apiKey?: string;
   model?: string;
   ollamaHost?: string;
+  confluence?: ConfluenceConfig;
 }
 
-const CONFIG_DIR = path.join(os.homedir(), ".mason");
-const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
+function configDir(): string {
+  return path.join(os.homedir(), ".mason");
+}
+
+function configFile(): string {
+  return path.join(configDir(), "config.json");
+}
 
 const DEFAULT_MODELS: Record<Provider, string> = {
   claude: "claude-sonnet-4-20250514",
@@ -27,7 +41,7 @@ const DEFAULT_MODELS: Record<Provider, string> = {
 
 export async function loadConfig(): Promise<MasonConfig | null> {
   try {
-    const raw = await fs.readFile(CONFIG_FILE, "utf-8");
+    const raw = await fs.readFile(configFile(), "utf-8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -35,8 +49,8 @@ export async function loadConfig(): Promise<MasonConfig | null> {
 }
 
 export async function saveConfig(config: MasonConfig): Promise<void> {
-  await fs.mkdir(CONFIG_DIR, { recursive: true });
-  await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
+  await fs.mkdir(configDir(), { recursive: true });
+  await fs.writeFile(configFile(), JSON.stringify(config, null, 2), "utf-8");
 }
 
 export function getDefaultModel(provider: Provider): string {
@@ -73,4 +87,16 @@ export async function detectCLI(
 
 export function needsApiKey(provider: Provider): boolean {
   return provider === "openai";
+}
+
+export async function saveConfluenceConfig(
+  confluence: ConfluenceConfig
+): Promise<void> {
+  const existing = (await loadConfig()) ?? { provider: "claude" as Provider };
+  await saveConfig({ ...existing, confluence });
+}
+
+export async function loadConfluenceConfig(): Promise<ConfluenceConfig | null> {
+  const config = await loadConfig();
+  return config?.confluence ?? null;
 }

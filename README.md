@@ -73,6 +73,8 @@ Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/]
 | `save_partial_snapshot` | Persists the partial map for one batch. |
 | `reduce_snapshot` | Reduce step — returns every partial + instructions to merge into a unified map. |
 | `save_snapshot` | Persist the final unified map. Clears partials. |
+| `mason_set_confluence` | Configure Confluence credentials — two-step: list spaces, then persist. |
+| `export_to_confluence` | Sync the concept map to Confluence as PM-readable wiki pages. |
 | `get_snapshot` | Load the concept map — feature → file lookup. |
 | `get_impact` | Trace what's affected by changing a file — co-change history + references + related tests. |
 | `analyze_project` | Git stats — hot files, stale dirs, commit conventions. |
@@ -100,6 +102,14 @@ Before editing a file, Mason tells you what else might be affected. Three signal
 - **Related tests** — test files paired by naming convention
 
 Ask your assistant *"what would be affected if I changed WeatherRepository?"* and it'll call `get_impact` for you.
+
+## Confluence sync
+
+Keep a Confluence wiki in sync with the concept map, in plain product language that PMs and designers can read. Each sync rewrites the snapshot through your assistant into PM-friendly descriptions, pushes one page per feature, and posts a "what changed since last sync" entry to a changelog page. Hand edits outside `<!-- mason:start:* -->` / `<!-- mason:end:* -->` markers survive the next sync — Mason only owns the marked regions.
+
+Setup happens during `mason_init` (you'll be asked) or any time later by asking your assistant *"set up Confluence for this project."* The assistant walks you through the Atlassian site URL, your account email, and an API token from id.atlassian.com, then lets you pick which space to use. To sync, ask *"sync the wiki to Confluence."*
+
+> ⚠️ **Token in chat history.** The API token is pasted into your assistant chat, not a terminal. It will appear in your chat history. If that's not acceptable, skip Confluence sync.
 
 ## Other clients
 

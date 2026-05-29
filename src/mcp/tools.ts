@@ -621,8 +621,9 @@ export async function masonInit(dir: string): Promise<string> {
       {
         initialized: true,
         initializedAt: marker.initializedAt,
+        confluenceConfigured: marker.features?.confluence === true,
         hint:
-          "This project is already set up for Mason. To refresh the concept map, call generate_snapshot.",
+          "This project is already set up for Mason. To refresh the concept map, call generate_snapshot_batch. To (re)configure Confluence, call mason_set_confluence directly.",
       },
       null,
       2
@@ -639,11 +640,17 @@ export async function masonInit(dir: string): Promise<string> {
   );
 }
 
-export async function masonCompleteInit(dir: string): Promise<string> {
+export async function masonCompleteInit(
+  dir: string,
+  options: { confluenceConfigured?: boolean } = {}
+): Promise<string> {
   const rootDir = path.resolve(dir);
   const marker: ProjectMarker = {
     version: 1,
     initializedAt: new Date().toISOString(),
+    features: {
+      confluence: options.confluenceConfigured ?? false,
+    },
   };
   await saveProjectMarker(rootDir, marker);
   return JSON.stringify(
@@ -657,3 +664,162 @@ export async function masonCompleteInit(dir: string): Promise<string> {
   );
 }
 
+// ===== Confluence MCP tools =====
+
+export async function masonSetConfluence(input: {
+  baseUrl: string;
+  email: string;
+  apiToken: string;
+  spaceKey?: string;
+  parentPageId?: string;
+}): Promise<string> {
+  const { createConfluenceClient } = await import("../confluence/client.js");
+  const { saveConfluenceConfig } = await import("../llm/config.js");
+  const { normalizeAtlassianBaseUrl } = await import("../confluence/url.js");
+
+  let baseUrl: string;
+  try {
+    baseUrl = normalizeAtlassianBaseUrl(input.baseUrl);
+  } catch (err) {
+    return JSON.stringify({
+      status: "error",
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  if (!input.email.includes("@")) {
+    return JSON.stringify({
+      status: "error",
+      error: `Email looks invalid: "${input.email}".`,
+    });
+  }
+  if (!input.apiToken.trim()) {
+    return JSON.stringify({
+      status: "error",
+      error: "API token is required.",
+    });
+  }
+
+  const probeConfig = {
+    baseUrl,
+    email: input.email,
+    apiToken: input.apiToken,
+    spaceKey: input.spaceKey ?? "",
+    parentPageId: input.parentPageId,
+  };
+  const client = createConfluenceClient(probeConfig);
+
+  let spaces;
+  try {
+    spaces = await client.listSpaces();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("401") || msg.includes("403")) {
+      return JSON.stringify({
+        status: "error",
+        error:
+          "Credentials rejected by Confluence. Re-check the email and that the API token hasn't expired or been revoked.",
+      });
+    }
+    return JSON.stringify({
+      status: "error",
+      error: `Confluence validation failed: ${msg}`,
+    });
+  }
+
+  if (!input.spaceKey) {
+    // Step 1 — return spaces for the assistant to relay to the user.
+    return JSON.stringify(
+      {
+        status: "spaces_listed",
+        baseUrl,
+        spaces: spaces.map((s) => ({ key: s.key, name: s.name })),
+        hint:
+          spaces.length === 0
+            ? "Authenticated, but no spaces are visible to this account. Create one in Confluence first, then re-run mason_set_confluence."
+            : "Ask the user which space to use, then call mason_set_confluence again with the same baseUrl/email/apiToken plus the chosen spaceKey.",
+      },
+      null,
+      2
+    );
+  }
+
+  const match = spaces.find((s) => s.key === input.spaceKey);
+  if (!match) {
+    return JSON.stringify({
+      status: "error",
+      error: `Space key "${input.spaceKey}" was not found among the spaces visible to this account. Available keys: ${spaces.map((s) => s.key).join(", ") || "(none)"}.`,
+    });
+  }
+
+  await saveConfluenceConfig({
+    baseUrl,
+    email: input.email,
+    apiToken: input.apiToken,
+    spaceKey: input.spaceKey,
+    parentPageId: input.parentPageId,
+  });
+
+  return JSON.stringify(
+    {
+      status: "saved",
+      spaceKey: input.spaceKey,
+      spaceName: match.name,
+      hint:
+        "Confluence is configured. The credentials are stored in ~/.mason/config.json. Call export_to_confluence to sync the concept map.",
+    },
+    null,
+    2
+  );
+}
+
+export async function exportToConfluenceTool(
+  dir: string,
+  overrides?: {
+    spaceKey?: string;
+    parentPageId?: string;
+    indexPageTitle?: string;
+    changelogPageTitle?: string;
+    featurePagePrefix?: string;
+  }
+): Promise<string> {
+  const rootDir = path.resolve(dir);
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("syncing to Confluence");
+  }
+
+  const { loadConfig } = await import("../llm/config.js");
+  const { exportToConfluence } = await import("../confluence/sync.js");
+
+  const config = await loadConfig();
+  if (!config?.confluence) {
+    return JSON.stringify({
+      status: "error",
+      error:
+        'No Confluence credentials configured. Call mason_set_confluence first (or re-run mason_init and walk through the Confluence section).',
+    });
+  }
+
+  const merged = {
+    ...config,
+    confluence: {
+      ...config.confluence,
+      spaceKey: overrides?.spaceKey ?? config.confluence.spaceKey,
+      parentPageId: overrides?.parentPageId ?? config.confluence.parentPageId,
+    },
+  };
+
+  try {
+    const summary = await exportToConfluence(rootDir, merged, {
+      indexPageTitle: overrides?.indexPageTitle,
+      changelogPageTitle: overrides?.changelogPageTitle,
+      featurePagePrefix: overrides?.featurePagePrefix,
+    });
+    return JSON.stringify({ status: "ok", ...summary }, null, 2);
+  } catch (err) {
+    return JSON.stringify({
+      status: "error",
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
