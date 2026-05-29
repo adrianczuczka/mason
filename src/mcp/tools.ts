@@ -520,10 +520,15 @@ export async function saveSnapshotData(
     flow.chain = sanitizePaths(rootDir, flow.chain);
   }
 
-  const existing = await loadSnapshot(rootDir);
+  // If partials exist we're consolidating a Map-Reduce run: replace the
+  // snapshot wholesale. Merging here would pollute the unified map with any
+  // earlier (possibly hallucinated) call to save_snapshot. Outside of
+  // Map-Reduce — incremental refresh of one feature — fall back to merge.
+  const partials = await loadAllPartials(rootDir);
+  const replaceMode = partials.length > 0;
+  const existing = replaceMode ? null : await loadSnapshot(rootDir);
 
   if (existing) {
-    // Merge: overwrite matching features/flows, keep the rest
     existing.features = { ...existing.features, ...features };
     existing.flows = { ...existing.flows, ...flows };
     existing.updatedAt = now;
@@ -532,6 +537,7 @@ export async function saveSnapshotData(
     await clearAllPartials(rootDir);
     return JSON.stringify({
       status: "updated",
+      mode: "merged",
       features: Object.keys(existing.features).length,
       flows: Object.keys(existing.flows).length,
     });
@@ -549,7 +555,8 @@ export async function saveSnapshotData(
   await saveSnapshot(rootDir, snapshot);
   await clearAllPartials(rootDir);
   return JSON.stringify({
-    status: "created",
+    status: replaceMode ? "replaced" : "created",
+    mode: replaceMode ? "replaced-from-partials" : "fresh",
     features: Object.keys(features).length,
     flows: Object.keys(flows).length,
   });

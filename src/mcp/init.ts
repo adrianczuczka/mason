@@ -80,12 +80,17 @@ Goal: process every file in the codebase, batch by batch, producing a partial co
 
   Briefly tell the user "Batch N of M done" each iteration so they see progress.
 
+  CRITICAL RULES FOR PHASE 1:
+  - Derive features and file paths ONLY from what appears verbatim in the \`prompt\` field of each batch response. NEVER invent paths from memory, prior projects, or what you assume a project of this kind would contain. If you have not seen a path in a batch \`prompt\`, do not put it in \`features.files\` or \`flows.chain\`.
+  - Process batches SEQUENTIALLY: one \`generate_snapshot_batch\` → derive → one \`save_partial_snapshot\` → next \`generate_snapshot_batch\`. Do not parallelise. Do not call \`save_snapshot\` during this phase — that is a Phase 2 step.
+  - You must walk every batch until \`nextOffset\` is null. Do not stop early. Do not skip ahead to reduce until every batch has been saved as a partial.
+
 PHASE 2 — Reduce (once)
 Goal: merge all partial maps into one coherent product-shaped catalog.
 
   1. Call \`reduce_snapshot(dir)\`. It returns every partial map plus reconciliation instructions.
   2. Follow the instructions to produce a unified \`features\` and \`flows\` map. Specifically: merge platform variants ("home Android" + "home iOS" → "home screen"), dedupe near-duplicates, reconcile descriptions, and ensure every file from every partial appears somewhere in the final map.
-  3. Call \`save_snapshot(dir, features, flows)\` with the unified map. This automatically clears the partial snapshots.
+  3. Call \`save_snapshot(dir, features, flows)\` ONCE with the unified map. Mason detects that partials exist and replaces the snapshot wholesale (rather than merging with any earlier state) and then clears the partials. Do not call \`save_snapshot\` more than once per Map-Reduce run.
 
 PHASE 3 — Finalize
   1. Call \`mason_complete_init(dir)\` to mark the project as initialized.
