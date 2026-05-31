@@ -6,8 +6,6 @@ import {
   renderIndexPage,
   renderChangelogPage,
   renderChangelogSection,
-  mergeIntoExistingBody,
-  splitWrappedBody,
   flowsForFeature,
   featurePageTitle,
 } from "./renderer.js";
@@ -17,9 +15,14 @@ import {
   loadSyncState,
   saveSyncState,
   snapshotMinimal,
+  hashDescription,
   type SyncState,
 } from "./diff.js";
-import { rewriteForProduct, type RewriteResult } from "./rewrite.js";
+import {
+  rewriteForProduct,
+  type RewriteResult,
+  type RewriteContext,
+} from "./rewrite.js";
 import type { Snapshot } from "../snapshot/snapshot.js";
 
 export interface SyncOptions {
@@ -39,7 +42,11 @@ export interface SyncSummary {
 
 export interface SyncDeps {
   client: ConfluenceClient;
-  rewrite: (snapshot: Snapshot, config: MasonConfig) => Promise<RewriteResult>;
+  rewrite: (
+    snapshot: Snapshot,
+    config: MasonConfig,
+    ctx: RewriteContext
+  ) => Promise<RewriteResult>;
 }
 
 const DEFAULT_INDEX_TITLE = "Mason — System Map";
@@ -74,16 +81,22 @@ export async function exportToConfluence(
   const featurePrefix = options.featurePagePrefix ?? DEFAULT_FEATURE_PREFIX;
 
   const spaceId = await client.resolveSpaceId(confluence.spaceKey);
+  // Wall-clock time is used ONLY for the append-only changelog heading. Page
+  // bodies carry no timestamp/hash, so a page is re-published only when its own
+  // content (description/flows) changes — not on every unrelated commit.
   const syncedAt = new Date().toISOString();
   const previousState = await loadSyncState(rootDir);
+  const previousHashes = previousState?.pageHashes ?? {};
+  const nextHashes: Record<string, string> = {};
 
-  const productLanguage = await rewrite(snapshot, config);
+  const productLanguage = await rewrite(snapshot, config, {
+    previousCache: previousState?.rewriteCache,
+  });
 
   // 1. Upsert index page (so feature pages can hang under it)
   const indexBody = renderIndexPage({
     featureTitles: Object.keys(snapshot.features),
     featurePrefix,
-    syncedAt,
   });
 
   const indexPage = await upsertPage({
@@ -92,7 +105,9 @@ export async function exportToConfluence(
     title: indexTitle,
     parentId: confluence.parentPageId,
     renderedBody: indexBody,
+    previousHash: previousHashes[indexTitle],
   });
+  nextHashes[indexTitle] = indexPage.hash;
 
   // 2. Upsert each feature page under the index
   const created: string[] = [];
@@ -115,7 +130,6 @@ export async function exportToConfluence(
       name,
       productDescription,
       flowDescriptions: relatedFlows,
-      syncedAt,
       indexPageTitle: indexTitle,
     });
 
@@ -125,7 +139,9 @@ export async function exportToConfluence(
       title,
       parentId: indexPage.id,
       renderedBody: rendered.body,
+      previousHash: previousHashes[title],
     });
+    nextHashes[title] = result.hash;
 
     featurePageIds[name] = result.id;
     if (result.outcome === "created") created.push(title);
@@ -151,11 +167,13 @@ export async function exportToConfluence(
     title: changelogTitle,
     parentId: indexPage.id,
     renderedBody: changelogBody,
+    previousHash: previousHashes[changelogTitle],
   });
+  nextHashes[changelogTitle] = changelogPage.hash;
 
   // 4. Persist sync state
   const nextState: SyncState = {
-    version: 1,
+    version: 2,
     syncedAt,
     pageIds: {
       index: indexPage.id,
@@ -164,6 +182,8 @@ export async function exportToConfluence(
     },
     lastSnapshot: snapshotMinimal(snapshot),
     changelogSections: newSections,
+    rewriteCache: productLanguage.cache,
+    pageHashes: nextHashes,
   };
   await saveSyncState(rootDir, nextState);
 
@@ -183,14 +203,19 @@ interface UpsertArgs {
   title: string;
   parentId?: string;
   renderedBody: string;
+  /** Hash of the body we published for this page last sync, if any. */
+  previousHash?: string;
 }
 
 interface UpsertResult {
   id: string;
   outcome: "created" | "updated" | "unchanged";
+  /** Hash of the body published this sync — persist for next-run comparison. */
+  hash: string;
 }
 
 async function upsertPage(args: UpsertArgs): Promise<UpsertResult> {
+  const hash = hashDescription(args.renderedBody);
   const existing = await args.client.findPageByTitle(args.spaceId, args.title);
 
   if (!existing) {
@@ -200,22 +225,24 @@ async function upsertPage(args: UpsertArgs): Promise<UpsertResult> {
       parentId: args.parentId,
       body: args.renderedBody,
     });
-    return { id: page.id, outcome: "created" };
+    return { id: page.id, outcome: "created", hash };
   }
 
-  const regions = splitWrappedBody(args.renderedBody);
-  const mergedBody = mergeIntoExistingBody(existing.body, regions);
-
-  if (mergedBody === existing.body) {
-    return { id: existing.id, outcome: "unchanged" };
+  // Confluence re-serializes stored bodies (strips comments, re-encodes
+  // entities, injects macro ids), so we can't compare against existing.body.
+  // Compare our render hash to the hash we stored last sync instead. When it
+  // matches, the page is already current — skip the write entirely.
+  if (args.previousHash === hash) {
+    return { id: existing.id, outcome: "unchanged", hash };
   }
 
+  // Mason owns the whole page body: overwrite it wholesale.
   const updated = await args.client.updatePage({
     id: existing.id,
     title: args.title,
     parentId: args.parentId,
-    body: mergedBody,
+    body: args.renderedBody,
     version: existing.version,
   });
-  return { id: updated.id, outcome: "updated" };
+  return { id: updated.id, outcome: "updated", hash };
 }

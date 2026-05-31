@@ -1,24 +1,9 @@
 import type { FeatureEntry, FlowEntry } from "../snapshot/snapshot.js";
 
-export const SENTINEL_PREFIX = "mason:";
-
-export type SentinelKey =
-  | "overview"
-  | "flows"
-  | "index-body"
-  | "changelog-entries";
-
-export function startSentinel(key: SentinelKey): string {
-  return `<!-- ${SENTINEL_PREFIX}start:${key} -->`;
-}
-
-export function endSentinel(key: SentinelKey): string {
-  return `<!-- ${SENTINEL_PREFIX}end:${key} -->`;
-}
-
-function wrap(key: SentinelKey, content: string): string {
-  return `${startSentinel(key)}\n${content}\n${endSentinel(key)}`;
-}
+// Mason fully owns each page body and overwrites it on every sync. Confluence
+// strips HTML comments and re-serializes storage XHTML, so in-page region
+// markers can't survive a round-trip — no-op detection happens via a content
+// hash in the local sync state instead (see sync.ts / diff.ts).
 
 function escape(value: string): string {
   return value
@@ -48,7 +33,6 @@ export interface RenderFeaturePageOptions {
   name: string;
   productDescription: string;
   flowDescriptions: Array<{ name: string; description: string }>;
-  syncedAt: string;
   indexPageTitle: string;
 }
 
@@ -56,14 +40,10 @@ export function renderFeaturePage(
   options: RenderFeaturePageOptions
 ): RenderedFeaturePage {
   const overviewBody =
-    `<h2>What it does</h2>` +
-    `<p>${escape(options.productDescription)}</p>` +
-    infoPanel(
-      `Auto-synced from code by Mason on ${options.syncedAt}. ` +
-        `Content between mason:start/end markers is overwritten on each sync — ` +
-        `edits outside those regions are preserved.`
-    );
+    `<h2>What it does</h2>` + `<p>${escape(options.productDescription)}</p>`;
 
+  // Only render "How it fits in" when there are flows — an empty section with a
+  // "nothing here" placeholder reads as unfinished.
   const flowsBody = options.flowDescriptions.length
     ? `<h2>How it fits in</h2><ul>` +
       options.flowDescriptions
@@ -73,13 +53,21 @@ export function renderFeaturePage(
         )
         .join("") +
       `</ul>`
-    : `<h2>How it fits in</h2><p><em>No related flows recorded yet.</em></p>`;
+    : "";
 
-  const body =
-    wrap("overview", overviewBody) +
-    `\n` +
-    wrap("flows", flowsBody) +
-    `\n<p><a href="" data-mason-index-link="true">Back to ${escape(options.indexPageTitle)}</a></p>`;
+  // Native Confluence page link, resolved by title.
+  const navBody =
+    `<p><ac:link><ri:page ri:content-title="${escape(options.indexPageTitle)}"/>` +
+    `<ac:plain-text-link-body><![CDATA[Back to ${options.indexPageTitle}]]></ac:plain-text-link-body>` +
+    `</ac:link></p>`;
+
+  // Provenance note as a footer, not wedged between the content sections.
+  const footer = infoPanel(
+    `Generated from code by Mason. This page is overwritten on each sync — ` +
+      `edit the code, not the page.`
+  );
+
+  const body = overviewBody + flowsBody + navBody + footer;
 
   return {
     title: options.name,
@@ -90,15 +78,11 @@ export function renderFeaturePage(
 export interface RenderIndexPageOptions {
   featureTitles: string[];
   featurePrefix: string;
-  syncedAt: string;
 }
 
 export function renderIndexPage(options: RenderIndexPageOptions): string {
   if (options.featureTitles.length === 0) {
-    return wrap(
-      "index-body",
-      infoPanel("No features in the snapshot yet.")
-    );
+    return infoPanel("No features in the snapshot yet.");
   }
 
   const list =
@@ -116,10 +100,10 @@ export function renderIndexPage(options: RenderIndexPageOptions): string {
     `</ul>`;
 
   const banner = infoPanel(
-    `Last synced from code on ${options.syncedAt}. Maintained automatically by Mason.`
+    `Generated from code by Mason. Maintained automatically — edit the code, not this page.`
   );
 
-  return wrap("index-body", banner + list);
+  return banner + list;
 }
 
 export interface DiffSection {
@@ -169,71 +153,10 @@ export function renderChangelogSection(section: DiffSection): string {
 
 export function renderChangelogPage(sections: string[]): string {
   if (sections.length === 0) {
-    return wrap(
-      "changelog-entries",
-      `<p><em>No sync has run yet.</em></p>`
-    );
+    return `<p><em>No sync has run yet.</em></p>`;
   }
   // Newest first
-  return wrap("changelog-entries", sections.join("\n<hr/>\n"));
-}
-
-export function replaceSentinelRegion(
-  existingBody: string,
-  key: SentinelKey,
-  newRegion: string
-): string {
-  const start = startSentinel(key);
-  const end = endSentinel(key);
-  const startIdx = existingBody.indexOf(start);
-  const endIdx = existingBody.indexOf(end);
-
-  if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
-    // No existing region — append the new region at the end
-    const sep = existingBody.length && !existingBody.endsWith("\n") ? "\n" : "";
-    return existingBody + sep + newRegion;
-  }
-
-  const before = existingBody.slice(0, startIdx);
-  const after = existingBody.slice(endIdx + end.length);
-  return before + newRegion + after;
-}
-
-export function mergeIntoExistingBody(
-  existingBody: string,
-  regions: Array<{ key: SentinelKey; content: string }>
-): string {
-  let merged = existingBody;
-  for (const { key, content } of regions) {
-    merged = replaceSentinelRegion(merged, key, content);
-  }
-  return merged;
-}
-
-export function splitWrappedBody(rendered: string): Array<{
-  key: SentinelKey;
-  content: string;
-}> {
-  const keys: SentinelKey[] = [
-    "overview",
-    "flows",
-    "index-body",
-    "changelog-entries",
-  ];
-  const regions: Array<{ key: SentinelKey; content: string }> = [];
-  for (const key of keys) {
-    const start = startSentinel(key);
-    const end = endSentinel(key);
-    const startIdx = rendered.indexOf(start);
-    const endIdx = rendered.indexOf(end);
-    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-      regions.push({
-        key,
-        content: rendered.slice(startIdx, endIdx + end.length),
-      });
-    }
-  }
-  return regions;
+  return sections.join("\n<hr/>\n");
 }
 
 export type FeatureMap = Record<string, FeatureEntry>;

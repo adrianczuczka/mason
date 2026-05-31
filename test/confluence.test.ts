@@ -7,11 +7,6 @@ import {
   renderIndexPage,
   renderChangelogPage,
   renderChangelogSection,
-  mergeIntoExistingBody,
-  splitWrappedBody,
-  replaceSentinelRegion,
-  startSentinel,
-  endSentinel,
 } from "../src/confluence/renderer.js";
 import {
   computeDiff,
@@ -19,10 +14,14 @@ import {
   loadSyncState,
   saveSyncState,
   snapshotMinimal,
+  hashDescription,
   type SyncState,
 } from "../src/confluence/diff.js";
 import { exportToConfluence } from "../src/confluence/sync.js";
-import type { RewriteResult } from "../src/confluence/rewrite.js";
+import {
+  rewriteForProduct,
+  type RewriteResult,
+} from "../src/confluence/rewrite.js";
 import { createConfluenceClient } from "../src/confluence/client.js";
 import { normalizeAtlassianBaseUrl } from "../src/confluence/url.js";
 import {
@@ -118,71 +117,79 @@ const baseConfig: MasonConfig = {
 };
 
 describe("Confluence renderer", () => {
-  it("wraps overview and flows in sentinel comments", () => {
+  it("renders feature content without any HTML-comment sentinels", () => {
     const rendered = renderFeaturePage({
       name: "Checkout",
       productDescription: "Lets shoppers pay for their cart.",
       flowDescriptions: [
         { name: "Place order", description: "Customer confirms a basket and pays." },
       ],
-      syncedAt: "2026-05-27T10:00:00Z",
       indexPageTitle: "System Map",
     });
 
-    expect(rendered.body).toContain(startSentinel("overview"));
-    expect(rendered.body).toContain(endSentinel("overview"));
-    expect(rendered.body).toContain(startSentinel("flows"));
-    expect(rendered.body).toContain(endSentinel("flows"));
+    // Confluence strips HTML comments — Mason must not emit sentinel markers.
+    expect(rendered.body).not.toContain("<!--");
+    expect(rendered.body).not.toContain("mason:start");
     expect(rendered.body).toContain("Lets shoppers pay for their cart.");
     expect(rendered.body).toContain("Place order");
   });
 
-  it("replaceSentinelRegion preserves content outside the region", () => {
-    const existing =
-      `<p>Hand-written intro.</p>\n` +
-      `${startSentinel("overview")}\n<p>old</p>\n${endSentinel("overview")}\n` +
-      `<p>Hand-written outro.</p>`;
-    const merged = replaceSentinelRegion(
-      existing,
-      "overview",
-      `${startSentinel("overview")}\n<p>new</p>\n${endSentinel("overview")}`
+  it("puts the provenance note in the footer, not between content sections", () => {
+    const rendered = renderFeaturePage({
+      name: "Checkout",
+      productDescription: "Lets shoppers pay for their cart.",
+      flowDescriptions: [
+        { name: "Place order", description: "Customer confirms a basket and pays." },
+      ],
+      indexPageTitle: "System Map",
+    });
+
+    const note = "Generated from code by Mason";
+    // The note appears after both content sections (it's a footer).
+    expect(rendered.body.indexOf(note)).toBeGreaterThan(
+      rendered.body.indexOf("How it fits in")
     );
-    expect(merged).toContain("<p>Hand-written intro.</p>");
-    expect(merged).toContain("<p>Hand-written outro.</p>");
-    expect(merged).toContain("<p>new</p>");
-    expect(merged).not.toContain("<p>old</p>");
+    // No raw snapshot hash leaks into reader-facing text.
+    expect(rendered.body).not.toContain("snapshot ");
   });
 
-  it("mergeIntoExistingBody updates multiple regions independently", () => {
-    const existing =
-      `<p>Custom note.</p>\n` +
-      `${startSentinel("overview")}\nA\n${endSentinel("overview")}\n` +
-      `<p>Middle hand-written.</p>\n` +
-      `${startSentinel("flows")}\nB\n${endSentinel("flows")}`;
-
-    const regions = [
-      { key: "overview" as const, content: `${startSentinel("overview")}\nA2\n${endSentinel("overview")}` },
-      { key: "flows" as const, content: `${startSentinel("flows")}\nB2\n${endSentinel("flows")}` },
-    ];
-    const merged = mergeIntoExistingBody(existing, regions);
-
-    expect(merged).toContain("<p>Custom note.</p>");
-    expect(merged).toContain("<p>Middle hand-written.</p>");
-    expect(merged).toContain("A2");
-    expect(merged).toContain("B2");
-    expect(merged).not.toContain("\nA\n");
-    expect(merged).not.toContain("\nB\n");
+  it("omits the 'How it fits in' section when a feature has no flows", () => {
+    const rendered = renderFeaturePage({
+      name: "Plumbing",
+      productDescription: "Internal wiring.",
+      flowDescriptions: [],
+      indexPageTitle: "System Map",
+    });
+    expect(rendered.body).not.toContain("How it fits in");
+    expect(rendered.body).not.toContain("No related flows");
   });
 
-  it("splitWrappedBody extracts only present regions", () => {
+  it("renders the back link as a working Confluence page link (no empty href)", () => {
+    const rendered = renderFeaturePage({
+      name: "Checkout",
+      productDescription: "Lets shoppers pay for their cart.",
+      flowDescriptions: [],
+      indexPageTitle: "Mason — System Map",
+    });
+
+    // The old empty-href anchor is gone.
+    expect(rendered.body).not.toContain('href=""');
+    expect(rendered.body).not.toContain("data-mason-index-link");
+    // Replaced by a native page link resolved by title.
+    expect(rendered.body).toContain(
+      '<ri:page ri:content-title="Mason — System Map"/>'
+    );
+    expect(rendered.body).toContain("Back to Mason — System Map");
+  });
+
+  it("renders the index page without sentinels and links each feature by title", () => {
     const body = renderIndexPage({
       featureTitles: ["A", "B"],
       featurePrefix: "Feature: ",
-      syncedAt: "2026-05-27T10:00:00Z",
     });
-    const regions = splitWrappedBody(body);
-    expect(regions.length).toBe(1);
-    expect(regions[0].key).toBe("index-body");
+    expect(body).not.toContain("<!--");
+    expect(body).toContain('ri:content-title="Feature: A"');
+    expect(body).toContain('ri:content-title="Feature: B"');
   });
 });
 
@@ -203,7 +210,7 @@ describe("Confluence diff", () => {
 
   it("detects added, removed, and changed features", () => {
     const prev: SyncState = {
-      version: 1,
+      version: 2,
       syncedAt: "2026-05-01T00:00:00Z",
       pageIds: { features: {} },
       lastSnapshot: {
@@ -214,6 +221,7 @@ describe("Confluence diff", () => {
         flows: {},
       },
       changelogSections: [],
+      rewriteCache: { features: {}, flows: {} },
     };
     const next = snapshot(
       {
@@ -230,7 +238,7 @@ describe("Confluence diff", () => {
 
   it("isMeaningfulDiff is false when nothing changed", () => {
     const prev: SyncState = {
-      version: 1,
+      version: 2,
       syncedAt: "2026-05-01T00:00:00Z",
       pageIds: { features: {} },
       lastSnapshot: {
@@ -238,6 +246,7 @@ describe("Confluence diff", () => {
         flows: {},
       },
       changelogSections: [],
+      rewriteCache: { features: {}, flows: {} },
     };
     const next = snapshot(
       { Checkout: { description: "x", files: ["a.ts"] } },
@@ -280,6 +289,7 @@ describe("Confluence sync (end-to-end with fake client)", () => {
     flows: Object.fromEntries(
       Object.entries(snap.flows).map(([k, v]) => [k, v.description])
     ),
+    cache: { features: {}, flows: {} },
   });
 
   async function writeSnapshot(snap: Snapshot): Promise<void> {
@@ -336,7 +346,7 @@ describe("Confluence sync (end-to-end with fake client)", () => {
     expect(checkoutPage.body).toContain("Place order");
   });
 
-  it("preserves hand-edits outside sentinels on the second sync", async () => {
+  it("overwrites the whole page body on the second sync (no stale content)", async () => {
     await writeSnapshot(
       snapshot(
         {
@@ -352,12 +362,13 @@ describe("Confluence sync (end-to-end with fake client)", () => {
     const fake = buildFakeClient();
     await exportToConfluence(tmp, baseConfig, {}, { client: fake.client, rewrite: identityRewrite });
 
-    // Simulate a hand-edit on the feature page (outside sentinels)
+    // Simulate a manual edit on the page body. Mason owns the page, so this is
+    // expected to be overwritten on the next sync (no preservation).
     const checkout = fake.pages.get("Feature: Checkout")!;
     checkout.body =
       `<p>PM note: must integrate with billing by EOQ.</p>\n` + checkout.body;
 
-    // Update snapshot (description change → triggers update)
+    // Update snapshot (description change → triggers a full overwrite)
     await writeSnapshot(
       snapshot(
         {
@@ -373,11 +384,12 @@ describe("Confluence sync (end-to-end with fake client)", () => {
     await exportToConfluence(tmp, baseConfig, {}, { client: fake.client, rewrite: identityRewrite });
 
     const afterSync = fake.pages.get("Feature: Checkout")!;
-    expect(afterSync.body).toContain(
-      "<p>PM note: must integrate with billing by EOQ.</p>"
-    );
+    // The body is exactly Mason's fresh render — the manual edit is gone, and so
+    // is the stale "First version", with no duplicated content.
+    expect(afterSync.body).not.toContain("PM note");
     expect(afterSync.body).toContain("Second version");
     expect(afterSync.body).not.toContain("First version");
+    expect(afterSync.body.match(/Second version/g)).toHaveLength(1);
     expect(afterSync.version).toBeGreaterThan(1);
   });
 
@@ -440,6 +452,179 @@ describe("Confluence sync (end-to-end with fake client)", () => {
 
     expect(summary.created).toEqual([]);
     expect(summary.hadChanges).toBe(false);
+  });
+
+  it("makes zero Confluence writes when re-run on an unchanged snapshot", async () => {
+    await writeSnapshot(
+      snapshot(
+        {
+          Checkout: { description: "Cart checkout", files: ["src/checkout.ts"] },
+          Auth: { description: "User login", files: ["src/auth.ts"] },
+        },
+        {
+          "Place order": { description: "User pays", chain: ["src/checkout.ts"] },
+        }
+      )
+    );
+
+    const fake = buildFakeClient();
+    await exportToConfluence(tmp, baseConfig, {}, { client: fake.client, rewrite: identityRewrite });
+    const before = { create: fake.calls.create, update: fake.calls.update };
+
+    const summary = await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite }
+    );
+
+    // Every page is byte-identical → no create/update calls hit the API.
+    expect(summary.created).toEqual([]);
+    expect(summary.updated).toEqual([]);
+    expect(summary.unchanged.length).toBeGreaterThan(0);
+    expect(fake.calls.create).toBe(before.create);
+    expect(fake.calls.update).toBe(before.update);
+  });
+
+  it("treats a legacy v1 sync state as fresh, then converges to no writes", async () => {
+    await writeSnapshot(
+      snapshot({ Checkout: { description: "x", files: ["src/checkout.ts"] } }, {})
+    );
+    // Seed a pre-existing v1 sync state from an older Mason version.
+    await fs.writeFile(
+      path.join(tmp, ".mason", "confluence-sync.json"),
+      JSON.stringify({
+        version: 1,
+        syncedAt: "2026-01-01T00:00:00Z",
+        pageIds: { features: {} },
+        lastSnapshot: { features: {}, flows: {} },
+        changelogSections: [],
+      }),
+      "utf-8"
+    );
+
+    const fake = buildFakeClient();
+    const first = await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite }
+    );
+    // v1 is unreadable → treated as null → first run is "fresh".
+    expect(first.hadChanges).toBe(true);
+
+    const before = { create: fake.calls.create, update: fake.calls.update };
+    const second = await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite }
+    );
+    expect(second.created).toEqual([]);
+    expect(second.updated).toEqual([]);
+    expect(fake.calls.create).toBe(before.create);
+    expect(fake.calls.update).toBe(before.update);
+  });
+});
+
+describe("Confluence rewrite (incremental cache)", () => {
+  const cfg: MasonConfig = { provider: "claude" };
+
+  it("reuses cached prose without calling the LLM when the source is unchanged", async () => {
+    const snap = snapshot(
+      { Checkout: { description: "eng desc", files: ["a.ts"] } },
+      {}
+    );
+    const previousCache = {
+      features: {
+        Checkout: {
+          sourceHash: hashDescription("eng desc"),
+          product: "Shoppers can pay for what's in their cart.",
+        },
+      },
+      flows: {},
+    };
+    const llm = vi.fn(async () => "{}");
+
+    const result = await rewriteForProduct(snap, cfg, {
+      previousCache,
+      llm: llm as never,
+    });
+
+    expect(llm).toHaveBeenCalledTimes(0);
+    expect(result.features.Checkout).toBe(
+      "Shoppers can pay for what's in their cart."
+    );
+    expect(result.cache.features.Checkout.sourceHash).toBe(
+      hashDescription("eng desc")
+    );
+  });
+
+  it("only sends new or changed entries to the LLM", async () => {
+    const snap = snapshot(
+      {
+        Auth: { description: "auth eng", files: ["auth.ts"] },
+        Checkout: { description: "checkout NEW", files: ["c.ts"] },
+        Search: { description: "search eng", files: ["s.ts"] },
+      },
+      {}
+    );
+    const previousCache = {
+      features: {
+        Auth: { sourceHash: hashDescription("auth eng"), product: "Sign in." },
+        Checkout: {
+          sourceHash: hashDescription("checkout OLD"),
+          product: "Old pay.",
+        },
+      },
+      flows: {},
+    };
+    let captured = "";
+    const llm = vi.fn(async (_c: unknown, prompt: string) => {
+      captured = prompt;
+      return JSON.stringify({
+        features: { Checkout: "Pay now.", Search: "Find things." },
+        flows: {},
+      });
+    });
+
+    const result = await rewriteForProduct(snap, cfg, {
+      previousCache,
+      llm: llm as never,
+    });
+
+    expect(llm).toHaveBeenCalledTimes(1);
+    expect(captured).toContain("Checkout");
+    expect(captured).toContain("Search");
+    expect(captured).not.toContain("Auth");
+    expect(result.features.Auth).toBe("Sign in."); // reused verbatim
+    expect(result.features.Checkout).toBe("Pay now.");
+    expect(result.features.Search).toBe("Find things.");
+  });
+
+  it("falls back to engineering prose (marked fallback) when no LLM is available, and re-attempts later", async () => {
+    const snap = snapshot(
+      { Checkout: { description: "eng only", files: ["c.ts"] } },
+      {}
+    );
+    const noLlm = vi.fn(async () => ""); // simulates no API/CLI configured
+
+    const result = await rewriteForProduct(snap, cfg, { llm: noLlm as never });
+    expect(result.features.Checkout).toBe("eng only");
+    expect(result.cache.features.Checkout.fallback).toBe(true);
+
+    // A later run with a working LLM must re-attempt the fallback entry.
+    const workingLlm = vi.fn(async () =>
+      JSON.stringify({ features: { Checkout: "Buy stuff easily." }, flows: {} })
+    );
+    const result2 = await rewriteForProduct(snap, cfg, {
+      previousCache: result.cache,
+      llm: workingLlm as never,
+    });
+
+    expect(workingLlm).toHaveBeenCalledTimes(1);
+    expect(result2.features.Checkout).toBe("Buy stuff easily.");
+    expect(result2.cache.features.Checkout.fallback).toBeUndefined();
   });
 });
 
@@ -532,7 +717,7 @@ describe("Confluence REST client (fetch wiring)", () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "mason-cf-state-"));
     try {
       const state: SyncState = {
-        version: 1,
+        version: 2,
         syncedAt: "2026-05-27T10:00:00Z",
         pageIds: {
           index: "i",
@@ -543,6 +728,10 @@ describe("Confluence REST client (fetch wiring)", () => {
           snapshot({ Checkout: { description: "x", files: [] } }, {})
         ),
         changelogSections: ["<h3>first</h3>"],
+        rewriteCache: {
+          features: { Checkout: { sourceHash: "h1", product: "x" } },
+          flows: {},
+        },
       };
       await saveSyncState(tmp, state);
       const loaded = await loadSyncState(tmp);

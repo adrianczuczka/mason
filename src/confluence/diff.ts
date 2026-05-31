@@ -1,10 +1,25 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import type { Snapshot } from "../snapshot/snapshot.js";
 import type { DiffSection } from "./renderer.js";
 
+export interface RewriteCacheEntry {
+  /** sha256 of the engineering (source) description this prose was derived from */
+  sourceHash: string;
+  /** the cached product-language prose */
+  product: string;
+  /** true when produced by the no-LLM fallback, not the model — re-attempted next run */
+  fallback?: boolean;
+}
+
+export interface RewriteCache {
+  features: Record<string, RewriteCacheEntry>;
+  flows: Record<string, RewriteCacheEntry>;
+}
+
 export interface SyncState {
-  version: 1;
+  version: 2;
   syncedAt: string;
   pageIds: {
     index?: string;
@@ -16,6 +31,20 @@ export interface SyncState {
     flows: Record<string, { description: string }>;
   };
   changelogSections: string[];
+  /** product-language prose cache, keyed by feature/flow name */
+  rewriteCache: RewriteCache;
+  /**
+   * Hash of the body Mason last rendered for each page, keyed by page title.
+   * Used to skip re-publishing unchanged pages — we compare our render hash to
+   * this, never to Confluence's re-serialized body. Optional for forward
+   * compatibility with state written before this field existed.
+   */
+  pageHashes?: Record<string, string>;
+}
+
+/** Stable content hash of a source description, for cache invalidation. */
+export function hashDescription(description: string): string {
+  return createHash("sha256").update(description, "utf8").digest("hex");
 }
 
 function syncStateDir(rootDir: string): string {
@@ -30,7 +59,9 @@ export async function loadSyncState(rootDir: string): Promise<SyncState | null> 
   try {
     const raw = await fs.readFile(syncStatePath(rootDir), "utf-8");
     const parsed = JSON.parse(raw);
-    if (parsed.version !== 1) return null;
+    // Only v2 state is usable. Older state (v1) is treated as absent: the next
+    // export re-finds pages by title and rebuilds the rewrite cache from scratch.
+    if (parsed.version !== 2) return null;
     return parsed;
   } catch {
     return null;
