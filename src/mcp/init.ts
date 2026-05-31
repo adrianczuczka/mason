@@ -4,6 +4,9 @@ import path from "node:path";
 export interface ProjectMarker {
   version: 1;
   initializedAt: string;
+  features?: {
+    confluence?: boolean;
+  };
 }
 
 function masonDir(rootDir: string): string {
@@ -92,14 +95,31 @@ Goal: merge all partial maps into one coherent product-shaped catalog.
   2. Follow the instructions to produce a unified \`features\` and \`flows\` map. Specifically: merge platform variants ("home Android" + "home iOS" → "home screen"), dedupe near-duplicates, reconcile descriptions, and ensure every file from every partial appears somewhere in the final map.
   3. Call \`save_snapshot(dir, features, flows)\` ONCE with the unified map. Mason detects that partials exist and replaces the snapshot wholesale (rather than merging with any earlier state) and then clears the partials. Do not call \`save_snapshot\` more than once per Map-Reduce run.
 
-PHASE 3 — Finalize
-  1. Call \`mason_complete_init(dir)\` to mark the project as initialized.
-  2. Confirm to the user that setup is complete and they can now ask architectural questions, request impact analysis, etc.
+PHASE 3 — Confluence sync (optional)
+Goal: optionally configure Confluence so the concept map can be exported as a product-readable wiki later.
+
+Tell the user: "Mason can keep a Confluence wiki in sync with the concept map, rewriting it into product-readable language for PMs and designers. Want to set that up now? You can also skip and configure it later by asking your assistant to 'set up Confluence for this project'."
+On no: skip to Phase 4.
+On yes:
+  1. Ask the user for the Atlassian site URL (e.g. \`acme.atlassian.net\` or \`https://acme.atlassian.net\`).
+  2. Ask for the user's Atlassian account email.
+  3. Tell the user: "Generate an API token at https://id.atlassian.com/manage-profile/security/api-tokens (label it 'Mason') and paste it here. WARNING: the token will be visible in this chat history; if that's not acceptable, skip Confluence and configure it elsewhere."
+  4. Call \`mason_set_confluence({ baseUrl, email, apiToken })\` — no spaceKey on the first call. The tool validates credentials and returns a list of spaces.
+  5. Show the spaces to the user (key + name) and ask which one to use.
+  6. Call \`mason_set_confluence({ baseUrl, email, apiToken, spaceKey })\` with the chosen spaceKey to persist.
+  7. Confirm Confluence is configured. Mention they can run \`export_to_confluence\` whenever they want to sync.
+
+If the credentials are rejected with a 401/403 the tool returns a friendly error — re-ask the user for a fresh token or correct email.
+
+PHASE 4 — Finalize
+  1. Call \`mason_complete_init(dir, { confluenceConfigured: true | false })\` — true if Phase 3 ended with status "saved", false otherwise.
+  2. Confirm to the user that setup is complete and they can now ask architectural questions, request impact analysis, or sync to Confluence (if configured).
 
 Notes:
-- Read tools (\`get_snapshot\`, \`get_impact\`) refuse to run until \`mason_complete_init\` has been called. Do not skip Phase 3.
+- Read tools (\`get_snapshot\`, \`get_impact\`) refuse to run until \`mason_complete_init\` has been called. Do not skip Phase 4.
 - If the user aborts mid-flow, the partials persist in \`.mason/partial-snapshots/\`; the next \`mason_init\` run can pick up where it left off.
-- \`mason_init\` is idempotent — already-initialized projects return \`{ initialized: true }\`.`;
+- \`mason_init\` is idempotent — already-initialized projects return \`{ initialized: true, confluenceConfigured: ... }\`.
+- The user can reconfigure Confluence later by asking their assistant to call \`mason_set_confluence\` directly.`;
 
 export function setupPlaybook(): string {
   return SETUP_PLAYBOOK;

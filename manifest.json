@@ -2,8 +2,8 @@
   "manifest_version": "0.3",
   "name": "mason",
   "display_name": "Mason",
-  "version": "0.4.0",
-  "description": "Context engineering MCP server — concept maps for codebases and change impact, built via Map-Reduce for complete coverage. MCP-only.",
+  "version": "0.5.0",
+  "description": "Context engineering MCP server — concept maps for codebases, change impact, and Confluence wiki sync. Concept maps built via Map-Reduce for complete coverage. MCP-only.",
   "long_description": "Mason persists a feature-to-file concept map in `.mason/snapshot.json` so AI assistants can answer architecture questions without grepping the codebase from scratch. Also exposes change impact analysis (co-change history, references, related tests) and git history aggregation (hot files, stale dirs, commit patterns).",
   "author": {
     "name": "Adrian Czuczka",
@@ -51,7 +51,39 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "confluenceConfigured": { "type": "boolean", "description": "True if Confluence was successfully configured during init", "default": false }
+        },
+        "required": ["dir"]
+      }
+    },
+    {
+      "name": "mason_set_confluence",
+      "description": "Configure Confluence credentials. Without `spaceKey`: validates credentials and returns available spaces for the assistant to relay. With `spaceKey`: persists to ~/.mason/config.json. Warn the user that the API token will be visible in chat history before they paste it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "baseUrl": { "type": "string", "description": "Confluence base URL. Accepts `acme`, `acme.atlassian.net`, or `https://acme.atlassian.net`." },
+          "email": { "type": "string", "description": "Atlassian account email" },
+          "apiToken": { "type": "string", "description": "API token from id.atlassian.com" },
+          "spaceKey": { "type": "string", "description": "Confluence space key. Omit on the first call to list spaces." },
+          "parentPageId": { "type": "string", "description": "Optional parent page ID under which Mason's index page is created" }
+        },
+        "required": ["baseUrl", "email", "apiToken"]
+      }
+    },
+    {
+      "name": "export_to_confluence",
+      "description": "Sync the concept map to Confluence as product-readable wiki pages: index page, one page per feature, and a changelog. Hand edits outside mason:start/end markers are preserved. Requires mason_set_confluence.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "spaceKey": { "type": "string", "description": "Override the configured space key" },
+          "parentPageId": { "type": "string", "description": "Override the configured parent page ID" },
+          "indexPageTitle": { "type": "string", "description": "Title of the index page" },
+          "changelogPageTitle": { "type": "string", "description": "Title of the changelog page" },
+          "featurePagePrefix": { "type": "string", "description": "Prefix for each feature page title" }
         },
         "required": ["dir"]
       }

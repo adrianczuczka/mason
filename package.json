@@ -1,7 +1,7 @@
 {
   "name": "mason-context",
-  "version": "0.4.0",
-  "description": "MCP server for codebase context engineering — feature-to-file concept maps and change impact for AI coding assistants",
+  "version": "0.5.0",
+  "description": "MCP server for codebase context engineering — feature-to-file concept maps, change impact, and Confluence wiki sync for AI coding assistants",
   "type": "module",
   "mcpName": "com.adrianczuczka/mason",
   "bin": {
@@ -28,6 +28,7 @@
     "code-analysis",
     "concept-map",
     "snapshot",
+    "confluence",
     "ai"
   ],
   "author": "Adrian Czuczka",

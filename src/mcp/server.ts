@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   analyzeProject,
+  exportToConfluenceTool,
   fullAnalysis,
   generateSnapshotBatch,
   getCodeSamples,
@@ -10,6 +11,7 @@ import {
   getSnapshot,
   masonCompleteInit,
   masonInit,
+  masonSetConfluence,
   reduceSnapshot,
   saveSnapshotData,
   saveSnapshotPartial,
@@ -25,7 +27,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool. Start every project with `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup. Setup is a Map-Reduce loop: repeatedly call `generate_snapshot_batch` + `save_partial_snapshot` until every batch is processed, then `reduce_snapshot` to produce the unified map, then `save_snapshot`, then `mason_complete_init`. Once initialized, `get_snapshot` returns the feature-to-file map and `get_impact` shows what other files an edit affects. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and never need init. Mason has no CLI; everything happens through these tools.",
+        "Mason is a context engineering tool. Start every project with `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup. Setup is a Map-Reduce loop: repeatedly call `generate_snapshot_batch` + `save_partial_snapshot` until every batch is processed, then `reduce_snapshot` to produce the unified map, then `save_snapshot`, then (optionally) `mason_set_confluence` to wire up Confluence sync, then `mason_complete_init`. Once initialized, `get_snapshot` returns the feature-to-file map, `get_impact` shows what other files an edit affects, and `export_to_confluence` pushes the concept map to a configured Confluence space as PM-readable wiki pages. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and never need init. Mason has no CLI; everything happens through these tools.",
     }
   );
 
@@ -45,14 +47,51 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "mason_complete_init",
-    "Mark the project as initialized. Call this after walking the user through the playbook returned by `mason_init`. Writes `.mason/project.json` so future tool calls don't re-run the wizard.",
+    "Mark the project as initialized. Call this after walking the user through the playbook returned by `mason_init`. Writes `.mason/project.json` so future tool calls don't re-run the wizard. Pass `confluenceConfigured: true` if Phase 3 of the playbook ended with Confluence credentials saved.",
     {
       dir: z
         .string()
         .describe("Absolute path to the project root directory"),
+      confluenceConfigured: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("True if Confluence was successfully configured during init"),
     },
-    async ({ dir }) => {
-      const result = await masonCompleteInit(dir);
+    async ({ dir, confluenceConfigured }) => {
+      const result = await masonCompleteInit(dir, { confluenceConfigured });
+      return { content: [{ type: "text", text: result }] };
+    }
+  );
+
+  server.tool(
+    "mason_set_confluence",
+    "Configure Confluence credentials. Two-step flow: (1) call without `spaceKey` to validate the credentials and receive a list of available spaces — relay them to the user. (2) call again with the same `baseUrl`/`email`/`apiToken` plus the chosen `spaceKey` to persist. Credentials are stored in `~/.mason/config.json`. Warn the user that the API token will be visible in chat history before they paste it.",
+    {
+      baseUrl: z
+        .string()
+        .describe("Confluence base URL. Accepts `acme`, `acme.atlassian.net`, or `https://acme.atlassian.net` (normalized automatically)."),
+      email: z.string().describe("User's Atlassian account email"),
+      apiToken: z
+        .string()
+        .describe("API token from id.atlassian.com/manage-profile/security/api-tokens"),
+      spaceKey: z
+        .string()
+        .optional()
+        .describe("Confluence space key. Omit on the first call to list available spaces."),
+      parentPageId: z
+        .string()
+        .optional()
+        .describe("Optional parent page ID under which Mason's index page is created"),
+    },
+    async ({ baseUrl, email, apiToken, spaceKey, parentPageId }) => {
+      const result = await masonSetConfluence({
+        baseUrl,
+        email,
+        apiToken,
+        spaceKey,
+        parentPageId,
+      });
       return { content: [{ type: "text", text: result }] };
     }
   );
@@ -257,6 +296,46 @@ export function createMcpServer(): McpServer {
       return {
         content: [{ type: "text", text: result }],
       };
+    }
+  );
+
+  server.tool(
+    "export_to_confluence",
+    "Sync the project's concept map to Confluence as product-readable wiki pages: an index page, one page per feature (PM-language descriptions, no file paths), and a changelog page. Hand-edits outside `<!-- mason:start/end:* -->` markers are preserved across syncs. Requires `mason_set_confluence` to have been called first.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      spaceKey: z
+        .string()
+        .optional()
+        .describe("Override the configured space key"),
+      parentPageId: z
+        .string()
+        .optional()
+        .describe("Override the configured parent page ID"),
+      indexPageTitle: z
+        .string()
+        .optional()
+        .describe("Title of the index page (default: 'Mason — System Map')"),
+      changelogPageTitle: z
+        .string()
+        .optional()
+        .describe("Title of the changelog page (default: 'Mason — Changelog')"),
+      featurePagePrefix: z
+        .string()
+        .optional()
+        .describe("Prefix for each feature page title (default: 'Feature: ')"),
+    },
+    async ({ dir, spaceKey, parentPageId, indexPageTitle, changelogPageTitle, featurePagePrefix }) => {
+      const result = await exportToConfluenceTool(dir, {
+        spaceKey,
+        parentPageId,
+        indexPageTitle,
+        changelogPageTitle,
+        featurePagePrefix,
+      });
+      return { content: [{ type: "text", text: result }] };
     }
   );
 
