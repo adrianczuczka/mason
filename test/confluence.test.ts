@@ -346,6 +346,69 @@ describe("Confluence sync (end-to-end with fake client)", () => {
     expect(checkoutPage.body).toContain("Place order");
   });
 
+  it("publishes capabilities but skips infrastructure features", async () => {
+    await writeSnapshot(
+      snapshot(
+        {
+          Checkout: {
+            description: "Cart checkout flow",
+            files: ["src/checkout.ts"],
+            type: "capability",
+          },
+          "Service wiring": {
+            description: "Dependency-injection container that wires services",
+            files: ["src/container.ts"],
+            type: "infrastructure",
+          },
+        },
+        {}
+      )
+    );
+
+    const fake = buildFakeClient();
+    const summary = await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite }
+    );
+
+    // Capability gets a page; infrastructure does not.
+    expect(summary.created).toEqual(["Feature: Checkout"]);
+    expect(fake.pages.has("Feature: Checkout")).toBe(true);
+    expect(fake.pages.has("Feature: Service wiring")).toBe(false);
+
+    // The index lists only the capability.
+    const index = fake.pages.get("Mason — System Map")!;
+    expect(index.body).toContain("Checkout");
+    expect(index.body).not.toContain("Service wiring");
+
+    // The changelog records only the published capability as added.
+    const changelog = fake.pages.get("Mason — Changelog")!;
+    expect(changelog.body).toContain("Checkout");
+    expect(changelog.body).not.toContain("Service wiring");
+  });
+
+  it("treats a feature with no type as a published capability (backward compat)", async () => {
+    await writeSnapshot(
+      snapshot(
+        { Legacy: { description: "Old entry, no type field", files: ["src/legacy.ts"] } },
+        {}
+      )
+    );
+
+    const fake = buildFakeClient();
+    const summary = await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite }
+    );
+
+    expect(summary.created).toEqual(["Feature: Legacy"]);
+    expect(fake.pages.has("Feature: Legacy")).toBe(true);
+  });
+
   it("overwrites the whole page body on the second sync (no stale content)", async () => {
     await writeSnapshot(
       snapshot(

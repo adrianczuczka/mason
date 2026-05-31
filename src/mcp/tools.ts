@@ -13,7 +13,9 @@ import {
   saveSnapshot,
   getCurrentGitHash,
   prepareSnapshotBatch,
+  normalizeFeatureType,
   DEFAULT_BATCH_SIZE,
+  type FeatureType,
 } from "../snapshot/snapshot.js";
 import { computeDrift } from "../drift/drift.js";
 import type { DriftReport } from "../drift/drift.js";
@@ -306,12 +308,18 @@ export async function getSnapshot(dir: string): Promise<string> {
   // Descriptions and metadata stay in the full snapshot on disk.
   // Deduplicate files that appear in multiple features.
   const seenFiles = new Set<string>();
-  const compactFeatures: Record<string, { files: string[]; tests?: string[] }> = {};
+  const compactFeatures: Record<
+    string,
+    { files: string[]; tests?: string[]; type: FeatureType }
+  > = {};
   for (const [name, feat] of Object.entries(snapshot.features)) {
     const unique = feat.files.filter((f) => !seenFiles.has(f));
     if (unique.length === 0) continue; // Skip fully duplicate features
     for (const f of unique) seenFiles.add(f);
-    const entry: { files: string[]; tests?: string[] } = { files: unique };
+    const entry: { files: string[]; tests?: string[]; type: FeatureType } = {
+      files: unique,
+      type: normalizeFeatureType(feat.type),
+    };
     if (feat.tests && feat.tests.length > 0) {
       entry.tests = feat.tests;
     }
@@ -477,15 +485,20 @@ export async function saveSnapshotPartial(
   dir: string,
   batchId: string,
   offset: number,
-  features: Record<string, { description: string; files: string[]; tests?: string[] }>,
+  features: Record<
+    string,
+    { description: string; files: string[]; tests?: string[]; type?: FeatureType }
+  >,
   flows: Record<string, { description: string; chain: string[] }>
 ): Promise<string> {
   const rootDir = path.resolve(dir);
 
-  // Sanitize all file paths to prevent path traversal in stored partials
+  // Sanitize all file paths to prevent path traversal in stored partials, and
+  // normalize the capability/infrastructure classification so it survives reduce.
   for (const feat of Object.values(features)) {
     feat.files = sanitizePaths(rootDir, feat.files);
     if (feat.tests) feat.tests = sanitizePaths(rootDir, feat.tests);
+    feat.type = normalizeFeatureType(feat.type);
   }
   for (const flow of Object.values(flows)) {
     flow.chain = sanitizePaths(rootDir, flow.chain);
@@ -636,6 +649,7 @@ export async function saveSnapshotData(
       files: string[];
       tests?: string[];
       refreshedHash?: string;
+      type?: FeatureType;
     }
   >,
   flows: Record<
@@ -649,10 +663,12 @@ export async function saveSnapshotData(
   const gitHash = await getCurrentGitHash(rootDir);
   const now = new Date().toISOString();
 
-  // Sanitize all file paths to prevent path traversal
+  // Sanitize all file paths to prevent path traversal, and normalize the
+  // capability/infrastructure classification (defaults to "capability").
   for (const feat of Object.values(features)) {
     feat.files = sanitizePaths(rootDir, feat.files);
     if (feat.tests) feat.tests = sanitizePaths(rootDir, feat.tests);
+    feat.type = normalizeFeatureType(feat.type);
   }
   for (const flow of Object.values(flows)) {
     flow.chain = sanitizePaths(rootDir, flow.chain);

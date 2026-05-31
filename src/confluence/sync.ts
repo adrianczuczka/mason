@@ -23,7 +23,7 @@ import {
   type RewriteResult,
   type RewriteContext,
 } from "./rewrite.js";
-import type { Snapshot } from "../snapshot/snapshot.js";
+import type { FeatureEntry, Snapshot } from "../snapshot/snapshot.js";
 
 export interface SyncOptions {
   indexPageTitle?: string;
@@ -76,6 +76,18 @@ export async function exportToConfluence(
   const client = deps?.client ?? createConfluenceClient(confluence);
   const rewrite = deps?.rewrite ?? rewriteForProduct;
 
+  // Only user-facing capabilities are published to the wiki. Infrastructure
+  // features (DI wiring, config, logging, provider plumbing) stay in the AI
+  // concept map but never become PM-facing pages. Filter once here; everything
+  // downstream — rewrite, index, feature pages, changelog diff, persisted
+  // state — operates on this published subset. Missing type defaults to
+  // "capability" (see normalizeFeatureType), so older snapshots publish as before.
+  const publishedFeatures: Record<string, FeatureEntry> = {};
+  for (const [name, entry] of Object.entries(snapshot.features)) {
+    if (entry.type !== "infrastructure") publishedFeatures[name] = entry;
+  }
+  const publishSnapshot: Snapshot = { ...snapshot, features: publishedFeatures };
+
   const indexTitle = options.indexPageTitle ?? DEFAULT_INDEX_TITLE;
   const changelogTitle = options.changelogPageTitle ?? DEFAULT_CHANGELOG_TITLE;
   const featurePrefix = options.featurePagePrefix ?? DEFAULT_FEATURE_PREFIX;
@@ -89,13 +101,13 @@ export async function exportToConfluence(
   const previousHashes = previousState?.pageHashes ?? {};
   const nextHashes: Record<string, string> = {};
 
-  const productLanguage = await rewrite(snapshot, config, {
+  const productLanguage = await rewrite(publishSnapshot, config, {
     previousCache: previousState?.rewriteCache,
   });
 
   // 1. Upsert index page (so feature pages can hang under it)
   const indexBody = renderIndexPage({
-    featureTitles: Object.keys(snapshot.features),
+    featureTitles: Object.keys(publishSnapshot.features),
     featurePrefix,
   });
 
@@ -115,11 +127,11 @@ export async function exportToConfluence(
   const unchanged: string[] = [];
   const featurePageIds: Record<string, string> = {};
 
-  for (const [name, entry] of Object.entries(snapshot.features)) {
+  for (const [name, entry] of Object.entries(publishSnapshot.features)) {
     const title = featurePageTitle(featurePrefix, name);
     const productDescription =
       productLanguage.features[name] ?? entry.description;
-    const relatedFlows = flowsForFeature(entry.files, snapshot.flows).map(
+    const relatedFlows = flowsForFeature(entry.files, publishSnapshot.flows).map(
       (f) => ({
         name: f.name,
         description: productLanguage.flows[f.name] ?? f.description,
@@ -150,7 +162,7 @@ export async function exportToConfluence(
   }
 
   // 3. Diff + changelog page
-  const diff = computeDiff(previousState, snapshot, syncedAt);
+  const diff = computeDiff(previousState, publishSnapshot, syncedAt);
   const hadChanges = previousState === null || isMeaningfulDiff(diff);
 
   const previousSections = previousState?.changelogSections ?? [];
@@ -180,7 +192,7 @@ export async function exportToConfluence(
       changelog: changelogPage.id,
       features: featurePageIds,
     },
-    lastSnapshot: snapshotMinimal(snapshot),
+    lastSnapshot: snapshotMinimal(publishSnapshot),
     changelogSections: newSections,
     rewriteCache: productLanguage.cache,
     pageHashes: nextHashes,

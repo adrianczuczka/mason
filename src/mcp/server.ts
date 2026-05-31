@@ -216,6 +216,12 @@ export function createMcpServer(): McpServer {
             description: z.string(),
             files: z.array(z.string()),
             tests: z.array(z.string()).optional(),
+            type: z
+              .enum(["capability", "infrastructure"])
+              .optional()
+              .describe(
+                '"capability" (user-facing functionality) or "infrastructure" (internal plumbing with no end user — DI/service wiring, config, logging, adapters). Defaults to "capability".'
+              ),
           })
         )
         .describe("Partial features for this batch only — files outside the batch will be added by other partials."),
@@ -265,6 +271,12 @@ export function createMcpServer(): McpServer {
             description: z.string().describe("One-line description of the feature"),
             files: z.array(z.string()).describe("File paths that implement this feature"),
             tests: z.array(z.string()).optional().describe("Test file paths for this feature"),
+            type: z
+              .enum(["capability", "infrastructure"])
+              .optional()
+              .describe(
+                'Classification: "capability" for user-facing functionality, "infrastructure" for internal plumbing with no end user (DI/service wiring, config, logging, adapters). Capabilities are published to Confluence; infrastructure stays in the AI concept map only. Defaults to "capability".'
+              ),
           })
         )
         .describe("Map of feature names to their implementing files"),

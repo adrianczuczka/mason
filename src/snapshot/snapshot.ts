@@ -19,6 +19,26 @@ export interface FeatureEntry {
    * "as of the snapshot's top-level gitHash".
    */
   refreshedHash?: string;
+  /**
+   * Whether this is a user-facing capability or internal infrastructure
+   * (DI wiring, config loading, logging, provider/transport plumbing).
+   * Capabilities are published to product-facing docs (Confluence);
+   * infrastructure stays in the AI concept map only. Defaults to "capability"
+   * when absent (older snapshots) or unrecognized — see normalizeFeatureType.
+   */
+  type?: "capability" | "infrastructure";
+}
+
+export type FeatureType = "capability" | "infrastructure";
+
+/**
+ * Coerce an arbitrary type value to a known classification. Anything that
+ * isn't explicitly "infrastructure" defaults to "capability" — so older
+ * snapshots and unclassified entries are treated as user-facing (published),
+ * never silently hidden.
+ */
+export function normalizeFeatureType(value: unknown): FeatureType {
+  return value === "infrastructure" ? "infrastructure" : "capability";
 }
 
 export interface FlowEntry {

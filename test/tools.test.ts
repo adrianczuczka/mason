@@ -555,6 +555,38 @@ describe("MCP tools", () => {
       expect(data.prompt).not.toContain("../escape.ts");
       expect(data.prompt).not.toContain("/etc/passwd");
     });
+
+    it("save_snapshot persists feature type, defaulting a missing type to capability", async () => {
+      await saveSnapshotData(tmpDir, {
+        Checkout: { description: "checkout", files: ["src/checkout.ts"], type: "capability" },
+        "Service wiring": { description: "DI container", files: ["src/container.ts"], type: "infrastructure" },
+        Legacy: { description: "no type field", files: ["src/legacy.ts"] },
+      }, {});
+
+      const onDisk = JSON.parse(
+        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8")
+      );
+      expect(onDisk.features.Checkout.type).toBe("capability");
+      expect(onDisk.features["Service wiring"].type).toBe("infrastructure");
+      // A feature the model didn't classify defaults to capability (published).
+      expect(onDisk.features.Legacy.type).toBe("capability");
+    });
+
+    it("save_partial_snapshot normalizes and stores feature type for reduce", async () => {
+      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
+        Auth: { description: "login", files: ["src/auth.ts"] },
+        Logging: { description: "logger", files: ["src/log.ts"], type: "infrastructure" },
+      }, {});
+
+      const stored = JSON.parse(
+        await fs.readFile(
+          path.join(tmpDir, ".mason", "partial-snapshots", "batch-000000.json"),
+          "utf-8"
+        )
+      );
+      expect(stored.features.Auth.type).toBe("capability");
+      expect(stored.features.Logging.type).toBe("infrastructure");
+    });
   });
 
   describe("scoped refresh (generate_snapshot_batch with files)", () => {
