@@ -7,7 +7,8 @@
   "bin": {
     "mason": "dist/mason.js",
     "mason-mcp": "dist/mason-mcp.js",
-    "mason-context": "dist/mason-mcp.js"
+    "mason-context": "dist/mason-mcp.js",
+    "mason-drift": "dist/mason-drift.js"
   },
   "scripts": {
     "build": "tsup",
