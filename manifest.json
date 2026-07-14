@@ -107,7 +107,12 @@
         "properties": {
           "dir": { "type": "string", "description": "Absolute path to the project root directory" },
           "offset": { "type": "number", "description": "0-indexed file offset to start the batch at. Omit on the first call." },
-          "batchSize": { "type": "number", "description": "Files per batch. Defaults to 50." }
+          "batchSize": { "type": "number", "description": "Files per batch. Defaults to 50." },
+          "files": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Scope the batch walk to this explicit file list (e.g. the drift set from mason_check_drift). Pass the same list on every batch call of one refresh run; reduce_snapshot then merges into the existing map instead of rebuilding."
+          }
         },
         "required": ["dir"]
       }
@@ -190,9 +195,30 @@
               },
               "required": ["description", "chain"]
             }
+          },
+          "removeFeatures": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Feature names to delete from the existing map (renamed or removed features). Only meaningful on incremental saves."
+          },
+          "removeFlows": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Flow names to delete from the existing map. Only meaningful on incremental saves."
           }
         },
         "required": ["dir", "features", "flows"]
+      }
+    },
+    {
+      "name": "mason_check_drift",
+      "description": "Check how far the concept map has drifted from HEAD. Deterministic (git + filesystem, no LLM). Returns stale features/flows with the changed files behind them, unmapped new files, ghost files, renames, and a recommendation: up-to-date, incremental, or full-rebuild.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
+        },
+        "required": ["dir"]
       }
     },
     {

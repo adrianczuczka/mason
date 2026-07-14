@@ -12,21 +12,27 @@ import {
   loadSnapshot,
   saveSnapshot,
   getCurrentGitHash,
-  getChangedFilesSince,
   prepareSnapshotBatch,
   DEFAULT_BATCH_SIZE,
 } from "../snapshot/snapshot.js";
+import { computeDrift } from "../drift/drift.js";
+import type { DriftReport } from "../drift/drift.js";
 import {
   BATCH_SYSTEM_PROMPT,
   REDUCE_SYSTEM_PROMPT,
+  REFRESH_REDUCE_SYSTEM_PROMPT,
   buildBatchPrompt,
   buildReducePrompt,
+  buildRefreshReducePrompt,
 } from "../snapshot/prompt.js";
 import {
   batchIdFor,
   clearAllPartials,
+  clearScope,
   loadAllPartials,
+  loadScope,
   savePartial,
+  saveScope,
 } from "../snapshot/partials.js";
 import type { Snapshot } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
@@ -291,9 +297,10 @@ export async function getSnapshot(dir: string): Promise<string> {
     });
   }
 
-  // Check staleness
-  const currentHash = await getCurrentGitHash(rootDir);
-  const isStale = snapshot.gitHash !== currentHash && snapshot.gitHash !== "unknown";
+  // Staleness is per entry, not just top-level — a partially refreshed map
+  // can be pinned to HEAD while individual entries lag behind.
+  const drift = await computeDrift(rootDir);
+  const isStale = drift?.stale ?? false;
 
   // Return compact format: feature/flow names -> file lists only.
   // Descriptions and metadata stay in the full snapshot on disk.
@@ -324,44 +331,115 @@ export async function getSnapshot(dir: string): Promise<string> {
     stale: isStale,
   };
 
-  if (isStale) {
-    const changedFiles = await getChangedFilesSince(rootDir, snapshot.gitHash);
-    if (changedFiles && changedFiles.length > 0) {
-      const samples = await buildChangedFilePreviews(rootDir, changedFiles);
+  if (isStale && drift) {
+    output.hint = driftHint(drift);
+    if (drift.historyAvailable && drift.changedFiles.length > 0) {
+      const samples = await buildChangedFilePreviews(
+        rootDir,
+        drift.changedFiles
+      );
       output.diff = {
-        changedFiles,
+        changedFiles: drift.changedFiles,
         samples,
-        truncated: changedFiles.length > STALE_DIFF_MAX_FILES,
+        truncated: drift.changedFiles.length > STALE_DIFF_MAX_FILES,
       };
-      output.hint =
-        "Snapshot is behind HEAD. Use the `diff` to update affected features/flows and call save_snapshot — only entries that touch the changed files need to be re-sent.";
-    } else {
-      output.hint =
-        "Snapshot is behind HEAD but the diff could not be computed. Call save_snapshot to refresh.";
+      output.drift = {
+        staleFeatures: drift.staleFeatures,
+        staleFlows: drift.staleFlows,
+        unmappedFiles: drift.unmappedFiles,
+        ghostFiles: drift.ghostFiles,
+        renames: drift.renames,
+        recommendation: drift.recommendation,
+      };
     }
   }
 
   return JSON.stringify(output);
 }
 
+function driftHint(report: DriftReport): string {
+  if (!report.stale) {
+    return "Snapshot matches HEAD. No action needed.";
+  }
+  if (!report.historyAvailable) {
+    return "Snapshot is stale but its commit is unreachable (shallow clone or rewritten history), so per-feature drift cannot be computed. Re-run the Map-Reduce build: generate_snapshot_batch → save_partial_snapshot → reduce_snapshot → save_snapshot.";
+  }
+  if (report.recommendation === "full-rebuild") {
+    return "Drift is too large for an incremental update. Re-run the Map-Reduce build: generate_snapshot_batch → save_partial_snapshot → reduce_snapshot → save_snapshot.";
+  }
+  if (report.changedFiles.length + report.unmappedFiles.length > STALE_DIFF_MAX_FILES) {
+    return "Many files drifted — use a scoped refresh instead of reading them all inline: call generate_snapshot_batch(dir, files=[...changedFiles, ...unmappedFiles]) repeatedly (same list every call) with save_partial_snapshot per batch, then reduce_snapshot and save_snapshot. Entries untouched by the drift are preserved in the reduce step.";
+  }
+  const nothingToRemap =
+    Object.keys(report.staleFeatures).length === 0 &&
+    Object.keys(report.staleFlows).length === 0 &&
+    report.unmappedFiles.length === 0 &&
+    report.ghostFiles.length === 0;
+  if (nothingToRemap) {
+    return "Changes since the snapshot don't touch any mapped files. Call save_snapshot with empty features/flows to re-pin the snapshot to HEAD.";
+  }
+  return "Read the changed files under staleFeatures/staleFlows, update those entries (fold unmappedFiles into the right features), and call save_snapshot with only the affected entries — unchanged entries are preserved. Drop ghostFiles from any entries that reference them, and delete features/flows that no longer exist via save_snapshot's removeFeatures/removeFlows.";
+}
+
+export async function checkDrift(dir: string): Promise<string> {
+  const rootDir = path.resolve(dir);
+
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("checking concept-map drift");
+  }
+
+  const report = await computeDrift(rootDir);
+  if (!report) {
+    return JSON.stringify({
+      exists: false,
+      hint: "No concept map exists yet. Build one first: generate_snapshot_batch → save_partial_snapshot → reduce_snapshot → save_snapshot.",
+    });
+  }
+
+  return JSON.stringify({ exists: true, ...report, hint: driftHint(report) });
+}
+
 export async function generateSnapshotBatch(
   dir: string,
   offset: number = 0,
-  batchSize: number = DEFAULT_BATCH_SIZE
+  batchSize: number = DEFAULT_BATCH_SIZE,
+  files?: string[]
 ): Promise<string> {
-  const batch = await prepareSnapshotBatch(dir, offset, batchSize);
+  const rootDir = path.resolve(dir);
+  const scoped = files !== undefined && files.length > 0;
+  const scopeFiles = scoped ? sanitizePaths(rootDir, files) : undefined;
+  const batch = await prepareSnapshotBatch(dir, offset, batchSize, scopeFiles);
+
+  if (scoped && batch.totalFiles > 0) {
+    // Mark this partial run as a scoped refresh so reduce_snapshot merges
+    // into the existing map instead of rebuilding it from partials alone.
+    await saveScope(rootDir, scopeFiles!);
+  } else if (!scoped) {
+    // A full build must never inherit a scope marker left behind by an
+    // abandoned refresh run — its reduce step would wrongly merge instead
+    // of rebuilding.
+    await clearScope(rootDir);
+  }
+
+  const task = scoped
+    ? "Refresh the concept map for a scoped set of drifted files (batch step)."
+    : "Build a concept-to-files map for this project (batch step).";
 
   if (batch.totalFiles === 0) {
     return JSON.stringify(
       {
-        task: "Build a concept-to-files map for this project (batch step).",
+        task,
         offset: 0,
         nextOffset: null,
         totalFiles: 0,
         batchId: batchIdFor(0),
         instructions: BATCH_SYSTEM_PROMPT,
-        prompt: "(No source files found to map.)",
-        next: "No source files were found. Skip the rest of the playbook and call mason_complete_init.",
+        prompt: scoped
+          ? "(None of the requested files exist as source files in this project.)"
+          : "(No source files found to map.)",
+        next: scoped
+          ? "None of the requested files matched project source files. Check the paths passed in `files` — they must be repo-relative."
+          : "No source files were found. Skip the rest of the playbook and call mason_complete_init.",
       },
       null,
       2
@@ -369,22 +447,26 @@ export async function generateSnapshotBatch(
   }
 
   const batchId = batchIdFor(batch.offset);
+  const continueCall = scoped
+    ? `generate_snapshot_batch(dir, offset=${batch.nextOffset}, files=<the same list>)`
+    : `generate_snapshot_batch(dir, offset=${batch.nextOffset})`;
 
   return JSON.stringify(
     {
-      task: "Build a concept-to-files map for this project (batch step).",
+      task,
       offset: batch.offset,
       nextOffset: batch.nextOffset,
       totalFiles: batch.totalFiles,
       batchId,
       batchSize: batch.batchSize,
       filesInBatch: batch.skeletons.length,
+      scoped,
       instructions: BATCH_SYSTEM_PROMPT,
       prompt: buildBatchPrompt(batch),
       next:
         batch.nextOffset === null
           ? `Derive partial features/flows for this batch and call save_partial_snapshot(dir, batchId="${batchId}", features, flows). This is the last batch — after saving, proceed to reduce_snapshot.`
-          : `Derive partial features/flows for this batch and call save_partial_snapshot(dir, batchId="${batchId}", features, flows). Then call generate_snapshot_batch(dir, offset=${batch.nextOffset}) to continue.`,
+          : `Derive partial features/flows for this batch and call save_partial_snapshot(dir, batchId="${batchId}", features, flows). Then call ${continueCall} to continue.`,
     },
     null,
     2
@@ -441,6 +523,49 @@ export async function reduceSnapshot(dir: string): Promise<string> {
         status: "error",
         error:
           "No partial snapshots found. Run generate_snapshot_batch and save_partial_snapshot at least once before calling reduce_snapshot.",
+      },
+      null,
+      2
+    );
+  }
+
+  // A scope marker means these partials re-analyzed only a drifted subset —
+  // merge them into the existing map instead of rebuilding from scratch.
+  const scope = await loadScope(rootDir);
+  const existing =
+    scope && scope.length > 0 ? await loadSnapshot(rootDir) : null;
+
+  if (scope && existing) {
+    // Strip bookkeeping fields — the assistant shouldn't echo them back.
+    const cleanFeatures = Object.fromEntries(
+      Object.entries(existing.features).map(([name, feat]) => [
+        name,
+        {
+          description: feat.description,
+          files: feat.files,
+          ...(feat.tests && feat.tests.length > 0 ? { tests: feat.tests } : {}),
+        },
+      ])
+    );
+    const cleanFlows = Object.fromEntries(
+      Object.entries(existing.flows).map(([name, flow]) => [
+        name,
+        { description: flow.description, chain: flow.chain },
+      ])
+    );
+
+    return JSON.stringify(
+      {
+        task: "Merge a scoped refresh into the existing concept map.",
+        partialsCount: partials.length,
+        refreshedFiles: scope.length,
+        instructions: REFRESH_REDUCE_SYSTEM_PROMPT,
+        prompt: buildRefreshReducePrompt(
+          { features: cleanFeatures, flows: cleanFlows },
+          scope,
+          partials
+        ),
+        next: "Follow `instructions` to produce the COMPLETE updated features/flows (entries untouched by the refresh copied through unchanged), then call save_snapshot(dir, features, flows). Partials and the scope marker are cleaned up automatically after save_snapshot succeeds.",
       },
       null,
       2
@@ -504,8 +629,21 @@ function sanitizePaths(
 
 export async function saveSnapshotData(
   dir: string,
-  features: Record<string, { description: string; files: string[]; tests?: string[] }>,
-  flows: Record<string, { description: string; chain: string[] }>
+  features: Record<
+    string,
+    {
+      description: string;
+      files: string[];
+      tests?: string[];
+      refreshedHash?: string;
+    }
+  >,
+  flows: Record<
+    string,
+    { description: string; chain: string[]; refreshedHash?: string }
+  >,
+  removeFeatures: string[] = [],
+  removeFlows: string[] = []
 ): Promise<string> {
   const rootDir = path.resolve(dir);
   const gitHash = await getCurrentGitHash(rootDir);
@@ -529,6 +667,30 @@ export async function saveSnapshotData(
   const existing = replaceMode ? null : await loadSnapshot(rootDir);
 
   if (existing) {
+    // Entries not re-sent in this call are only verified as of the previous
+    // hash — record that before the top-level gitHash moves to HEAD, so
+    // drift detection can still see which entries were skipped.
+    if (existing.gitHash !== "unknown") {
+      for (const feat of Object.values(existing.features)) {
+        feat.refreshedHash ??= existing.gitHash;
+      }
+      for (const flow of Object.values(existing.flows)) {
+        flow.refreshedHash ??= existing.gitHash;
+      }
+    }
+
+    const removedFeatures = removeFeatures.filter(
+      (name) => name in existing.features
+    );
+    const removedFlows = removeFlows.filter((name) => name in existing.flows);
+    for (const name of removedFeatures) delete existing.features[name];
+    for (const name of removedFlows) delete existing.flows[name];
+
+    if (gitHash !== "unknown") {
+      for (const feat of Object.values(features)) feat.refreshedHash = gitHash;
+      for (const flow of Object.values(flows)) flow.refreshedHash = gitHash;
+    }
+
     existing.features = { ...existing.features, ...features };
     existing.flows = { ...existing.flows, ...flows };
     existing.updatedAt = now;
@@ -540,6 +702,8 @@ export async function saveSnapshotData(
       mode: "merged",
       features: Object.keys(existing.features).length,
       flows: Object.keys(existing.flows).length,
+      removedFeatures: removedFeatures.length,
+      removedFlows: removedFlows.length,
     });
   }
 
