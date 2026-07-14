@@ -67,6 +67,41 @@ export async function loadAllPartials(rootDir: string): Promise<Partial[]> {
   return partials;
 }
 
+// A scope marker records that the current partials come from a scoped
+// refresh (drift repair) rather than a full Map-Reduce build. It lives in the
+// partials directory so clearAllPartials removes it with the partials;
+// loadAllPartials skips it because it has no batchId/features/flows.
+function scopePath(rootDir: string): string {
+  return path.join(partialsDir(rootDir), "scope.json");
+}
+
+export async function saveScope(
+  rootDir: string,
+  files: string[]
+): Promise<void> {
+  await fs.mkdir(partialsDir(rootDir), { recursive: true });
+  await fs.writeFile(
+    scopePath(rootDir),
+    JSON.stringify({ files, savedAt: new Date().toISOString() }, null, 2),
+    "utf-8"
+  );
+}
+
+export async function loadScope(rootDir: string): Promise<string[] | null> {
+  try {
+    const raw = await fs.readFile(scopePath(rootDir), "utf-8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.files)) return parsed.files;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearScope(rootDir: string): Promise<void> {
+  await fs.rm(scopePath(rootDir), { force: true });
+}
+
 export async function clearAllPartials(rootDir: string): Promise<void> {
   try {
     await fs.rm(partialsDir(rootDir), { recursive: true, force: true });

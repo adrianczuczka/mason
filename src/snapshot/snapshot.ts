@@ -19,11 +19,20 @@ export interface FeatureEntry {
   description: string;
   files: string[];
   tests?: string[];
+  /**
+   * Commit this entry was last verified against. Entries updated by an
+   * incremental save carry HEAD here; untouched entries keep the hash the
+   * map had before the save, so drift stays visible per entry. Absent means
+   * "as of the snapshot's top-level gitHash".
+   */
+  refreshedHash?: string;
 }
 
 export interface FlowEntry {
   description: string;
   chain: string[];
+  /** See FeatureEntry.refreshedHash. */
+  refreshedHash?: string;
 }
 
 export interface Snapshot {
@@ -155,7 +164,7 @@ export interface SnapshotBatch {
   testPairs: Array<{ test: string; source: string; confidence: string }>;
 }
 
-async function listSourceFiles(resolvedRoot: string): Promise<string[]> {
+export async function listSourceFiles(resolvedRoot: string): Promise<string[]> {
   const all = await fg(SOURCE_GLOB, {
     cwd: resolvedRoot,
     ignore: SOURCE_IGNORE,
@@ -167,10 +176,18 @@ async function listSourceFiles(resolvedRoot: string): Promise<string[]> {
 export async function prepareSnapshotBatch(
   rootDir: string,
   offset: number,
-  batchSize: number = DEFAULT_BATCH_SIZE
+  batchSize: number = DEFAULT_BATCH_SIZE,
+  scopeFiles?: string[]
 ): Promise<SnapshotBatch> {
   const resolvedRoot = path.resolve(rootDir);
-  const allFiles = await listSourceFiles(resolvedRoot);
+  let allFiles = await listSourceFiles(resolvedRoot);
+  if (scopeFiles) {
+    // Intersect with the real source list: keeps ignore rules and path safety,
+    // and silently drops scope entries that no longer exist on disk. An empty
+    // scope stays empty — it must not fall back to walking the whole project.
+    const scopeSet = new Set(scopeFiles);
+    allFiles = allFiles.filter((f) => scopeSet.has(f));
+  }
   const totalFiles = allFiles.length;
   const safeOffset = Math.max(0, Math.min(offset, totalFiles));
   const batchPaths = allFiles.slice(safeOffset, safeOffset + batchSize);

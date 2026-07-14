@@ -158,6 +158,45 @@ export function buildReducePrompt(
 ${JSON.stringify({ partials }, null, 2)}`;
 }
 
+export const REFRESH_REDUCE_SYSTEM_PROMPT = `You are Mason, merging a scoped refresh into an existing concept-to-files map.
+
+Only a subset of the project's files was re-analyzed (they changed since the map was built). You receive the existing full map, the list of re-analyzed file paths, and partial concept maps derived from ONLY those files.
+
+Respond with ONLY a JSON object: \`{"features": {...}, "flows": {...}}\` — the COMPLETE updated map. No markdown, no preamble.
+
+Merge rules:
+- Entries in the existing map that reference none of the re-analyzed files: copy them through UNCHANGED.
+- Entries that reference re-analyzed files: update them using the partials — adjust descriptions, add new files, drop files that moved elsewhere.
+- Merge partial features into existing features when they're the same product concept, even if named slightly differently ("auth" vs "authentication") — keep the existing name unless the new one is clearly more product-natural.
+- Features whose files were all deleted or renamed away: remove them by omitting them from your output.
+- Every file that appears in any partial MUST end up in some feature. Don't silently drop files.
+- Do not invent or alter entries for files you haven't seen.`;
+
+export function buildRefreshReducePrompt(
+  existingMap: {
+    features: Record<string, { description: string; files: string[]; tests?: string[] }>;
+    flows: Record<string, { description: string; chain: string[] }>;
+  },
+  refreshedFiles: string[],
+  partials: Array<{
+    batchId: string;
+    offset: number;
+    features: Record<string, { description: string; files: string[]; tests?: string[] }>;
+    flows: Record<string, { description: string; chain: string[] }>;
+  }>
+): string {
+  return `Merge this scoped refresh into the existing concept map.
+
+=== EXISTING MAP ===
+${JSON.stringify(existingMap, null, 2)}
+
+=== RE-ANALYZED FILES ===
+${refreshedFiles.join("\n")}
+
+=== PARTIALS (derived from the re-analyzed files only) ===
+${JSON.stringify({ partials }, null, 2)}`;
+}
+
 export function buildIncrementalPrompt(
   files: Array<{ path: string; content: string }>,
   existingSnapshot: { features: Record<string, unknown>; flows: Record<string, unknown> }
