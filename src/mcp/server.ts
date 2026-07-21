@@ -28,7 +28,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool. Start every project with `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup. Setup is a Map-Reduce loop: repeatedly call `generate_snapshot_batch` + `save_partial_snapshot` until every batch is processed, then `reduce_snapshot` to produce the unified map, then `save_snapshot`, then (optionally) `mason_set_confluence` to wire up Confluence sync, then `mason_complete_init`. Once initialized, `get_snapshot` returns the feature-to-file map, `mason_check_drift` reports which features are stale relative to HEAD and whether to refresh incrementally or rebuild, `get_impact` shows what other files an edit affects, and `export_to_confluence` pushes the concept map to a configured Confluence space as PM-readable wiki pages. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and never need init. Mason has no CLI; everything happens through these tools.",
+        "Mason maintains a persistent feature-to-file concept map of this codebase so you can skip manual exploration. RULE: before answering ANY question about features, architecture, data flows, or where something lives — and before any grep/glob/file-read exploration for such a question — call `get_snapshot` first. One call returns the whole map and replaces 5-10 search round-trips; if it has drifted it says so and self-corrects. Likewise call `get_impact` BEFORE editing or refactoring a file (git co-change history + references + related tests — signals you cannot get from reading the file itself), and `mason_check_drift` to verify the map is fresh in long sessions. If `get_snapshot` reports no snapshot exists, offer to set Mason up: `mason_init` returns a setup playbook (a Map-Reduce loop of `generate_snapshot_batch` + `save_partial_snapshot`, then `reduce_snapshot` + `save_snapshot`, optionally `mason_set_confluence`, then `mason_complete_init`). `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics for unmapped projects and never need init. Mason has no CLI; everything happens through these tools.",
     }
   );
 
@@ -99,7 +99,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "full_analysis",
-    "Run a complete project analysis in one call. Returns git history stats, project structure with file counts, curated code sample previews (~60 lines each), and test-to-source file mapping. This is the recommended starting point — call this first, then read specific files natively for full content.",
+    "One-shot orientation for a project WITHOUT a concept map (get_snapshot returned exists:false). Returns git history stats, project structure with file counts, curated code sample previews (~60 lines each), and test-to-source mapping. On a mapped project, prefer get_snapshot — it is cheaper and answers feature/architecture questions directly.",
     {
       dir: z
         .string()
@@ -152,7 +152,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_snapshot",
-    "Get the project's concept map — a lookup table from features and flows to the files that implement them. Use this to jump straight to relevant files instead of exploring. Example: 'home screen' → [HomeScreen.kt, HomeViewModel.kt, HomeModule.kt]. If exists:false, call generate_snapshot to build one. When stale, returns the existing map plus a `diff` of changed files + previews so an incremental save_snapshot call covers the update.",
+    "CALL THIS FIRST — before grep, glob, or reading files — for any question about what this codebase does, its features, architecture, data flows, or where something is implemented ('where is X handled?', 'how does Y work?', 'what implements Z?'). Returns the persistent feature-to-file concept map in one cheap, instant, LLM-free call, replacing 5-10 exploration round-trips. Example: 'home screen' → [HomeScreen.kt, HomeViewModel.kt, HomeModule.kt]. Then read only the mapped files. If the map has drifted it says so (with a diff) — trust the freshness signal. If exists:false, the project isn't set up; offer mason_init.",
     {
       dir: z
         .string()
@@ -329,7 +329,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_impact",
-    "Analyze the impact of changing specific files. Returns three signals: git co-change (files that historically change together), references (files that mention the target by name), and related tests. Use this before editing a file to understand what else might need updating.",
+    "CALL THIS BEFORE editing, refactoring, or assessing the blast radius of any file. Returns three signals you cannot get by reading the file itself: git co-change history (files that historically change in the same commits), references (files that mention the target by name), and related tests. One call replaces a manual sweep of grep + git log. Also the right tool for 'what would break if I changed X?' questions.",
     {
       dir: z
         .string()

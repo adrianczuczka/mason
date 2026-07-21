@@ -75,11 +75,11 @@ Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/]
 | `save_snapshot` | Persist the final unified map. Clears partials. |
 | `mason_set_confluence` | Configure Confluence credentials — two-step: list spaces, then persist. |
 | `export_to_confluence` | Sync the concept map to Confluence as PM-readable wiki pages. |
-| `get_snapshot` | Load the concept map — feature → file lookup. |
+| `get_snapshot` | **First call for any architecture question.** Loads the concept map — feature → file lookup — in one LLM-free call. |
 | `mason_check_drift` | Feature-level staleness report — what changed since the snapshot, and whether to refresh incrementally or rebuild. |
-| `get_impact` | Trace what's affected by changing a file — co-change history + references + related tests. |
+| `get_impact` | **Call before editing a file.** Traces what's affected — co-change history + references + related tests. |
 | `analyze_project` | Git stats — hot files, stale dirs, commit conventions. |
-| `full_analysis` | One-shot first visit: structure + samples + tests + git. |
+| `full_analysis` | One-shot orientation for unmapped projects: structure + samples + tests + git. |
 | `get_code_samples` | Smart file previews selected by architectural role. |
 
 The init / write tools refuse to run until `mason_init` has completed. The read-only diagnostics (`analyze_project`, `full_analysis`, `get_code_samples`) work without init.
