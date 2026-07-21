@@ -76,6 +76,7 @@ Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/]
 | `mason_set_confluence` | Configure Confluence credentials — two-step: list spaces, then persist. |
 | `export_to_confluence` | Sync the concept map to Confluence as PM-readable wiki pages. |
 | `get_snapshot` | Load the concept map — feature → file lookup. |
+| `mason_check_drift` | Feature-level staleness report — what changed since the snapshot, and whether to refresh incrementally or rebuild. |
 | `get_impact` | Trace what's affected by changing a file — co-change history + references + related tests. |
 | `analyze_project` | Git stats — hot files, stale dirs, commit conventions. |
 | `full_analysis` | One-shot first visit: structure + samples + tests + git. |
@@ -102,6 +103,27 @@ Before editing a file, Mason tells you what else might be affected. Three signal
 - **Related tests** — test files paired by naming convention
 
 Ask your assistant *"what would be affected if I changed WeatherRepository?"* and it'll call `get_impact` for you.
+
+## Drift detection
+
+A concept map that silently goes stale is worse than no map — your assistant confidently jumps to files that no longer do what the map says. `mason_check_drift` compares the map against HEAD (pure git + filesystem, no LLM call) and reports drift at the **feature level**: which features are stale and which files changed under them, new source files not yet mapped, ghost files the map still references, and renames. It ends with a recommendation — `up-to-date`, `incremental` (re-map just the stale entries), or `full-rebuild` (re-run the Map-Reduce playbook).
+
+Ask your assistant *"is the concept map still fresh?"* — and if it isn't, the same report tells it exactly which entries to regenerate. `get_snapshot` includes the same drift report whenever it detects a stale map, so a stale map self-heals in the course of normal use.
+
+Incremental refreshes are safe against partial updates: every entry a refresh touches is stamped with the commit it was verified against, so entries skipped in one refresh keep reporting as stale instead of silently riding along on the map's new hash. Features that disappear from the codebase can be deleted from the map with `save_snapshot`'s `removeFeatures`/`removeFlows` — renames stop leaving zombie entries behind.
+
+When a lot of files drifted at once, the assistant runs a **scoped refresh** instead of a full rebuild: `generate_snapshot_batch` accepts a `files` list, so the Map-Reduce loop walks only the drifted files and the reduce step merges the result into the existing map. 60 drifted files in a 1000-file monorepo means ~2 batches, not 20.
+
+### Drift checks in CI
+
+Because the check is deterministic, it also ships as a tiny standalone binary — the one exception to "MCP-only", read-only and LLM-free:
+
+```bash
+npx -p mason-context mason-drift --dir .   # exit 0 fresh · 1 stale · 2 error
+npx -p mason-context mason-drift --json    # full report as JSON
+```
+
+Run it on merges to main to catch a rotting map before your assistant does — for example, warn on PRs when the map went stale. Fixing the map still happens through an assistant session (it's the LLM that rewrites entries), so a common pattern is CI detects, a human (or a scheduled agent) asks their assistant to refresh. Note: the diff is computed against the snapshot's base commit, so shallow CI checkouts need enough `fetch-depth` to reach it — when they don't, `mason-drift` reports stale with `full-rebuild` rather than guessing.
 
 ## Confluence sync
 

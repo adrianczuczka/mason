@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   analyzeProject,
+  checkDrift,
   exportToConfluenceTool,
   fullAnalysis,
   generateSnapshotBatch,
@@ -27,7 +28,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason is a context engineering tool. Start every project with `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup. Setup is a Map-Reduce loop: repeatedly call `generate_snapshot_batch` + `save_partial_snapshot` until every batch is processed, then `reduce_snapshot` to produce the unified map, then `save_snapshot`, then (optionally) `mason_set_confluence` to wire up Confluence sync, then `mason_complete_init`. Once initialized, `get_snapshot` returns the feature-to-file map, `get_impact` shows what other files an edit affects, and `export_to_confluence` pushes the concept map to a configured Confluence space as PM-readable wiki pages. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and never need init. Mason has no CLI; everything happens through these tools.",
+        "Mason is a context engineering tool. Start every project with `mason_init` for the project directory. If it returns `initialized: false`, follow the included `playbook` to walk the user through one-time setup. Setup is a Map-Reduce loop: repeatedly call `generate_snapshot_batch` + `save_partial_snapshot` until every batch is processed, then `reduce_snapshot` to produce the unified map, then `save_snapshot`, then (optionally) `mason_set_confluence` to wire up Confluence sync, then `mason_complete_init`. Once initialized, `get_snapshot` returns the feature-to-file map, `mason_check_drift` reports which features are stale relative to HEAD and whether to refresh incrementally or rebuild, `get_impact` shows what other files an edit affects, and `export_to_confluence` pushes the concept map to a configured Confluence space as PM-readable wiki pages. `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics and never need init. Mason has no CLI; everything happens through these tools.",
     }
   );
 
@@ -182,9 +183,13 @@ export function createMcpServer(): McpServer {
         .int()
         .optional()
         .describe("Files per batch. Defaults to 50."),
+      files: z
+        .array(z.string())
+        .optional()
+        .describe("Scope the batch walk to this explicit file list — e.g. the drift set from mason_check_drift (changedFiles + unmappedFiles). Pass the SAME list on every batch call of one refresh run. Triggers refresh mode: reduce_snapshot will merge the partials into the existing map instead of rebuilding it."),
     },
-    async ({ dir, offset, batchSize }) => {
-      const result = await generateSnapshotBatch(dir, offset, batchSize);
+    async ({ dir, offset, batchSize, files }) => {
+      const result = await generateSnapshotBatch(dir, offset, batchSize, files);
       return {
         content: [{ type: "text", text: result }],
       };
@@ -271,9 +276,39 @@ export function createMcpServer(): McpServer {
           })
         )
         .describe("Map of flow names to ordered file chains"),
+      removeFeatures: z
+        .array(z.string())
+        .optional()
+        .describe("Feature names to delete from the existing map — for features that were renamed or no longer exist. Applied before merging; only meaningful on incremental saves."),
+      removeFlows: z
+        .array(z.string())
+        .optional()
+        .describe("Flow names to delete from the existing map. Applied before merging; only meaningful on incremental saves."),
     },
-    async ({ dir, features, flows }) => {
-      const result = await saveSnapshotData(dir, features, flows);
+    async ({ dir, features, flows, removeFeatures, removeFlows }) => {
+      const result = await saveSnapshotData(
+        dir,
+        features,
+        flows,
+        removeFeatures ?? [],
+        removeFlows ?? []
+      );
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    }
+  );
+
+  server.tool(
+    "mason_check_drift",
+    "Check how far the concept map has drifted from HEAD. Deterministic (git + filesystem, no LLM). Returns which features/flows are stale and the changed files behind them, new source files not yet mapped, ghost files (mapped but deleted), renames, and a `recommendation`: `up-to-date` (nothing to do), `incremental` (update just the stale entries via save_snapshot), or `full-rebuild` (re-run the Map-Reduce build). Call this before trusting the map in a long session, or periodically to keep the map and any synced wikis fresh.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+    },
+    async ({ dir }) => {
+      const result = await checkDrift(dir);
       return {
         content: [{ type: "text", text: result }],
       };

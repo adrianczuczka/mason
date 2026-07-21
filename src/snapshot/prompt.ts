@@ -1,70 +1,3 @@
-export const SNAPSHOT_SYSTEM_PROMPT = `You are Mason, a context engineering tool. You're given source files from a codebase. Your job is to create a concept-to-files map that helps an AI coding assistant instantly find the right files for any task.
-
-Respond with ONLY a JSON object. No markdown, no explanation, no code fences. Just the raw JSON.
-
-The JSON must have two keys: "features" and "flows".
-
-"features" maps user-facing feature names or concepts to the files that implement them. Group files by what a developer would naturally ask about. Use plain language names ("home screen", not "HomeScreenModule").
-
-"flows" maps data/action flows to ordered chains of files showing how data moves through the system. These help when someone asks "what happens when X?"
-
-Example output:
-{
-  "features": {
-    "user authentication": {
-      "description": "Login, signup, token refresh, and session management",
-      "files": ["src/services/AuthService.ts", "src/middleware/AuthMiddleware.ts", "src/models/User.ts", "src/routes/auth.ts"],
-      "tests": ["tests/auth.test.ts"]
-    },
-    "payment processing": {
-      "description": "Stripe integration for subscriptions and one-time payments",
-      "files": ["src/services/PaymentService.ts", "src/webhooks/stripe.ts", "src/models/Subscription.ts"],
-      "tests": ["tests/payment.test.ts"]
-    }
-  },
-  "flows": {
-    "user login": {
-      "description": "User submits credentials, gets JWT token",
-      "chain": ["src/routes/auth.ts", "src/services/AuthService.ts", "src/models/User.ts"]
-    },
-    "process payment": {
-      "description": "User initiates payment, Stripe charges card, webhook confirms",
-      "chain": ["src/routes/payment.ts", "src/services/PaymentService.ts", "src/webhooks/stripe.ts"]
-    }
-  }
-}
-
-Rules:
-- Use the FULL relative file paths exactly as given in the input
-- Group by what a human would naturally ask about, not by technical structure
-- Each feature should have 2-8 files — not too granular, not too broad
-- Flows should show the actual call chain order
-- Include test files in the "tests" field when they exist
-- Cover ALL the files you're given — don't skip any`;
-
-export function buildSnapshotPrompt(
-  files: Array<{ path: string; content: string }>,
-  testPairs?: Array<{ test: string; source: string; confidence: string }>
-): string {
-  const fileBlocks = files
-    .map(
-      (f) =>
-        `=== ${f.path} ===\n${f.content.slice(0, 3000)}${f.content.length > 3000 ? "\n... (truncated)" : ""}`
-    )
-    .join("\n\n");
-
-  let prompt = `Create a concept-to-files map for this codebase. Here are the key source files:\n\n${fileBlocks}`;
-
-  if (testPairs && testPairs.length > 0) {
-    const testBlock = testPairs
-      .map((p) => `${p.test} → ${p.source}`)
-      .join("\n");
-    prompt += `\n\nHere are the test-to-source file mappings. Use these to populate the "tests" field for each feature:\n\n${testBlock}`;
-  }
-
-  return prompt;
-}
-
 export const BATCH_SYSTEM_PROMPT = `You are Mason, building one piece of a larger concept-to-files map via a Map-Reduce pattern.
 
 You are seeing ONE batch of files from this project — not the whole codebase. Other batches will be processed separately and merged with yours in a final reduce step.
@@ -158,22 +91,42 @@ export function buildReducePrompt(
 ${JSON.stringify({ partials }, null, 2)}`;
 }
 
-export function buildIncrementalPrompt(
-  files: Array<{ path: string; content: string }>,
-  existingSnapshot: { features: Record<string, unknown>; flows: Record<string, unknown> }
+export const REFRESH_REDUCE_SYSTEM_PROMPT = `You are Mason, merging a scoped refresh into an existing concept-to-files map.
+
+Only a subset of the project's files was re-analyzed (they changed since the map was built). You receive the existing full map, the list of re-analyzed file paths, and partial concept maps derived from ONLY those files.
+
+Respond with ONLY a JSON object: \`{"features": {...}, "flows": {...}}\` — the COMPLETE updated map. No markdown, no preamble.
+
+Merge rules:
+- Entries in the existing map that reference none of the re-analyzed files: copy them through UNCHANGED.
+- Entries that reference re-analyzed files: update them using the partials — adjust descriptions, add new files, drop files that moved elsewhere.
+- Merge partial features into existing features when they're the same product concept, even if named slightly differently ("auth" vs "authentication") — keep the existing name unless the new one is clearly more product-natural.
+- Features whose files were all deleted or renamed away: remove them by omitting them from your output.
+- Every file that appears in any partial MUST end up in some feature. Don't silently drop files.
+- Do not invent or alter entries for files you haven't seen.`;
+
+export function buildRefreshReducePrompt(
+  existingMap: {
+    features: Record<string, { description: string; files: string[]; tests?: string[] }>;
+    flows: Record<string, { description: string; chain: string[] }>;
+  },
+  refreshedFiles: string[],
+  partials: Array<{
+    batchId: string;
+    offset: number;
+    features: Record<string, { description: string; files: string[]; tests?: string[] }>;
+    flows: Record<string, { description: string; chain: string[] }>;
+  }>
 ): string {
-  const fileBlocks = files
-    .map(
-      (f) =>
-        `=== ${f.path} ===\n${f.content.slice(0, 3000)}${f.content.length > 3000 ? "\n... (truncated)" : ""}`
-    )
-    .join("\n\n");
+  return `Merge this scoped refresh into the existing concept map.
 
-  return `Here is the existing concept map for this project:
-${JSON.stringify(existingSnapshot, null, 2)}
+=== EXISTING MAP ===
+${JSON.stringify(existingMap, null, 2)}
 
-These files have been added or changed. Update the concept map to incorporate them. Return the FULL updated map (not just the changes).
+=== RE-ANALYZED FILES ===
+${refreshedFiles.join("\n")}
 
-Changed/new files:
-${fileBlocks}`;
+=== PARTIALS (derived from the re-analyzed files only) ===
+${JSON.stringify({ partials }, null, 2)}`;
 }
+
