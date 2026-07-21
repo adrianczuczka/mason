@@ -1,0 +1,73 @@
+{
+  "name": "hono",
+  "git": "https://github.com/honojs/hono",
+  "commit": "44f884321a1d52e98d45a85634da9d5f4751a43a",
+  "note": "Small-medium real OSS target (~186 non-test TS source files). Ground truth verified by exploration at the pinned commit, 2026-07-21.",
+  "questions": [
+    {
+      "id": "router_selection",
+      "category": "location",
+      "question": "Where does Hono choose its default router, and which files implement the different router strategies? Name the exact files.",
+      "criteria": "Names src/hono.ts as where the default is chosen (SmartRouter wrapping RegExpRouter + TrieRouter in the Hono constructor) and identifies the five router implementations under src/router/ (reg-exp-router, trie-router, smart-router, linear-router, pattern-router). Bonus: mentions the Router interface in src/router.ts, that route registration funnels through hono-base.ts, or the alternate presets (preset/quick.ts, preset/tiny.ts).",
+      "groundTruth": [
+        "src/hono.ts",
+        "src/router.ts",
+        "src/hono-base.ts",
+        "src/router/reg-exp-router/router.ts",
+        "src/router/trie-router/router.ts",
+        "src/router/smart-router/router.ts",
+        "src/router/linear-router/router.ts",
+        "src/router/pattern-router/router.ts",
+        "src/router/reg-exp-router/index.ts",
+        "src/router/trie-router/index.ts",
+        "src/router/smart-router/index.ts",
+        "src/router/linear-router/index.ts",
+        "src/router/pattern-router/index.ts"
+      ]
+    },
+    {
+      "id": "middleware_chain",
+      "category": "architecture",
+      "question": "Explain how Hono executes a middleware chain for a request: how does the onion model work, where is a request's Context created, and which files implement each part?",
+      "criteria": "Names src/compose.ts as the composition implementation (recursive dispatch(i) calling dispatch(i+1) as next), src/hono-base.ts as where dispatch happens and the Context is instantiated per request, and src/context.ts as the Context class. Describes the onion model: middleware run code before await next(), then in reverse after.",
+      "groundTruth": ["src/compose.ts", "src/hono-base.ts", "src/context.ts"]
+    },
+    {
+      "id": "add_middleware_task",
+      "category": "task",
+      "question": "I want to contribute a new built-in middleware called response-time (sets an X-Response-Time header) to this repo. Which files do I need to create or touch, and what conventions do existing middleware follow?",
+      "criteria": "Says to create src/middleware/response-time/index.ts (factory returning a MiddlewareHandler) with a colocated index.test.ts, and to register the export in package.json (exports map entry pointing at dist, plus the typesVersions block). Correctly notes there is NO central middleware barrel file to edit. Bonus: points at an existing middleware like timing or logger as the template, or mentions larger middleware splitting logic into a named sibling file re-exported by index.ts.",
+      "groundTruth": [
+        "package.json",
+        "src/middleware/basic-auth/index.ts",
+        "src/middleware/logger/index.ts"
+      ]
+    },
+    {
+      "id": "context_impact",
+      "category": "impact",
+      "question": "What would be affected if I changed the Context class in src/context.ts — say, renaming a public method? Which parts of the codebase depend on it most heavily?",
+      "criteria": "Identifies the core dependents: src/hono-base.ts (instantiates Context in the request dispatch path), src/compose.ts (typed over Context), src/types.ts (Context in the public handler/middleware type surface), and states that essentially all of src/middleware/* and src/helper/* consume Context, plus adapters under src/adapter/*. Conveys the scale (dozens of importing files) rather than naming two or three.",
+      "groundTruth": ["src/context.ts", "src/hono-base.ts", "src/compose.ts", "src/types.ts"]
+    },
+    {
+      "id": "hc_client",
+      "category": "architecture",
+      "question": "How does Hono's hc RPC client give you type-safe API calls like client.api.users.$get? What happens at runtime versus at the type level, and which files implement it?",
+      "criteria": "Explains that hc (src/client/client.ts) is implemented with a JS Proxy that intercepts property access to build fetch calls at runtime, and that all route type-safety is purely TypeScript (the Hono app generic) with no code generation. Names src/client/client.ts; bonus for src/types.ts as the type plumbing.",
+      "groundTruth": ["src/client/client.ts", "src/types.ts"]
+    },
+    {
+      "id": "jsx_runtimes",
+      "category": "location",
+      "question": "Hono supports JSX both for server-side rendering and in the browser. Where are the two JSX runtimes implemented, and how does a user select between them?",
+      "criteria": "Identifies the server-side string-rendering runtime (src/jsx/base.ts, exported via src/jsx/index.ts) and the client-side DOM runtime under src/jsx/dom/ (its own render.ts, hooks, context), selected via the separate hono/jsx/dom export in package.json. Conveys that the same components can render on server or run client-side.",
+      "groundTruth": [
+        "src/jsx/base.ts",
+        "src/jsx/index.ts",
+        "src/jsx/dom/render.ts",
+        "package.json"
+      ]
+    }
+  ]
+}

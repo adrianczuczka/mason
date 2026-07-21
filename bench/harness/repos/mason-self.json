@@ -1,0 +1,56 @@
+{
+  "name": "mason-self",
+  "git": "/Users/adrianczuczka/VSCodeProjects/mason",
+  "commit": "8ebd701ad49922c0a6c7098d5690c6cd401e64f2",
+  "note": "Self-benchmark: Mason benchmarked on its own codebase. Useful for harness smoke tests and dogfooding; numbers are NOT publishable (the repo's CLAUDE.md is unusually good, and the authors wrote both map and questions).",
+  "questions": [
+    {
+      "id": "drift_location",
+      "category": "location",
+      "question": "Where does Mason compute drift, and where is the CI exit code decided? Name the exact files and briefly describe the split of responsibilities.",
+      "criteria": "Names src/drift/drift.ts as the drift computation (computeDrift, comparing the snapshot against git HEAD) and src/drift/cli.ts as the CLI that decides exit codes (0 fresh, 1 stale, 2 error). Correctly describes the split: drift.ts is the pure logic, cli.ts is arg parsing / summary / exit codes.",
+      "groundTruth": ["src/drift/drift.ts", "src/drift/cli.ts"]
+    },
+    {
+      "id": "mapreduce_arch",
+      "category": "architecture",
+      "question": "Explain how Mason's Map-Reduce snapshot build works end to end: which MCP tools are involved at each step, and which source files implement each part?",
+      "criteria": "Describes the loop: generate_snapshot_batch returns file batches, save_partial_snapshot persists partials, reduce_snapshot returns partials for merging, save_snapshot persists the unified map. Names src/mcp/tools.ts as the tool implementations, src/snapshot/snapshot.ts for load/save/batching, src/snapshot/partials.ts for partials and the scope marker, src/snapshot/prompt.ts for the batch/reduce prompts. Bonus: mentions replace vs merge save modes or scoped refresh.",
+      "groundTruth": [
+        "src/mcp/tools.ts",
+        "src/snapshot/snapshot.ts",
+        "src/snapshot/partials.ts",
+        "src/snapshot/prompt.ts"
+      ]
+    },
+    {
+      "id": "add_tool_task",
+      "category": "task",
+      "question": "I want to add a new MCP tool called mason_get_test_map that returns the test-to-source mapping. What files do I need to touch, what existing code should I reuse, and what project conventions apply?",
+      "criteria": "Identifies the three-place tool metadata sync: src/mcp/server.ts (Zod schema + registration), manifest.json, and the README tools table. Points at src/mcp/tools.ts for the implementation and src/test-map.ts (buildTestMap) as the code to reuse. Mentions relevant conventions: Zod schemas, ESM .js imports, conventional commits, and ideally whether the tool should be init-gated or read-only.",
+      "groundTruth": [
+        "src/mcp/server.ts",
+        "src/mcp/tools.ts",
+        "src/test-map.ts",
+        "manifest.json",
+        "README.md"
+      ]
+    },
+    {
+      "id": "snapshot_impact",
+      "category": "impact",
+      "question": "What would be affected if I changed the Snapshot interface in src/snapshot/snapshot.ts — for example adding a required field to FeatureEntry? List the files that would need attention and why.",
+      "criteria": "Names the direct consumers: src/mcp/tools.ts (save/load/merge paths), src/drift/drift.ts (per-entry hash comparison), src/snapshot/partials.ts (partial merge), and the Confluence render path (src/confluence/renderer.ts and/or sync.ts, which read features/flows). Mentions tests that would need updating (test/tools.test.ts, test/drift.test.ts) and backward compatibility with existing snapshot.json files (version field / older maps).",
+      "groundTruth": [
+        "src/snapshot/snapshot.ts",
+        "src/mcp/tools.ts",
+        "src/drift/drift.ts",
+        "src/snapshot/partials.ts",
+        "src/confluence/renderer.ts",
+        "src/confluence/sync.ts",
+        "test/tools.test.ts",
+        "test/drift.test.ts"
+      ]
+    }
+  ]
+}
