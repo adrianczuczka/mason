@@ -30,9 +30,7 @@
     "entry_point": "dist/mason-mcp.js",
     "mcp_config": {
       "command": "node",
-      "args": [
-        "${__dirname}/dist/mason-mcp.js"
-      ]
+      "args": ["${__dirname}/dist/mason-mcp.js"]
     }
   },
   "tools": [
@@ -42,14 +40,9 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     },
     {
@@ -58,19 +51,10 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          },
-          "confluenceConfigured": {
-            "type": "boolean",
-            "description": "True if Confluence was successfully configured during init",
-            "default": false
-          }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "confluenceConfigured": { "type": "boolean", "description": "True if Confluence was successfully configured during init", "default": false }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     },
     {
@@ -79,32 +63,13 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "baseUrl": {
-            "type": "string",
-            "description": "Confluence base URL. Accepts `acme`, `acme.atlassian.net`, or `https://acme.atlassian.net`."
-          },
-          "email": {
-            "type": "string",
-            "description": "Atlassian account email"
-          },
-          "apiToken": {
-            "type": "string",
-            "description": "API token from id.atlassian.com"
-          },
-          "spaceKey": {
-            "type": "string",
-            "description": "Confluence space key. Omit on the first call to list spaces."
-          },
-          "parentPageId": {
-            "type": "string",
-            "description": "Optional parent page ID under which Mason's index page is created"
-          }
+          "baseUrl": { "type": "string", "description": "Confluence base URL. Accepts `acme`, `acme.atlassian.net`, or `https://acme.atlassian.net`." },
+          "email": { "type": "string", "description": "Atlassian account email" },
+          "apiToken": { "type": "string", "description": "API token from id.atlassian.com" },
+          "spaceKey": { "type": "string", "description": "Confluence space key. Omit on the first call to list spaces." },
+          "parentPageId": { "type": "string", "description": "Optional parent page ID under which Mason's index page is created" }
         },
-        "required": [
-          "baseUrl",
-          "email",
-          "apiToken"
-        ]
+        "required": ["baseUrl", "email", "apiToken"]
       }
     },
     {
@@ -113,50 +78,25 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          },
-          "spaceKey": {
-            "type": "string",
-            "description": "Override the configured space key"
-          },
-          "parentPageId": {
-            "type": "string",
-            "description": "Override the configured parent page ID"
-          },
-          "indexPageTitle": {
-            "type": "string",
-            "description": "Title of the index page"
-          },
-          "changelogPageTitle": {
-            "type": "string",
-            "description": "Title of the changelog page"
-          },
-          "featurePagePrefix": {
-            "type": "string",
-            "description": "Prefix for each feature page title"
-          }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "spaceKey": { "type": "string", "description": "Override the configured space key" },
+          "parentPageId": { "type": "string", "description": "Override the configured parent page ID" },
+          "indexPageTitle": { "type": "string", "description": "Title of the index page" },
+          "changelogPageTitle": { "type": "string", "description": "Title of the changelog page" },
+          "featurePagePrefix": { "type": "string", "description": "Prefix for each feature page title" }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     },
     {
       "name": "get_snapshot",
-      "description": "CALL THIS FIRST — before grep or reading files — for any question about the codebase's features, architecture, data flows, or where something is implemented. Returns the persistent feature-to-file concept map in one cheap, LLM-free call, replacing 5-10 exploration round-trips. Reports drift when stale.",
+      "description": "CALL THIS FIRST — before grep or reading files — for any question about the codebase's features, architecture, data flows, or where something is implemented. Returns the persistent feature-to-file concept map in one cheap, LLM-free call, replacing 5-10 exploration round-trips. Reports drift when stale. Requires init.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     },
     {
@@ -165,29 +105,16 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          },
-          "offset": {
-            "type": "number",
-            "description": "0-indexed file offset to start the batch at. Omit on the first call."
-          },
-          "batchSize": {
-            "type": "number",
-            "description": "Files per batch. Defaults to 50."
-          },
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "offset": { "type": "number", "description": "0-indexed file offset to start the batch at. Omit on the first call." },
+          "batchSize": { "type": "number", "description": "Files per batch. Defaults to 50." },
           "files": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "description": "Scope the batch walk to this explicit file list (e.g. the drift set from mason_check_drift). Pass the same list on every batch call of one refresh run; reduce_snapshot then merges into the existing map instead of rebuilding."
           }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     },
     {
@@ -196,43 +123,19 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          },
-          "batchId": {
-            "type": "string",
-            "description": "The batchId returned by generate_snapshot_batch"
-          },
-          "offset": {
-            "type": "number",
-            "description": "The offset returned by generate_snapshot_batch"
-          },
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "batchId": { "type": "string", "description": "The batchId returned by generate_snapshot_batch" },
+          "offset": { "type": "number", "description": "The offset returned by generate_snapshot_batch" },
           "features": {
             "type": "object",
             "additionalProperties": {
               "type": "object",
               "properties": {
-                "description": {
-                  "type": "string"
-                },
-                "files": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "tests": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
+                "description": { "type": "string" },
+                "files": { "type": "array", "items": { "type": "string" } },
+                "tests": { "type": "array", "items": { "type": "string" } }
               },
-              "required": [
-                "description",
-                "files"
-              ]
+              "required": ["description", "files"]
             }
           },
           "flows": {
@@ -240,30 +143,14 @@
             "additionalProperties": {
               "type": "object",
               "properties": {
-                "description": {
-                  "type": "string"
-                },
-                "chain": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
+                "description": { "type": "string" },
+                "chain": { "type": "array", "items": { "type": "string" } }
               },
-              "required": [
-                "description",
-                "chain"
-              ]
+              "required": ["description", "chain"]
             }
           }
         },
-        "required": [
-          "dir",
-          "batchId",
-          "offset",
-          "features",
-          "flows"
-        ]
+        "required": ["dir", "batchId", "offset", "features", "flows"]
       }
     },
     {
@@ -272,14 +159,9 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     },
     {
@@ -288,36 +170,18 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          },
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
           "features": {
             "type": "object",
             "description": "Map of feature names to their implementing files",
             "additionalProperties": {
               "type": "object",
               "properties": {
-                "description": {
-                  "type": "string"
-                },
-                "files": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "tests": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
+                "description": { "type": "string" },
+                "files": { "type": "array", "items": { "type": "string" } },
+                "tests": { "type": "array", "items": { "type": "string" } }
               },
-              "required": [
-                "description",
-                "files"
-              ]
+              "required": ["description", "files"]
             }
           },
           "flows": {
@@ -326,42 +190,24 @@
             "additionalProperties": {
               "type": "object",
               "properties": {
-                "description": {
-                  "type": "string"
-                },
-                "chain": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
+                "description": { "type": "string" },
+                "chain": { "type": "array", "items": { "type": "string" } }
               },
-              "required": [
-                "description",
-                "chain"
-              ]
+              "required": ["description", "chain"]
             }
           },
           "removeFeatures": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "description": "Feature names to delete from the existing map (renamed or removed features). Only meaningful on incremental saves."
           },
           "removeFlows": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "description": "Flow names to delete from the existing map. Only meaningful on incremental saves."
           }
         },
-        "required": [
-          "dir",
-          "features",
-          "flows"
-        ]
+        "required": ["dir", "features", "flows"]
       }
     },
     {
@@ -370,14 +216,9 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     },
     {
@@ -386,22 +227,14 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          },
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
           "files": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "description": "File paths or names to analyze"
           }
         },
-        "required": [
-          "dir",
-          "files"
-        ]
+        "required": ["dir", "files"]
       }
     },
     {
@@ -410,30 +243,20 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     },
     {
       "name": "full_analysis",
-      "description": "One-shot orientation for a project WITHOUT a concept map: git stats, project structure, curated code samples, and test mapping. On a mapped project, prefer get_snapshot.",
+      "description": "One-shot orientation for a project WITHOUT a concept map: git stats, project structure, curated code samples, and test-to-source mapping. On a mapped project, prefer get_snapshot.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     },
     {
@@ -442,28 +265,15 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": {
-            "type": "string",
-            "description": "Absolute path to the project root directory"
-          },
-          "count": {
-            "type": "number",
-            "description": "Maximum number of files to sample",
-            "default": 15
-          }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "count": { "type": "number", "description": "Maximum number of files to sample", "default": 15 }
         },
-        "required": [
-          "dir"
-        ]
+        "required": ["dir"]
       }
     }
   ],
   "compatibility": {
-    "platforms": [
-      "darwin",
-      "linux",
-      "win32"
-    ],
+    "platforms": ["darwin", "linux", "win32"],
     "runtimes": {
       "node": ">=20.0.0"
     }
