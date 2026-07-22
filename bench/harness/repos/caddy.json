@@ -1,0 +1,73 @@
+{
+  "name": "caddy",
+  "git": "https://github.com/caddyserver/caddy",
+  "commit": "31daa220fcba80c7ed7ea636e7f04c568c8cccf8",
+  "note": "Non-web-language target (Go, ~322 walked files). Ground truth verified by exploration at the pinned commit, 2026-07-22.",
+  "questions": [
+    {
+      "id": "module_system",
+      "category": "location",
+      "question": "Where is Caddy's module system implemented — registration, the global module map, and the loading of registered modules from config? Name the exact files.",
+      "criteria": "Names modules.go as the registration half (RegisterModule, the global modules map with its mutex, the Module interface and ModuleInfo struct) and context.go as the loading half (Context.LoadModule instantiating and provisioning registered modules from JSON config). Bonus: lifecycle interfaces (Provisioner/Validator/CleanerUpper) in modules.go.",
+      "groundTruth": ["modules.go", "context.go"]
+    },
+    {
+      "id": "config_reload",
+      "category": "architecture",
+      "question": "How does Caddy reload configuration without downtime? Trace the path from the admin API receiving new config to the graceful swap, naming the files and key functions.",
+      "criteria": "Names admin.go (config endpoint routes and handleConfig) feeding caddy.go's reload path: Load/changeConfig → run(newCfg) which builds and provisions a new Context, starts it, then stops the old one — new config up before old torn down. Bonus: unsyncedDecodeAndRun, finishSettingUp, or the admin server swap functions.",
+      "groundTruth": ["admin.go", "caddy.go"]
+    },
+    {
+      "id": "middleware_chain",
+      "category": "architecture",
+      "question": "How does Caddy's HTTP middleware chain work — how are handler routes composed into a chain, and which files implement the server and the composition?",
+      "criteria": "Names modules/caddyhttp/routes.go as the composition core (RouteList.Compile folding routes via wrapRoute/wrapMiddleware into a Handler chain), modules/caddyhttp/server.go for the Server and its ServeHTTP entry, and modules/caddyhttp/caddyhttp.go for the Handler/Middleware/MiddlewareHandler interfaces. Bonus: app.go provisioning servers.",
+      "groundTruth": [
+        "modules/caddyhttp/routes.go",
+        "modules/caddyhttp/server.go",
+        "modules/caddyhttp/caddyhttp.go",
+        "modules/caddyhttp/app.go"
+      ]
+    },
+    {
+      "id": "add_handler_task",
+      "category": "task",
+      "question": "I want to contribute a new HTTP handler module to this repo (an http.handlers.* module that manipulates responses). What boilerplate does a handler module need, which interfaces must it implement and where are they defined, and which existing module is a good template?",
+      "criteria": "Describes the module boilerplate: init() calling caddy.RegisterModule, CaddyModule() returning ModuleInfo with an http.handlers.<name> ID and New constructor, and ServeHTTP(w, r, next) implementing MiddlewareHandler (defined in modules/caddyhttp/caddyhttp.go), with optional Provision/Validate (interfaces in modules.go). ANY existing handler module is a valid template — headers, staticresp, vars, or similar; do not penalize the choice. Bonus: interface guard vars convention.",
+      "groundTruth": [
+        "modules/caddyhttp/headers/headers.go",
+        "modules/caddyhttp/caddyhttp.go",
+        "modules.go",
+        "modules/caddyhttp/staticresp.go",
+        "modules/caddyhttp/vars.go"
+      ]
+    },
+    {
+      "id": "context_impact",
+      "category": "impact",
+      "question": "What would be affected if I changed the Context.LoadModule contract in context.go — which subsystems are most tightly coupled to module loading?",
+      "criteria": "Identifies caddytls (connpolicy.go, tls.go, capools.go, automation.go) and caddyhttp/reverseproxy (reverseproxy.go, selectionpolicies.go) as the most coupled subsystems, plus core callers (caddy.go, admin.go, logging.go, modules/caddyhttp/routes.go and app.go). Conveys the scale — roughly 30 calling files — rather than naming one or two.",
+      "groundTruth": [
+        "context.go",
+        "modules/caddytls/connpolicy.go",
+        "modules/caddyhttp/reverseproxy/reverseproxy.go",
+        "modules/caddyhttp/routes.go",
+        "caddy.go"
+      ]
+    },
+    {
+      "id": "caddyfile_adapter",
+      "category": "architecture",
+      "question": "How does a Caddyfile become Caddy's native JSON config? Which files implement the parsing and the adapter mechanism, and where is the caddyfile adapter registered?",
+      "criteria": "Describes the pipeline: lexer/parser in caddyconfig/caddyfile/ (lexer.go, parse.go, dispenser.go for directive token-walking), the generic Adapter interface and RegisterAdapter/GetAdapter in caddyconfig/configadapters.go, the caddyfile.Adapter delegating to a ServerType (caddyconfig/caddyfile/adapter.go), and the HTTP ServerType in caddyconfig/httpcaddyfile/httptype.go whose init() registers the 'caddyfile' adapter. Bonus: directives.go/builtins.go for directive mapping.",
+      "groundTruth": [
+        "caddyconfig/caddyfile/lexer.go",
+        "caddyconfig/caddyfile/parse.go",
+        "caddyconfig/caddyfile/adapter.go",
+        "caddyconfig/configadapters.go",
+        "caddyconfig/httpcaddyfile/httptype.go"
+      ]
+    }
+  ]
+}
