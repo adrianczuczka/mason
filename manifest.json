@@ -228,6 +228,24 @@
       }
     },
     {
+      "name": "save_decision",
+      "description": "CALL THIS when you learn something the code alone can't tell you: a failed approach, a deprecation, a workaround's reason, or a review-settled convention. Records are git-committed to .mason/decisions/ and PR-reviewed; get_context surfaces them on matching tasks. Also handles updates (id), re-verification (same id + content), and supersession (supersedes). Requires init.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "title": { "type": "string", "description": "Short, specific headline — becomes the stable record id (max 80 chars)" },
+          "body": { "type": "string", "description": "The knowledge itself: what was tried/decided, why, and what to avoid (max 1500 chars)" },
+          "category": { "type": "string", "enum": ["decision", "gotcha", "deprecation", "convention"] },
+          "files": { "type": "array", "items": { "type": "string" }, "description": "Repo-relative anchor files; if these change the decision is flagged for re-verification" },
+          "id": { "type": "string", "description": "Existing decision id to update or re-verify" },
+          "supersedes": { "type": "string", "description": "Id of a decision this one replaces" },
+          "force": { "type": "boolean", "description": "Save even when a near-duplicate was detected" }
+        },
+        "required": ["dir", "title", "body", "category"]
+      }
+    },
+    {
       "name": "mason_check_drift",
       "description": "Check how far the concept map has drifted from HEAD. Deterministic (git + filesystem, no LLM). Returns stale features/flows with the changed files behind them, unmapped new files, ghost files, renames, and a recommendation: up-to-date, incremental, or full-rebuild.",
       "inputSchema": {

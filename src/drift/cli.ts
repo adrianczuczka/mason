@@ -1,6 +1,8 @@
 import path from "node:path";
 import { computeDrift } from "./drift.js";
 import type { DriftReport } from "./drift.js";
+import { computeDecisionDrift } from "../decisions/drift.js";
+import type { DecisionDriftReport } from "../decisions/drift.js";
 
 export const USAGE = `Usage: mason-drift [--dir <path>] [--json]
 
@@ -131,6 +133,25 @@ export async function runDriftCli(
     return 2;
   }
 
-  io.out(args.json ? JSON.stringify(report, null, 2) : formatDriftSummary(report));
+  // Additive: decision staleness never changes exit codes — `stale` and the
+  // 0/1/2 contract keep meaning MAP staleness for existing CI consumers.
+  const decisionDrift = await computeDecisionDrift(rootDir);
+
+  if (args.json) {
+    const output: DriftReport & { decisions?: DecisionDriftReport } = report;
+    if (decisionDrift.totalDecisions > 0) {
+      output.decisions = decisionDrift;
+    }
+    io.out(JSON.stringify(output, null, 2));
+  } else {
+    const lines = [formatDriftSummary(report)];
+    const staleIds = Object.keys(decisionDrift.staleDecisions);
+    if (staleIds.length > 0) {
+      lines.push(
+        `Decisions needing verification (${staleIds.length}/${decisionDrift.totalDecisions}): ${staleIds.join(", ")}`
+      );
+    }
+    io.out(lines.join("\n"));
+  }
   return report.stale ? 1 : 0;
 }

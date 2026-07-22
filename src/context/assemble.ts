@@ -4,67 +4,16 @@ import type { FeatureType, Snapshot } from "../snapshot/snapshot.js";
 import { computeDrift } from "../drift/drift.js";
 import { analyzeImpact } from "../impact/impact.js";
 import type { CochangeEntry, ReferenceEntry } from "../impact/impact.js";
+import { scoreEntry, tokenSet } from "./lexical.js";
+import { loadDecisions } from "../decisions/decisions.js";
+import type { DecisionCategory, DecisionRecord } from "../decisions/decisions.js";
+import { computeDecisionDrift } from "../decisions/drift.js";
 
 const MAX_FEATURES = 5;
 const MAX_FLOWS = 3;
 const MAX_IMPACT_TARGETS = 3;
-
-// Question/filler words that carry no signal about which feature a task
-// touches. Domain words ("auth", "drift") are never in this list.
-const STOPWORDS = new Set([
-  "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with",
-  "how", "does", "do", "is", "are", "was", "what", "where", "which", "why",
-  "when", "who", "i", "we", "my", "our", "you", "your", "it", "its", "this",
-  "that", "these", "those", "can", "could", "should", "would", "will",
-  "want", "need", "please", "about", "into", "from", "when", "there", "any",
-  "all", "some", "not", "but", "also", "just", "like", "get", "make", "use",
-  "new", "work", "works", "working", "implement", "implemented", "change",
-  "changed", "file", "files", "code",
-]);
-
-/** Split camelCase/PascalCase/kebab/snake/path into lowercase word tokens. */
-function tokenize(text: string): string[] {
-  return text
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length > 2 && !STOPWORDS.has(t));
-}
-
-/** Crude singular/plural folding so "flows" matches "flow" etc. */
-function stem(token: string): string {
-  return token.length > 3 && token.endsWith("s") ? token.slice(0, -1) : token;
-}
-
-function tokenSet(text: string): Set<string> {
-  return new Set(tokenize(text).map(stem));
-}
-
-interface Scorable {
-  name: string;
-  description: string;
-  files: string[];
-}
-
-/**
- * Lexical relevance of one map entry to the task. Name hits are the
- * strongest signal, then description, then file-path words. Each distinct
- * task token counts once at its best weight, so a token appearing
- * everywhere doesn't triple-count.
- */
-function scoreEntry(taskTokens: Set<string>, entry: Scorable): number {
-  const nameTokens = tokenSet(entry.name);
-  const descTokens = tokenSet(entry.description);
-  const fileTokens = tokenSet(entry.files.map((f) => path.basename(f)).join(" "));
-
-  let score = 0;
-  for (const token of taskTokens) {
-    if (nameTokens.has(token)) score += 3;
-    else if (descTokens.has(token)) score += 1;
-    else if (fileTokens.has(token)) score += 1;
-  }
-  return score;
-}
+const MAX_DECISIONS = 5;
+const DECISION_FEATURE_OVERLAP_BOOST = 2;
 
 export interface MatchedFeature {
   description: string;
@@ -82,11 +31,24 @@ export interface MatchedFlow {
   stale: boolean;
 }
 
+export interface MatchedDecision {
+  title: string;
+  /** Full body — the payload the decisions store exists for. */
+  body: string;
+  category: DecisionCategory;
+  files: string[];
+  score: number;
+  /** Anchor files changed since this record was last verified. */
+  stale: boolean;
+}
+
 export interface ContextBundle {
   exists: true;
   task: string;
   features: Record<string, MatchedFeature>;
   flows: Record<string, MatchedFlow>;
+  /** Recorded team knowledge matching this task — treat as constraints. */
+  decisions: Record<string, MatchedDecision>;
   /** All tests paired with the matched files, deduped. */
   relatedTests: string[];
   impact: {
@@ -108,6 +70,8 @@ export interface NoMatchBundle {
   task: string;
   features: Record<string, never>;
   flows: Record<string, never>;
+  /** Decisions can match even when no feature does. */
+  decisions: Record<string, MatchedDecision>;
   /** The full feature catalog, so the caller can still act without a second guess. */
   availableFeatures: Record<string, string>;
   availableFlows: Record<string, string>;
@@ -132,6 +96,8 @@ export async function assembleContext(
   if (!snapshot) return null;
 
   const drift = await computeDrift(resolvedRoot);
+  const allDecisions = await loadDecisions(resolvedRoot);
+  const decisionDrift = await computeDecisionDrift(resolvedRoot, allDecisions);
   const taskTokens = tokenSet(task);
   const anchorFiles = new Set(files ?? []);
 
@@ -165,8 +131,20 @@ export async function assembleContext(
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_FLOWS);
 
+  const matchedEntryFiles = new Set<string>([
+    ...featureScores.flatMap((e) => e.feat.files),
+    ...flowScores.flatMap((e) => e.flow.chain),
+  ]);
+  const decisions = matchDecisions(
+    allDecisions,
+    taskTokens,
+    anchorBoost,
+    matchedEntryFiles,
+    decisionDrift.staleDecisions
+  );
+
   if (featureScores.length === 0 && flowScores.length === 0) {
-    return noMatchBundle(snapshot, task);
+    return noMatchBundle(snapshot, task, decisions);
   }
 
   const features: Record<string, MatchedFeature> = {};
@@ -223,11 +201,15 @@ export async function assembleContext(
   ];
 
   const stale = drift?.stale ?? false;
+  const staleDecisionIds = Object.keys(decisions).filter(
+    (id) => decisions[id].stale
+  );
   return {
     exists: true,
     task,
     features,
     flows,
+    decisions,
     relatedTests,
     impact,
     freshness: {
@@ -235,21 +217,87 @@ export async function assembleContext(
       recommendation: drift?.recommendation ?? "up-to-date",
       staleMatches,
     },
-    hint: bundleHint(stale, staleMatches),
+    hint: bundleHint(stale, staleMatches, staleDecisionIds),
   };
 }
 
-function bundleHint(stale: boolean, staleMatches: string[]): string {
-  if (staleMatches.length > 0) {
-    return `Entries [${staleMatches.join(", ")}] changed since they were last verified — read their files rather than trusting the descriptions, and consider mason_check_drift for a refresh plan.`;
+/**
+ * Score active decisions against the task with the same lexical machinery
+ * as map entries, plus a feature-overlap boost: a decision anchored to a
+ * file of an already-matched feature is relevant even with zero lexical
+ * overlap ("auth is weird" should surface on any auth task).
+ */
+function matchDecisions(
+  allDecisions: DecisionRecord[],
+  taskTokens: Set<string>,
+  anchorBoost: (files: string[]) => number,
+  matchedEntryFiles: Set<string>,
+  staleDecisions: Record<string, string[]>
+): Record<string, MatchedDecision> {
+  const scored = allDecisions
+    .filter((d) => d.status === "active")
+    .map((d) => {
+      let score =
+        scoreEntry(taskTokens, {
+          name: d.title,
+          description: d.body,
+          files: d.files,
+        }) + anchorBoost(d.files);
+      if (d.files.some((f) => matchedEntryFiles.has(f))) {
+        score += DECISION_FEATURE_OVERLAP_BOOST;
+      }
+      return { d, score };
+    })
+    .filter((e) => e.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_DECISIONS);
+
+  const result: Record<string, MatchedDecision> = {};
+  for (const { d, score } of scored) {
+    result[d.id] = {
+      title: d.title,
+      body: d.body,
+      category: d.category,
+      files: d.files,
+      score,
+      stale: staleDecisions[d.id] !== undefined,
+    };
   }
-  if (stale) {
-    return "The matched entries are current, but other parts of the map have drifted — mason_check_drift shows what needs refreshing.";
-  }
-  return "Map is current. Start from the listed files; cochange/references show what else an edit would touch.";
+  return result;
 }
 
-function noMatchBundle(snapshot: Snapshot, task: string): NoMatchBundle {
+function bundleHint(
+  stale: boolean,
+  staleMatches: string[],
+  staleDecisionIds: string[] = []
+): string {
+  const parts: string[] = [];
+  if (staleMatches.length > 0) {
+    parts.push(
+      `Entries [${staleMatches.join(", ")}] changed since they were last verified — read their files rather than trusting the descriptions, and consider mason_check_drift for a refresh plan.`
+    );
+  } else if (stale) {
+    parts.push(
+      "The matched entries are current, but other parts of the map have drifted — mason_check_drift shows what needs refreshing."
+    );
+  } else {
+    parts.push(
+      "Map is current. Start from the listed files; cochange/references show what else an edit would touch."
+    );
+  }
+  if (staleDecisionIds.length > 0) {
+    parts.push(
+      `Decisions [${staleDecisionIds.join(", ")}] have anchor files that changed since they were recorded — verify each still holds; if it does, re-save it with its id to re-pin, otherwise update or supersede it via save_decision.`
+    );
+  }
+  return parts.join(" ");
+}
+
+function noMatchBundle(
+  snapshot: Snapshot,
+  task: string,
+  decisions: Record<string, MatchedDecision>
+): NoMatchBundle {
   const availableFeatures: Record<string, string> = {};
   for (const [name, feat] of Object.entries(snapshot.features)) {
     availableFeatures[name] = feat.description;
@@ -263,6 +311,7 @@ function noMatchBundle(snapshot: Snapshot, task: string): NoMatchBundle {
     task,
     features: {},
     flows: {},
+    decisions,
     availableFeatures,
     availableFlows,
     hint: "No map entry matched the task wording. The full catalog is listed — pick the relevant entries and call get_context again with their names in the task, or read their files directly via get_snapshot.",

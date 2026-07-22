@@ -11,6 +11,7 @@ import {
   getContext,
   getImpact,
   getSnapshot,
+  saveDecision,
   masonCompleteInit,
   masonInit,
   masonSetConfluence,
@@ -29,7 +30,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason maintains a persistent feature-to-file concept map of this codebase so you can skip manual exploration. RULE: when given a task, bug, or change request, call `get_context` with the task text first — one call returns the relevant features, files, tests, blast radius, and freshness. Before answering ANY question about features, architecture, data flows, or where something lives — and before any grep/glob/file-read exploration for such a question — call `get_snapshot` first. One call returns the whole map and replaces 5-10 search round-trips; if it has drifted it says so and self-corrects. Likewise call `get_impact` BEFORE editing or refactoring a file (git co-change history + references + related tests — signals you cannot get from reading the file itself), and `mason_check_drift` to verify the map is fresh in long sessions. If `get_snapshot` reports no snapshot exists, offer to set Mason up: `mason_init` returns a setup playbook (a Map-Reduce loop of `generate_snapshot_batch` + `save_partial_snapshot`, then `reduce_snapshot` + `save_snapshot`, optionally `mason_set_confluence`, then `mason_complete_init`). `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics for unmapped projects and never need init. Mason has no CLI; everything happens through these tools.",
+        "Mason maintains a persistent feature-to-file concept map of this codebase so you can skip manual exploration. RULE: when given a task, bug, or change request, call `get_context` with the task text first — one call returns the relevant features, files, tests, blast radius, and freshness. Before answering ANY question about features, architecture, data flows, or where something lives — and before any grep/glob/file-read exploration for such a question — call `get_snapshot` first. One call returns the whole map and replaces 5-10 search round-trips; if it has drifted it says so and self-corrects. Likewise call `get_impact` BEFORE editing or refactoring a file (git co-change history + references + related tests — signals you cannot get from reading the file itself), and `mason_check_drift` to verify the map is fresh in long sessions. When you learn something the code alone can't tell you — a failed approach, a deprecation, a workaround's reason, a review-settled convention — record it with `save_decision` so the whole team's assistants inherit it; `get_context` returns matching decisions as constraints. If `get_snapshot` reports no snapshot exists, offer to set Mason up: `mason_init` returns a setup playbook (a Map-Reduce loop of `generate_snapshot_batch` + `save_partial_snapshot`, then `reduce_snapshot` + `save_snapshot`, optionally `mason_set_confluence`, then `mason_complete_init`). `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics for unmapped projects and never need init. Mason has no CLI; everything happens through these tools.",
     }
   );
 
@@ -332,6 +333,53 @@ export function createMcpServer(): McpServer {
       return {
         content: [{ type: "text", text: result }],
       };
+    }
+  );
+
+  server.tool(
+    "save_decision",
+    "CALL THIS when you learn something about this codebase that the code alone can't tell you: a failed approach ('we tried X, it broke Y'), a deprecation ('don't extend Z'), a workaround and its reason, or a convention settled in review. Best moments: the end of a debugging session, right after a design choice. Records are git-committed to .mason/decisions/ and PR-reviewed like code; get_context surfaces them on matching tasks. Do NOT record anything derivable by reading the code, session trivia, or secrets. Also handles updates (pass id), re-verification (same id + content re-pins to HEAD), and supersession (pass supersedes).",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      title: z
+        .string()
+        .max(80)
+        .describe("Short, specific headline — becomes the stable record id"),
+      body: z
+        .string()
+        .max(1500)
+        .describe("The knowledge itself: what was tried/decided, why, and what to avoid. Must contain information NOT derivable by reading the code."),
+      category: z.enum(["decision", "gotcha", "deprecation", "convention"]),
+      files: z
+        .array(z.string())
+        .optional()
+        .describe("Repo-relative files this applies to. Anchors drift-checking: if these change, the decision is flagged for re-verification."),
+      id: z
+        .string()
+        .optional()
+        .describe("Existing decision id to update. Passing id with unchanged content re-verifies it (re-pins refreshedHash to HEAD)."),
+      supersedes: z
+        .string()
+        .optional()
+        .describe("Id of a decision this one replaces — the old record is kept but marked superseded"),
+      force: z
+        .boolean()
+        .optional()
+        .describe("Save even when a near-duplicate was detected"),
+    },
+    async ({ dir, title, body, category, files, id, supersedes, force }) => {
+      const result = await saveDecision(dir, {
+        title,
+        body,
+        category,
+        files,
+        id,
+        supersedes,
+        force,
+      });
+      return { content: [{ type: "text", text: result }] };
     }
   );
 

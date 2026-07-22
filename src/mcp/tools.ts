@@ -388,6 +388,29 @@ export async function getSnapshot(dir: string): Promise<string> {
     stale: isStale,
   };
 
+  // Compact decision index — titles only, no bodies (up to 150 × 1.5KB is
+  // too heavy for the orientation call). Full text via get_context or the
+  // record file itself.
+  const { loadDecisions } = await import("../decisions/decisions.js");
+  const decisionRecords = await loadDecisions(rootDir);
+  if (decisionRecords.length > 0) {
+    const compactDecisions: Record<
+      string,
+      { title: string; category: string; files: string[] }
+    > = {};
+    for (const d of decisionRecords) {
+      if (d.status !== "active") continue;
+      compactDecisions[d.id] = {
+        title: d.title,
+        category: d.category,
+        files: d.files,
+      };
+    }
+    output.decisions = compactDecisions;
+    output.decisionsHint =
+      "Recorded team knowledge — get_context returns matching full bodies; records live at .mason/decisions/<id>.json.";
+  }
+
   if (isStale && drift) {
     output.hint = driftHint(drift);
     if (drift.historyAvailable && drift.changedFiles.length > 0) {
@@ -837,6 +860,27 @@ export async function getImpact(
   const { analyzeImpact } = await import("../impact/impact.js");
   const result = await analyzeImpact(rootDir, files);
   return JSON.stringify(result, null, 2);
+}
+
+export async function saveDecision(
+  dir: string,
+  input: {
+    title: string;
+    body: string;
+    category: "decision" | "gotcha" | "deprecation" | "convention";
+    files?: string[];
+    id?: string;
+    supersedes?: string;
+    force?: boolean;
+  }
+): Promise<string> {
+  const rootDir = path.resolve(dir);
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("recording team decisions");
+  }
+  const { upsertDecision } = await import("../decisions/decisions.js");
+  const result = await upsertDecision(rootDir, input);
+  return JSON.stringify(result);
 }
 
 export async function getContext(

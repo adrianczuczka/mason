@@ -56,7 +56,7 @@ export interface DriftReport {
   recommendation: DriftRecommendation;
 }
 
-async function getChangesWithStatus(
+export async function getChangesWithStatus(
   resolvedRoot: string,
   fromHash: string
 ): Promise<FileChange[] | null> {
