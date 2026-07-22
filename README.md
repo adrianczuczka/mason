@@ -76,6 +76,7 @@ Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/]
 | `mason_set_confluence` | Configure Confluence credentials — two-step: list spaces, then persist. |
 | `export_to_confluence` | Sync the concept map to Confluence as PM-readable wiki pages. |
 | `get_snapshot` | **First call for any architecture question.** Loads the concept map — feature → file lookup — in one LLM-free call. |
+| `get_context` | **First call for any task or bug.** Matching features + files + tests + blast radius + freshness, in one call. |
 | `mason_check_drift` | Feature-level staleness report — what changed since the snapshot, and whether to refresh incrementally or rebuild. |
 | `get_impact` | **Call before editing a file.** Traces what's affected — co-change history + references + related tests. |
 | `analyze_project` | Git stats — hot files, stale dirs, commit conventions. |

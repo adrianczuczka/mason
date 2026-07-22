@@ -8,6 +8,7 @@ import {
   fullAnalysis,
   generateSnapshotBatch,
   getCodeSamples,
+  getContext,
   getImpact,
   getSnapshot,
   masonCompleteInit,
@@ -28,7 +29,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason maintains a persistent feature-to-file concept map of this codebase so you can skip manual exploration. RULE: before answering ANY question about features, architecture, data flows, or where something lives — and before any grep/glob/file-read exploration for such a question — call `get_snapshot` first. One call returns the whole map and replaces 5-10 search round-trips; if it has drifted it says so and self-corrects. Likewise call `get_impact` BEFORE editing or refactoring a file (git co-change history + references + related tests — signals you cannot get from reading the file itself), and `mason_check_drift` to verify the map is fresh in long sessions. If `get_snapshot` reports no snapshot exists, offer to set Mason up: `mason_init` returns a setup playbook (a Map-Reduce loop of `generate_snapshot_batch` + `save_partial_snapshot`, then `reduce_snapshot` + `save_snapshot`, optionally `mason_set_confluence`, then `mason_complete_init`). `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics for unmapped projects and never need init. Mason has no CLI; everything happens through these tools.",
+        "Mason maintains a persistent feature-to-file concept map of this codebase so you can skip manual exploration. RULE: when given a task, bug, or change request, call `get_context` with the task text first — one call returns the relevant features, files, tests, blast radius, and freshness. Before answering ANY question about features, architecture, data flows, or where something lives — and before any grep/glob/file-read exploration for such a question — call `get_snapshot` first. One call returns the whole map and replaces 5-10 search round-trips; if it has drifted it says so and self-corrects. Likewise call `get_impact` BEFORE editing or refactoring a file (git co-change history + references + related tests — signals you cannot get from reading the file itself), and `mason_check_drift` to verify the map is fresh in long sessions. If `get_snapshot` reports no snapshot exists, offer to set Mason up: `mason_init` returns a setup playbook (a Map-Reduce loop of `generate_snapshot_batch` + `save_partial_snapshot`, then `reduce_snapshot` + `save_snapshot`, optionally `mason_set_confluence`, then `mason_complete_init`). `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics for unmapped projects and never need init. Mason has no CLI; everything happens through these tools.",
     }
   );
 
@@ -160,6 +161,29 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir }) => {
       const result = await getSnapshot(dir);
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    }
+  );
+
+  server.tool(
+    "get_context",
+    "CALL THIS FIRST when given a task to implement, a bug to fix, a ticket, or a change request ('add X', 'fix Y', 'refactor Z'). One call returns everything needed to start: the matching features/flows with their files, related tests, blast radius for the key files (git co-change + references), and per-entry freshness — replacing a get_snapshot + get_impact + test-hunting sequence. Cheap, instant, LLM-free. Pass the task in natural language; optionally pass `files` (e.g. from a diff) to anchor the match. For open-ended architecture questions with no task, use get_snapshot instead.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      task: z
+        .string()
+        .describe("The task, bug, or change request in natural language — e.g. 'add rate limiting to the API client' or a ticket description"),
+      files: z
+        .array(z.string())
+        .optional()
+        .describe("Optional file paths already known to be involved (e.g. from a diff or stack trace). Entries containing them are boosted above pure text matches."),
+    },
+    async ({ dir, task, files }) => {
+      const result = await getContext(dir, task, files);
       return {
         content: [{ type: "text", text: result }],
       };

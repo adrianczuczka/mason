@@ -100,6 +100,23 @@
       }
     },
     {
+      "name": "get_context",
+      "description": "CALL THIS FIRST when given a task, bug, or change request. One call returns the matching features/flows with their files, related tests, blast radius for the key files (git co-change + references), and per-entry freshness — replacing a get_snapshot + get_impact + test-hunting sequence. Pass the task in natural language; optionally pass files to anchor the match. Requires init.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "task": { "type": "string", "description": "The task, bug, or change request in natural language" },
+          "files": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optional file paths already known to be involved (e.g. from a diff or stack trace). Entries containing them are boosted above pure text matches."
+          }
+        },
+        "required": ["dir", "task"]
+      }
+    },
+    {
       "name": "generate_snapshot_batch",
       "description": "Map step of the concept-map build. Returns one batch of source files (skeletons of every file in the batch plus a few deeper-read bodies for grounding) and a system prompt instructing you to derive features and flows for ONLY this batch. Call repeatedly with the returned `nextOffset` until it is null, calling `save_partial_snapshot` between calls.",
       "inputSchema": {

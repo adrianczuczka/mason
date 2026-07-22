@@ -790,6 +790,26 @@ export async function getImpact(
   return JSON.stringify(result, null, 2);
 }
 
+export async function getContext(
+  dir: string,
+  task: string,
+  files?: string[]
+): Promise<string> {
+  const rootDir = path.resolve(dir);
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("assembling task context");
+  }
+  const { assembleContext } = await import("../context/assemble.js");
+  const bundle = await assembleContext(rootDir, task, files);
+  if (!bundle) {
+    return JSON.stringify({
+      exists: false,
+      hint: "No concept map exists yet. Build one first: generate_snapshot_batch → save_partial_snapshot → reduce_snapshot → save_snapshot.",
+    });
+  }
+  return JSON.stringify(bundle);
+}
+
 // ===== Init MCP tools =====
 
 export async function masonInit(dir: string): Promise<string> {
