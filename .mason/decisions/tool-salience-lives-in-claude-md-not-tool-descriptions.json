@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "tool-salience-lives-in-claude-md-not-tool-descriptions",
+  "title": "Tool salience lives in CLAUDE.md, not tool descriptions",
+  "body": "Benchmark A/B runs (2026-07): with only MCP tool descriptions — even CALL-THIS-FIRST phrasing — assistants made zero Mason calls in 24 sessions; with the marker-delimited CLAUDE.md section, adoption went to 4/6 with correct per-tool routing. Empirical hierarchy: project instructions > tool descriptions > tool availability. Any new tool must be added to CLAUDE_MD_SECTION, not just registered; never evaluate a tool's value without checking the benchmark's mason-calls column first.",
+  "category": "decision",
+  "files": [
+    "src/mcp/init.ts",
+    "src/mcp/server.ts"
+  ],
+  "createdAt": "2026-07-22T14:19:45.298Z",
+  "updatedAt": "2026-07-22T14:19:45.298Z",
+  "refreshedHash": "3a041f742d84d0f3e797d7e440b665148bb52acb",
+  "status": "active"
+}

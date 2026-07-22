@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "benchmark-rubrics-must-not-over-specify-implementation-choic",
+  "title": "Benchmark rubrics must not over-specify implementation choices",
+  "body": "The nest add_transport question scored a correct mason-arm answer 7/10 because the rubric named MQTT as 'the' template and the agent chose Redis with justification — an equally valid template. When authoring criteria, score the decisive knowledge (what must be surfaced), and explicitly allow any valid variant for incidental choices. Same class of bug as the hono request-id question that asked for a middleware that already existed.",
+  "category": "gotcha",
+  "files": [
+    "bench/harness/README.md"
+  ],
+  "createdAt": "2026-07-22T14:19:45.376Z",
+  "updatedAt": "2026-07-22T14:19:45.376Z",
+  "refreshedHash": "3a041f742d84d0f3e797d7e440b665148bb52acb",
+  "status": "active"
+}

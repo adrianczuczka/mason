@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "mason-drift-output-is-a-ci-contract-extend-additively-only",
+  "title": "mason-drift output is a CI contract — extend additively only",
+  "body": "External CI pipelines consume the 0/1/2 exit codes and the --json shape, and 'stale' there means MAP staleness specifically. Decision drift (2026-07) was added as a parallel computeDecisionDrift with an optional extra JSON key for exactly this reason. Any future staleness source must follow the same pattern: new optional keys, never changed exit-code semantics.",
+  "category": "convention",
+  "files": [
+    "src/drift/cli.ts",
+    "src/decisions/drift.ts"
+  ],
+  "createdAt": "2026-07-22T14:19:45.359Z",
+  "updatedAt": "2026-07-22T14:19:45.359Z",
+  "refreshedHash": "3a041f742d84d0f3e797d7e440b665148bb52acb",
+  "status": "active"
+}

@@ -1,0 +1,329 @@
+{
+  "version": 2,
+  "createdAt": "2026-07-22T14:18:53.690Z",
+  "updatedAt": "2026-07-22T14:18:53.690Z",
+  "gitHash": "3a041f742d84d0f3e797d7e440b665148bb52acb",
+  "features": {
+    "MCP server entry point": {
+      "description": "Starts the Mason MCP stdio server that exposes all tools to AI assistants",
+      "files": [
+        "bin/mason-mcp.ts",
+        "src/mcp/server.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "drift detection CLI": {
+      "description": "Headless CI check comparing the concept map against git HEAD, deterministic and LLM-free",
+      "files": [
+        "bin/mason-drift.ts",
+        "src/drift/cli.ts",
+        "src/drift/drift.ts"
+      ],
+      "tests": [
+        "test/drift.test.ts",
+        "test/drift-cli.test.ts"
+      ],
+      "type": "capability"
+    },
+    "legacy CLI migration shim": {
+      "description": "Prints a migration message for users who still invoke the removed standalone mason CLI",
+      "files": [
+        "bin/mason.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "git history analysis": {
+      "description": "Analyzer that mines git history for commit conventions, hot files, and stale directories",
+      "files": [
+        "src/analyzers/base.ts",
+        "src/analyzers/git-history.ts",
+        "src/analyzers/index.ts"
+      ],
+      "tests": [
+        "test/git-history.test.ts"
+      ],
+      "type": "capability"
+    },
+    "Confluence wiki sync": {
+      "description": "Syncs the concept map to a Confluence space, rewriting it into product-readable language for PMs and designers",
+      "files": [
+        "src/confluence/client.ts",
+        "src/confluence/diff.ts",
+        "src/confluence/renderer.ts",
+        "src/confluence/rewrite.ts",
+        "src/confluence/sync.ts",
+        "src/confluence/url.ts"
+      ],
+      "tests": [
+        "test/confluence.test.ts"
+      ],
+      "type": "capability"
+    },
+    "task context assembly": {
+      "description": "get_context: scores the concept map against a task description and returns relevant features, files, tests, blast radius, and decisions",
+      "files": [
+        "src/context/assemble.ts",
+        "src/context/lexical.ts"
+      ],
+      "tests": [
+        "test/context.test.ts"
+      ],
+      "type": "capability"
+    },
+    "team decisions log": {
+      "description": "Records team knowledge the code alone can't express (failed approaches, deprecations, conventions) and tracks staleness against anchor files",
+      "files": [
+        "src/decisions/decisions.ts",
+        "src/decisions/drift.ts"
+      ],
+      "tests": [
+        "test/decisions.test.ts"
+      ],
+      "type": "capability"
+    },
+    "change impact analysis": {
+      "description": "get_impact: co-change history, references, and related tests for a file before editing it",
+      "files": [
+        "src/impact/impact.ts"
+      ],
+      "type": "capability"
+    },
+    "LLM provider config": {
+      "description": "Multi-provider LLM call plumbing (claude, openai, ollama, gemini) and config stored at ~/.mason/config.json",
+      "files": [
+        "src/llm/config.ts",
+        "src/llm/providers.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "init gating": {
+      "description": "Tracks whether a project has completed Mason setup via .mason/project.json",
+      "files": [
+        "src/mcp/init.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "smart file sampler": {
+      "description": "Selects representative files by architectural role (config, entry point, viewmodel, repository, etc.) for snapshot batches",
+      "files": [
+        "src/mcp/sampler.ts"
+      ],
+      "tests": [
+        "test/sampler.test.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "MCP tool implementations": {
+      "description": "Core logic behind every MCP tool exposed by the server, including snapshot verification",
+      "files": [
+        "src/mcp/tools.ts"
+      ],
+      "tests": [
+        "test/tools.test.ts",
+        "test/verify.test.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "concept-map snapshot storage": {
+      "description": "Load/save of the persistent snapshot, partial-snapshot accumulation, and batch/reduce/refresh system prompts",
+      "files": [
+        "src/snapshot/partials.ts",
+        "src/snapshot/prompt.ts",
+        "src/snapshot/snapshot.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "test-to-source pairing": {
+      "description": "Pairs test files with source files by naming convention",
+      "files": [
+        "src/test-map.ts"
+      ],
+      "tests": [
+        "test/test-map.test.ts"
+      ],
+      "type": "capability"
+    },
+    "shared types": {
+      "description": "Shared analyzer/finding interfaces used across the analyzers module",
+      "files": [
+        "src/types.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "git repo detection": {
+      "description": "Detects whether a directory is a git repository",
+      "files": [
+        "src/utils/git.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "benchmark harness": {
+      "description": "deepeval-based benchmark comparing Mason snapshot answers against grep/exploration answers for token savings and quality",
+      "files": [
+        "bench/tests/test_mason.py"
+      ],
+      "type": "infrastructure"
+    },
+    "Go API test fixture": {
+      "description": "Sample Go API project used as a fixture to test Mason's multi-language analysis",
+      "files": [
+        "test/fixtures/go-api/internal/handler/UserHandler.go",
+        "test/fixtures/go-api/internal/handler/UserHandler_test.go",
+        "test/fixtures/go-api/internal/middleware/AuthMiddleware.go",
+        "test/fixtures/go-api/internal/model/User.go",
+        "test/fixtures/go-api/internal/repository/UserRepository.go",
+        "test/fixtures/go-api/internal/service/UserService.go",
+        "test/fixtures/go-api/internal/service/UserService_test.go",
+        "test/fixtures/go-api/main.go"
+      ],
+      "type": "infrastructure"
+    },
+    "Kotlin Multiplatform test fixture": {
+      "description": "Sample KMP app fixture (Android, iOS, and shared modules) used to test Mason's multi-language analysis",
+      "files": [
+        "test/fixtures/kotlin-multiplatform/androidApp/build.gradle.kts",
+        "test/fixtures/kotlin-multiplatform/androidApp/src/androidTest/kotlin/HomeScreenTest.kt",
+        "test/fixtures/kotlin-multiplatform/androidApp/src/main/kotlin/HomeScreen.kt",
+        "test/fixtures/kotlin-multiplatform/androidApp/src/main/kotlin/MainActivity.kt",
+        "test/fixtures/kotlin-multiplatform/build.gradle.kts",
+        "test/fixtures/kotlin-multiplatform/feature/home/data/src/commonMain/kotlin/WeatherMapper.kt",
+        "test/fixtures/kotlin-multiplatform/feature/home/data/src/commonMain/kotlin/WeatherRepositoryImpl.kt",
+        "test/fixtures/kotlin-multiplatform/feature/home/di/build.gradle.kts",
+        "test/fixtures/kotlin-multiplatform/feature/home/di/src/commonMain/kotlin/HomeModule.kt",
+        "test/fixtures/kotlin-multiplatform/feature/home/domain/src/commonMain/kotlin/WeatherRepository.kt",
+        "test/fixtures/kotlin-multiplatform/feature/home/presentation/src/commonMain/kotlin/HomeViewModel.kt",
+        "test/fixtures/kotlin-multiplatform/iosApp/ContentView.swift",
+        "test/fixtures/kotlin-multiplatform/iosApp/iOSApp.swift",
+        "test/fixtures/kotlin-multiplatform/iosApp/iosAppTests/HomeViewTests.swift",
+        "test/fixtures/kotlin-multiplatform/settings.gradle.kts",
+        "test/fixtures/kotlin-multiplatform/shared/build.gradle.kts",
+        "test/fixtures/kotlin-multiplatform/shared/src/commonMain/kotlin/NetworkModule.kt"
+      ],
+      "type": "infrastructure"
+    },
+    "Python Django test fixture": {
+      "description": "Sample Django project fixture used to test Mason's multi-language analysis",
+      "files": [
+        "test/fixtures/python-django/app/middleware/AuthMiddleware.py",
+        "test/fixtures/python-django/app/models.py",
+        "test/fixtures/python-django/app/repositories/UserRepository.py",
+        "test/fixtures/python-django/app/serializers.py",
+        "test/fixtures/python-django/app/services/EmailService.py",
+        "test/fixtures/python-django/app/services/UserService.py",
+        "test/fixtures/python-django/app/views.py",
+        "test/fixtures/python-django/manage.py"
+      ],
+      "tests": [
+        "test/fixtures/python-django/tests/test_models.py",
+        "test/fixtures/python-django/tests/test_views.py"
+      ],
+      "type": "infrastructure"
+    },
+    "minimal Python test fixture": {
+      "description": "Minimal single-file Python project fixture used to test Mason's baseline analysis",
+      "files": [
+        "test/fixtures/minimal/main.py"
+      ],
+      "type": "infrastructure"
+    },
+    "Node React test fixture": {
+      "description": "Sample Node/React project fixture used to test Mason's multi-language analysis",
+      "files": [
+        "test/fixtures/node-react/src/App.tsx",
+        "test/fixtures/node-react/src/components/Button.tsx",
+        "test/fixtures/node-react/src/components/Header.tsx",
+        "test/fixtures/node-react/src/hooks/useAuth.ts",
+        "test/fixtures/node-react/src/index.tsx",
+        "test/fixtures/node-react/src/services/ApiClient.ts",
+        "test/fixtures/node-react/src/services/AuthService.ts",
+        "test/fixtures/node-react/src/store/authReducer.ts",
+        "test/fixtures/node-react/src/store/authStore.ts",
+        "test/fixtures/node-react/src/types/ApiResponse.ts",
+        "test/fixtures/node-react/src/types/User.ts",
+        "test/fixtures/node-react/src/utils/helpers.ts"
+      ],
+      "tests": [
+        "test/fixtures/node-react/src/__tests__/App.test.tsx",
+        "test/fixtures/node-react/src/components/__tests__/Button.test.tsx",
+        "test/fixtures/node-react/src/hooks/__tests__/useAuth.test.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "Rust workspace test fixture": {
+      "description": "Sample Rust workspace fixture used to test Mason's multi-language analysis",
+      "files": [
+        "test/fixtures/rust-workspace/api/src/handler.rs",
+        "test/fixtures/rust-workspace/api/src/main.rs",
+        "test/fixtures/rust-workspace/api/src/router.rs",
+        "test/fixtures/rust-workspace/common/src/lib.rs",
+        "test/fixtures/rust-workspace/core/src/lib.rs",
+        "test/fixtures/rust-workspace/core/src/model.rs"
+      ],
+      "tests": [
+        "test/fixtures/rust-workspace/core/tests/model_test.rs"
+      ],
+      "type": "infrastructure"
+    },
+    "test fixture path helper": {
+      "description": "Resolves absolute paths to fixture directories for tests",
+      "files": [
+        "test/helpers.ts"
+      ],
+      "type": "infrastructure"
+    },
+    "build tooling": {
+      "description": "tsup bundler config for the three CLI entry points, and vitest test runner config",
+      "files": [
+        "tsup.config.ts",
+        "vitest.config.ts"
+      ],
+      "type": "infrastructure"
+    }
+  },
+  "flows": {
+    "drift check flow": {
+      "description": "CI entry point runs the deterministic drift check against git HEAD",
+      "chain": [
+        "bin/mason-drift.ts",
+        "src/drift/cli.ts",
+        "src/drift/drift.ts"
+      ]
+    },
+    "decision staleness flow": {
+      "description": "Flags active decisions whose anchor files changed since last verified",
+      "chain": [
+        "src/decisions/drift.ts",
+        "src/drift/drift.ts",
+        "src/decisions/decisions.ts"
+      ]
+    },
+    "MCP server startup flow": {
+      "description": "Binary boots the MCP stdio server which registers all tool implementations",
+      "chain": [
+        "bin/mason-mcp.ts",
+        "src/mcp/server.ts",
+        "src/mcp/tools.ts"
+      ]
+    },
+    "Confluence sync flow": {
+      "description": "Loads the snapshot, diffs against sync state, and pushes rendered pages to Confluence",
+      "chain": [
+        "src/confluence/sync.ts",
+        "src/confluence/diff.ts",
+        "src/confluence/renderer.ts",
+        "src/confluence/client.ts"
+      ]
+    },
+    "get_context assembly flow": {
+      "description": "Scores the task description against the snapshot and enriches with drift, impact, and decisions",
+      "chain": [
+        "src/context/assemble.ts",
+        "src/context/lexical.ts",
+        "src/snapshot/snapshot.ts",
+        "src/drift/drift.ts",
+        "src/impact/impact.ts",
+        "src/decisions/decisions.ts"
+      ]
+    }
+  }
+}

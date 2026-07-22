@@ -47,7 +47,7 @@
       "id": "add_transport_task",
       "category": "task",
       "question": "I want to contribute a new microservices transport to this repo (say, for ZeroMQ). Which directories and files do I create or touch, and what existing code should I use as a template?",
-      "criteria": "Identifies both halves: a server implementation in packages/microservices/server/ (new server-zeromq.ts extending Server from server.ts, mimicking server-mqtt.ts) registered in server-factory.ts, and a client proxy in packages/microservices/client/ (extending ClientProxy from client-proxy.ts, mimicking client-mqtt.ts) registered in client-proxy-factory.ts. Bonus: names the concrete methods to implement (listen/close/bindEvents; connect/publish/dispatchEvent).",
+      "criteria": "Identifies both halves: a server implementation in packages/microservices/server/ (new server-zeromq.ts extending Server from server.ts) registered in server-factory.ts, and a client proxy in packages/microservices/client/ (extending ClientProxy from client-proxy.ts) registered in client-proxy-factory.ts. ANY existing transport pair (mqtt, redis, nats, rmq, tcp) is an equally valid template — do not penalize the choice. Bonus: names the concrete methods to implement (listen/close/bindEvents; connect/publish/dispatchEvent).",
       "groundTruth": [
         "packages/microservices/server/server-mqtt.ts",
         "packages/microservices/server/server.ts",

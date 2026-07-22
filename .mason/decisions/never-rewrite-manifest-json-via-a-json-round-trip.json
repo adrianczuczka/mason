@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "never-rewrite-manifest-json-via-a-json-round-trip",
+  "title": "Never rewrite manifest.json via a JSON round-trip",
+  "body": "A scripted json.load/json.dump edit reformatted the whole hand-formatted file and produced a 322-line diff for three description changes (fixed in commit d68ffa2). Edit manifest.json with targeted string edits that preserve the existing compact formatting.",
+  "category": "gotcha",
+  "files": [
+    "manifest.json"
+  ],
+  "createdAt": "2026-07-22T14:19:45.336Z",
+  "updatedAt": "2026-07-22T14:19:45.336Z",
+  "refreshedHash": "3a041f742d84d0f3e797d7e440b665148bb52acb",
+  "status": "active"
+}
