@@ -257,6 +257,41 @@
       }
     },
     {
+      "name": "verify_snapshot",
+      "description": "Spot-check the concept map's correctness: returns a sample of entries (never-verified and least-recently-verified first) with skeletons of their claimed files, for the assistant to judge whether the files implement what each entry claims. Report verdicts via save_verification. Requires init.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "sample": { "type": "number", "description": "Entries to sample (default 5)" }
+        },
+        "required": ["dir"]
+      }
+    },
+    {
+      "name": "save_verification",
+      "description": "Record verify_snapshot verdicts: ok entries are stamped verifiedAt; failures are flagged and surface in mason_check_drift until re-mapped. Requires init.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "verdicts": {
+            "type": "object",
+            "description": "Entry name → {ok: boolean, note?: string (required when ok is false)}",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "ok": { "type": "boolean" },
+                "note": { "type": "string" }
+              },
+              "required": ["ok"]
+            }
+          }
+        },
+        "required": ["dir", "verdicts"]
+      }
+    },
+    {
       "name": "get_impact",
       "description": "CALL THIS BEFORE editing or refactoring any file. Returns git co-change history, references, and related tests — blast-radius signals you cannot get by reading the file itself. Also answers 'what would break if I changed X?'.",
       "inputSchema": {

@@ -12,6 +12,8 @@ import {
   getImpact,
   getSnapshot,
   saveDecision,
+  saveVerification,
+  verifySnapshot,
   masonCompleteInit,
   masonInit,
   masonSetConfluence,
@@ -396,6 +398,50 @@ export function createMcpServer(): McpServer {
       return {
         content: [{ type: "text", text: result }],
       };
+    }
+  );
+
+  server.tool(
+    "verify_snapshot",
+    "Spot-check the concept map's CORRECTNESS (drift checks freshness; this checks entries were right to begin with). Returns a sample of entries — always the never-verified and least-recently-verified first — with skeletons of their claimed files, for you to judge whether the files actually implement what the entry claims. Report verdicts back via save_verification. Run periodically, or after an automated refresh wrote entries no human reviewed.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      sample: z
+        .number()
+        .int()
+        .optional()
+        .describe("Entries to sample (default 5)"),
+    },
+    async ({ dir, sample }) => {
+      const result = await verifySnapshot(dir, sample);
+      return { content: [{ type: "text", text: result }] };
+    }
+  );
+
+  server.tool(
+    "save_verification",
+    "Record verify_snapshot verdicts. Entries judged ok are stamped verifiedAt; failures are flagged verificationFailed with your note and surface in mason_check_drift until re-mapped. Verdict notes are required for failures.",
+    {
+      dir: z
+        .string()
+        .describe("Absolute path to the project root directory"),
+      verdicts: z
+        .record(
+          z.object({
+            ok: z.boolean(),
+            note: z
+              .string()
+              .optional()
+              .describe("One line on what's wrong — required when ok is false"),
+          })
+        )
+        .describe("Entry name → verdict, exactly as returned by verify_snapshot"),
+    },
+    async ({ dir, verdicts }) => {
+      const result = await saveVerification(dir, verdicts);
+      return { content: [{ type: "text", text: result }] };
     }
   );
 

@@ -476,7 +476,34 @@ export async function checkDrift(dir: string): Promise<string> {
     });
   }
 
-  return JSON.stringify({ exists: true, ...report, hint: driftHint(report) });
+  // Additive: correctness state alongside freshness state. Drift proves the
+  // map is current; verification proves it was right to begin with.
+  const snapshot = await loadSnapshot(rootDir);
+  let verification: Record<string, unknown> | undefined;
+  let hint = driftHint(report);
+  if (snapshot) {
+    const all = [
+      ...Object.values(snapshot.features),
+      ...Object.values(snapshot.flows),
+    ];
+    const failedNames = [
+      ...Object.entries(snapshot.features)
+        .filter(([, e]) => e.verificationFailed)
+        .map(([n]) => n),
+      ...Object.entries(snapshot.flows)
+        .filter(([, e]) => e.verificationFailed)
+        .map(([n]) => n),
+    ];
+    verification = {
+      neverVerified: all.filter((e) => !e.verifiedAt).length,
+      failed: failedNames,
+    };
+    if (failedNames.length > 0) {
+      hint += ` Verification previously FAILED for [${failedNames.join(", ")}] — re-map those entries before trusting them.`;
+    }
+  }
+
+  return JSON.stringify({ exists: true, ...report, verification, hint });
 }
 
 export async function generateSnapshotBatch(
@@ -860,6 +887,142 @@ export async function getImpact(
   const { analyzeImpact } = await import("../impact/impact.js");
   const result = await analyzeImpact(rootDir, files);
   return JSON.stringify(result, null, 2);
+}
+
+const VERIFY_DEFAULT_SAMPLE = 5;
+const VERIFY_MAX_FILES_PER_ENTRY = 8;
+const VERIFY_SKELETON_CHARS = 500;
+
+/**
+ * Verification closes the day-one hole drift can't: drift proves the map is
+ * current against git, but nothing proves an entry was CORRECT when written.
+ * Sample entries weighted toward never-verified, then oldest-verified.
+ */
+export async function verifySnapshot(
+  dir: string,
+  sample: number = VERIFY_DEFAULT_SAMPLE
+): Promise<string> {
+  const rootDir = path.resolve(dir);
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("verifying the concept map");
+  }
+  const snapshot = await loadSnapshot(rootDir);
+  if (!snapshot) {
+    return JSON.stringify({
+      exists: false,
+      hint: "No concept map exists yet — nothing to verify.",
+    });
+  }
+
+  const entries = [
+    ...Object.entries(snapshot.features).map(([name, e]) => ({
+      name,
+      kind: "feature" as const,
+      description: e.description,
+      files: e.files,
+      verifiedAt: e.verifiedAt,
+    })),
+    ...Object.entries(snapshot.flows).map(([name, e]) => ({
+      name,
+      kind: "flow" as const,
+      description: e.description,
+      files: e.chain,
+      verifiedAt: e.verifiedAt,
+    })),
+  ];
+
+  entries.sort((a, b) => {
+    if (!a.verifiedAt && !b.verifiedAt) return a.name.localeCompare(b.name);
+    if (!a.verifiedAt) return -1;
+    if (!b.verifiedAt) return 1;
+    return a.verifiedAt.localeCompare(b.verifiedAt);
+  });
+
+  const picked = entries.slice(0, Math.max(1, sample));
+  const toVerify = [];
+  for (const entry of picked) {
+    const skeletons: Array<{ path: string; content: string } | { path: string; missing: true }> = [];
+    for (const filePath of entry.files.slice(0, VERIFY_MAX_FILES_PER_ENTRY)) {
+      const full = await readFullFile(rootDir, filePath);
+      if (full) {
+        skeletons.push({
+          path: full.path,
+          content: full.content.slice(0, VERIFY_SKELETON_CHARS),
+        });
+      } else {
+        skeletons.push({ path: filePath, missing: true });
+      }
+    }
+    toVerify.push({
+      name: entry.name,
+      kind: entry.kind,
+      description: entry.description,
+      lastVerified: entry.verifiedAt ?? "never",
+      skeletons,
+      truncated: entry.files.length > VERIFY_MAX_FILES_PER_ENTRY,
+    });
+  }
+
+  const neverVerified = entries.filter((e) => !e.verifiedAt).length;
+
+  return JSON.stringify({
+    exists: true,
+    totalEntries: entries.length,
+    neverVerified,
+    entries: toVerify,
+    instructions:
+      "For each entry, judge from the skeletons whether the listed files actually implement the claimed feature/flow (missing files count against it). Then call save_verification with verdicts: {\"<entry name>\": {\"ok\": true|false, \"note\": \"<one line, required when ok is false>\"}}. Be skeptical — a plausible description is not evidence; the files must show it.",
+  });
+}
+
+export async function saveVerification(
+  dir: string,
+  verdicts: Record<string, { ok: boolean; note?: string }>
+): Promise<string> {
+  const rootDir = path.resolve(dir);
+  if (!(await isInitialized(rootDir))) {
+    return uninitializedResponse("saving verification verdicts");
+  }
+  const snapshot = await loadSnapshot(rootDir);
+  if (!snapshot) {
+    return JSON.stringify({ exists: false, hint: "No concept map exists." });
+  }
+
+  const now = new Date().toISOString();
+  const stamped: string[] = [];
+  const unknown: string[] = [];
+  const failed: string[] = [];
+
+  for (const [name, verdict] of Object.entries(verdicts)) {
+    const entry = snapshot.features[name] ?? snapshot.flows[name];
+    if (!entry) {
+      unknown.push(name);
+      continue;
+    }
+    entry.verifiedAt = now;
+    if (verdict.ok) {
+      delete entry.verificationFailed;
+      delete entry.verificationNote;
+    } else {
+      entry.verificationFailed = true;
+      entry.verificationNote = verdict.note ?? "verification failed";
+      failed.push(name);
+    }
+    stamped.push(name);
+  }
+
+  snapshot.updatedAt = now;
+  await saveSnapshot(rootDir, snapshot);
+
+  return JSON.stringify({
+    stamped,
+    unknown,
+    failed,
+    hint:
+      failed.length > 0
+        ? `Entries [${failed.join(", ")}] are mis-mapped. Re-map them: read their actual files, correct the entries, and call save_snapshot with only those entries (plus removeFeatures/removeFlows if a concept no longer exists).`
+        : "All sampled entries verified. Re-run verify_snapshot periodically — it always picks the least-recently-verified entries next.",
+  });
 }
 
 export async function saveDecision(

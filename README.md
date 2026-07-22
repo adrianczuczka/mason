@@ -79,6 +79,8 @@ Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/]
 | `get_context` | **First call for any task or bug.** Matching features + files + tests + blast radius + freshness + recorded decisions, in one call. |
 | `save_decision` | Record knowledge the code can't express — failed approaches, deprecations, conventions. Git-committed, PR-reviewed, drift-checked. |
 | `mason_check_drift` | Feature-level staleness report — what changed since the snapshot, and whether to refresh incrementally or rebuild. |
+| `verify_snapshot` | Spot-check map correctness — sampled entries + file skeletons for the assistant to judge, least-recently-verified first. |
+| `save_verification` | Record verification verdicts — failures flag entries for re-mapping until fixed. |
 | `get_impact` | **Call before editing a file.** Traces what's affected — co-change history + references + related tests. |
 | `analyze_project` | Git stats — hot files, stale dirs, commit conventions. |
 | `full_analysis` | One-shot orientation for unmapped projects: structure + samples + tests + git. |

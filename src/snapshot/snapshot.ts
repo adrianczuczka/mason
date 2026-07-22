@@ -27,6 +27,16 @@ export interface FeatureEntry {
    * when absent (older snapshots) or unrecognized — see normalizeFeatureType.
    */
   type?: "capability" | "infrastructure";
+  /**
+   * When an assistant last confirmed this entry's files actually implement
+   * the claimed feature (verify_snapshot flow). Absent on older snapshots
+   * and never-verified entries. Drift checks freshness against git; this
+   * checks the map was CORRECT in the first place.
+   */
+  verifiedAt?: string;
+  /** Set when verification judged the entry wrong — re-map it. */
+  verificationFailed?: boolean;
+  verificationNote?: string;
 }
 
 export type FeatureType = "capability" | "infrastructure";
@@ -46,6 +56,10 @@ export interface FlowEntry {
   chain: string[];
   /** See FeatureEntry.refreshedHash. */
   refreshedHash?: string;
+  /** See FeatureEntry.verifiedAt / verificationFailed. */
+  verifiedAt?: string;
+  verificationFailed?: boolean;
+  verificationNote?: string;
 }
 
 export interface Snapshot {
