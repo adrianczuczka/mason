@@ -800,6 +800,16 @@ describe("MCP tools", () => {
       expect(data.playbook).toMatch(/mason_complete_init/);
     });
 
+    it("playbook carries the CLAUDE.md section with markers", async () => {
+      const raw = await masonInit(tmpDir);
+      const data = JSON.parse(raw);
+
+      expect(data.playbook).toMatch(/PHASE 4 — Assistant instructions/);
+      expect(data.playbook).toContain("<!-- mason:start -->");
+      expect(data.playbook).toContain("<!-- mason:end -->");
+      expect(data.playbook).toMatch(/call `get_context` with the task text first/);
+    });
+
     it("returns initialized=true after masonCompleteInit", async () => {
       await masonCompleteInit(tmpDir);
       const raw = await masonInit(tmpDir);

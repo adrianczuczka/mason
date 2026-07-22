@@ -85,6 +85,8 @@ Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/]
 
 The init / write tools refuse to run until `mason_init` has completed. The read-only diagnostics (`analyze_project`, `full_analysis`, `get_code_samples`) work without init.
 
+Setup also offers to add a short marker-delimited section to your project's CLAUDE.md telling assistants to consult the map before exploring — assistants follow project instructions far more reliably than they discover MCP tools on their own.
+
 ### How the concept map is built
 
 To stay accurate on codebases of any size, Mason uses a **Map-Reduce** pattern instead of stuffing the whole codebase into one LLM call:

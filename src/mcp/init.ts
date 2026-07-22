@@ -58,6 +58,24 @@ export function uninitializedResponse(action: string): string {
   );
 }
 
+/**
+ * The section the setup playbook offers to add to the project's CLAUDE.md.
+ * This is Mason's salience channel: benchmark runs showed assistants ignore
+ * MCP tool descriptions in favor of grep muscle memory, but reliably follow
+ * project instructions. Marker-delimited so a future init can update it.
+ */
+export const CLAUDE_MD_SECTION = `<!-- mason:start -->
+## Mason concept map
+
+This project has a Mason concept map (\`.mason/snapshot.json\`) served over MCP. Use it BEFORE exploring the codebase with grep, glob, or file reads:
+
+- Given a task, bug, or change request → call \`get_context\` with the task text first. One call returns the relevant features, files, tests, blast radius, and freshness.
+- Asked how something works or where it lives → call \`get_snapshot\` first.
+- Before editing any file → call \`get_impact\` for co-change history, references, and related tests.
+
+Fall back to manual exploration only for details the map doesn't answer.
+<!-- mason:end -->`;
+
 const SETUP_PLAYBOOK = `You are walking the user through one-time Mason setup for this project. \
 Mason persists a concept map of this codebase so future questions don't re-explore from scratch. \
 The map is built via a Map-Reduce pattern so it covers the WHOLE codebase, not just a sample. \
@@ -111,12 +129,21 @@ On yes:
 
 If the credentials are rejected with a 401/403 the tool returns a friendly error — re-ask the user for a fresh token or correct email.
 
-PHASE 4 — Finalize
+PHASE 4 — Assistant instructions (recommended)
+Goal: make sure future assistant sessions actually use the map instead of re-exploring.
+
+Tell the user: "Assistants reliably follow project instructions (CLAUDE.md) but often ignore available tools. Mason works best if I add a short section to this project's CLAUDE.md telling assistants to consult the concept map first. Add it?"
+On no: skip to Phase 5.
+On yes: append the following section verbatim to the project's CLAUDE.md (create the file with just this section if it doesn't exist; if the \`<!-- mason:start -->\` marker is already present, replace the marked block instead of appending):
+
+${CLAUDE_MD_SECTION}
+
+PHASE 5 — Finalize
   1. Call \`mason_complete_init(dir, { confluenceConfigured: true | false })\` — true if Phase 3 ended with status "saved", false otherwise.
   2. Confirm to the user that setup is complete and they can now ask architectural questions, request impact analysis, or sync to Confluence (if configured).
 
 Notes:
-- Read tools (\`get_snapshot\`, \`get_impact\`) refuse to run until \`mason_complete_init\` has been called. Do not skip Phase 4.
+- Read tools (\`get_snapshot\`, \`get_impact\`) refuse to run until \`mason_complete_init\` has been called. Do not skip Phase 5.
 - If the user aborts mid-flow, the partials persist in \`.mason/partial-snapshots/\`; the next \`mason_init\` run can pick up where it left off.
 - \`mason_init\` is idempotent — already-initialized projects return \`{ initialized: true, confluenceConfigured: ... }\`.
 - The user can reconfigure Confluence later by asking their assistant to call \`mason_set_confluence\` directly.`;
