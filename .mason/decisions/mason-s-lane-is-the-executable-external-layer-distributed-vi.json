@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "mason-s-lane-is-the-executable-external-layer-distributed-vi",
+  "title": "Mason's lane is the executable/external layer, distributed via instruction files",
+  "body": "Deep research (2026-07, 22 sources, adversarially verified): instruction files are the only harness mechanism with mass adoption (61-100% of 2,853 engineered repos vs <20% for everything else), AGENTS.md is converging bottom-up as the tool-agnostic standard, and the under-occupied surface vendors don't own is the executable/external layer — MCP servers, memory, and freshness infrastructure. Also: persistent memory is high-leverage ONLY with a quality pipeline (dedupe/verification/freshness), and sophisticated retrieval scaffolds don't beat simple baselines on code-derivable questions. Consequences: distribute through instruction files (kept ruthlessly concise), never compete with harness-native compaction/retrieval, and invest in the decision/drift/verify pipeline over Q&A navigation features.",
+  "category": "decision",
+  "files": [
+    "src/mcp/init.ts",
+    "src/context/assemble.ts"
+  ],
+  "createdAt": "2026-07-22T21:19:16.240Z",
+  "updatedAt": "2026-07-22T21:19:16.240Z",
+  "refreshedHash": "0e424dcae35ec0d186fe81f7969511a875c49df1",
+  "status": "active"
+}
