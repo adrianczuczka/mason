@@ -4,15 +4,19 @@ import type { DriftReport } from "./drift.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
 import type { DecisionDriftReport } from "../decisions/drift.js";
 
-export const USAGE = `Usage: mason-drift [--dir <path>] [--json]
+export const USAGE = `Usage: mason-drift [--dir <path>] [--json | --refresh-prompt]
 
 Checks the Mason concept map (.mason/snapshot.json) against git HEAD.
 Deterministic: no LLM call, no network — safe for CI.
 
 Options:
-  --dir <path>   Project root to check (default: current directory)
-  --json         Print the full drift report as JSON
-  --help         Show this help
+  --dir <path>       Project root to check (default: current directory)
+  --json             Print the full drift report as JSON
+  --refresh-prompt   When stale, print refresh instructions for ANY coding
+                     assistant with the Mason MCP server connected (Claude,
+                     Codex, Gemini, ...) — pipe it to your agent CLI to
+                     close the loop. Prints nothing extra when fresh.
+  --help             Show this help
 
 Exit codes:
   0  concept map is up to date
@@ -27,15 +31,23 @@ export interface DriftCliIo {
 interface ParsedArgs {
   dir: string;
   json: boolean;
+  refreshPrompt: boolean;
   help: boolean;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { dir: process.cwd(), json: false, help: false };
+  const parsed: ParsedArgs = {
+    dir: process.cwd(),
+    json: false,
+    refreshPrompt: false,
+    help: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--json") {
       parsed.json = true;
+    } else if (arg === "--refresh-prompt") {
+      parsed.refreshPrompt = true;
     } else if (arg === "--help" || arg === "-h") {
       parsed.help = true;
     } else if (arg === "--dir") {
@@ -95,6 +107,69 @@ export function formatDriftSummary(report: DriftReport): string {
   return lines.join("\n");
 }
 
+/**
+ * Provider-neutral refresh instructions: any coding assistant with the
+ * Mason MCP server connected can execute them — no Claude/Codex/Gemini
+ * assumptions. This is the automation half of "the map maintains itself":
+ * CI detects with this binary (free, deterministic), then pipes this
+ * prompt to whatever headless agent the team runs.
+ */
+export function formatRefreshPrompt(
+  report: DriftReport,
+  decisionDrift: DecisionDriftReport
+): string {
+  const lines: string[] = [];
+  lines.push(
+    "The Mason concept map for this project is stale. Refresh it using the Mason MCP tools (server name: mason). Work autonomously; do not ask questions. Modify ONLY the concept map via Mason tools — do not edit source files."
+  );
+  lines.push("");
+  lines.push("DRIFT REPORT (deterministic, computed against git HEAD):");
+  lines.push(
+    JSON.stringify(
+      {
+        commitsBehind: report.commitsBehind,
+        recommendation: report.recommendation,
+        staleFeatures: report.staleFeatures,
+        staleFlows: report.staleFlows,
+        changedFiles: report.changedFiles,
+        unmappedFiles: report.unmappedFiles,
+        ghostFiles: report.ghostFiles,
+        renames: report.renames,
+      },
+      null,
+      2
+    )
+  );
+  lines.push("");
+
+  const scopedFiles = [...report.changedFiles, ...report.unmappedFiles];
+  if (!report.historyAvailable || report.recommendation === "full-rebuild") {
+    lines.push(
+      "PROCEDURE (full rebuild): run the complete Map-Reduce build. Call generate_snapshot_batch repeatedly (follow nextOffset until null), calling save_partial_snapshot after each batch, then reduce_snapshot, then save_snapshot once with the unified map. Derive features ONLY from files shown in each batch prompt — never invent paths."
+    );
+  } else {
+    lines.push(
+      "PROCEDURE (scoped refresh): call generate_snapshot_batch with the files list below — the SAME list on every call — following nextOffset until null, calling save_partial_snapshot after each batch. Then call reduce_snapshot (it merges into the existing map, preserving untouched entries) and save_snapshot once. Use save_snapshot's removeFeatures/removeFlows for features that no longer exist (see ghostFiles/renames). Derive features ONLY from files shown in each batch prompt — never invent paths."
+    );
+    lines.push("");
+    lines.push(`files: ${JSON.stringify(scopedFiles)}`);
+  }
+
+  const staleDecisionIds = Object.keys(decisionDrift.staleDecisions);
+  if (staleDecisionIds.length > 0) {
+    lines.push("");
+    lines.push(
+      `NOTE: decisions [${staleDecisionIds.join(", ")}] have anchor files that changed. Do NOT modify decision records in this automated run — they encode human knowledge. Mention them in your final summary so the team re-verifies them.`
+    );
+  }
+
+  lines.push("");
+  lines.push(
+    "Finish by confirming the map was saved and summarizing which entries changed."
+  );
+  return lines.join("\n");
+}
+
 export async function runDriftCli(
   argv: string[],
   io: DriftCliIo = {
@@ -105,6 +180,9 @@ export async function runDriftCli(
   let args: ParsedArgs;
   try {
     args = parseArgs(argv);
+    if (args.json && args.refreshPrompt) {
+      throw new Error("--json and --refresh-prompt are mutually exclusive");
+    }
   } catch (error) {
     io.err(error instanceof Error ? error.message : String(error));
     io.err(USAGE);
@@ -136,6 +214,15 @@ export async function runDriftCli(
   // Additive: decision staleness never changes exit codes — `stale` and the
   // 0/1/2 contract keep meaning MAP staleness for existing CI consumers.
   const decisionDrift = await computeDecisionDrift(rootDir);
+
+  if (args.refreshPrompt) {
+    io.out(
+      report.stale
+        ? formatRefreshPrompt(report, decisionDrift)
+        : formatDriftSummary(report)
+    );
+    return report.stale ? 1 : 0;
+  }
 
   if (args.json) {
     const output: DriftReport & { decisions?: DecisionDriftReport } = report;

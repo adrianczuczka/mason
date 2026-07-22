@@ -145,6 +145,48 @@ describe("runDriftCli", () => {
     expect(report.recommendation).toBe("up-to-date");
   });
 
+  it("--refresh-prompt emits provider-neutral scoped-refresh instructions when stale", async () => {
+    await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    const hash = await commitAll("feat: add a");
+    await writeSnapshot(hash);
+    await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 2;\n");
+    await commitAll("fix: bump a");
+
+    const { io, out } = captureIo();
+    const code = await runDriftCli(["--dir", tmpDir, "--refresh-prompt"], io);
+
+    expect(code).toBe(1);
+    const prompt = out.join("\n");
+    expect(prompt).toMatch(/Mason MCP tools/);
+    expect(prompt).toMatch(/scoped refresh/);
+    expect(prompt).toMatch(/"src\/a\.ts"/);
+    expect(prompt).toMatch(/save_snapshot/);
+    // Provider-neutral: no vendor CLI names in the prompt itself
+    expect(prompt).not.toMatch(/claude -p|codex|gemini/i);
+  });
+
+  it("--refresh-prompt prints the up-to-date one-liner and exits 0 when fresh", async () => {
+    await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    const hash = await commitAll("feat: add a");
+    await writeSnapshot(hash);
+
+    const { io, out } = captureIo();
+    const code = await runDriftCli(["--dir", tmpDir, "--refresh-prompt"], io);
+
+    expect(code).toBe(0);
+    expect(out.join("\n")).toMatch(/up to date/);
+  });
+
+  it("rejects combining --json with --refresh-prompt", async () => {
+    const { io, err } = captureIo();
+    const code = await runDriftCli(
+      ["--dir", tmpDir, "--json", "--refresh-prompt"],
+      io
+    );
+    expect(code).toBe(2);
+    expect(err.join("\n")).toMatch(/mutually exclusive/);
+  });
+
   it("exits 2 when no snapshot exists", async () => {
     const { io, err } = captureIo();
     const code = await runDriftCli(["--dir", tmpDir], io);

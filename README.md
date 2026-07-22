@@ -123,11 +123,44 @@ When a lot of files drifted at once, the assistant runs a **scoped refresh** ins
 Because the check is deterministic, it also ships as a tiny standalone binary — the one exception to "MCP-only", read-only and LLM-free:
 
 ```bash
-npx -p mason-context mason-drift --dir .   # exit 0 fresh · 1 stale · 2 error
-npx -p mason-context mason-drift --json    # full report as JSON
+npx -p mason-context mason-drift --dir .          # exit 0 fresh · 1 stale · 2 error
+npx -p mason-context mason-drift --json           # full report as JSON
+npx -p mason-context mason-drift --refresh-prompt # stale? print refresh instructions for any agent
 ```
 
-Run it on merges to main to catch a rotting map before your assistant does — for example, warn on PRs when the map went stale. Fixing the map still happens through an assistant session (it's the LLM that rewrites entries), so a common pattern is CI detects, a human (or a scheduled agent) asks their assistant to refresh. Note: the diff is computed against the snapshot's base commit, so shallow CI checkouts need enough `fetch-depth` to reach it — when they don't, `mason-drift` reports stale with `full-rebuild` rather than guessing.
+Run it on merges to main to catch a rotting map before your assistant does. Note: the diff is computed against the snapshot's base commit, so shallow CI checkouts need enough `fetch-depth` to reach it — when they don't, `mason-drift` reports stale with `full-rebuild` rather than guessing.
+
+### The map maintains itself
+
+Detection is free and deterministic; the fix needs an LLM — but not any particular one. `mason-drift --refresh-prompt` emits provider-neutral instructions that any coding agent with the Mason MCP server connected can execute. Pipe it to whichever headless CLI your team runs:
+
+```bash
+# Claude Code
+claude -p "$(mason-drift --refresh-prompt)" --dangerously-skip-permissions \
+  --mcp-config '{"mcpServers":{"mason":{"command":"npx","args":["-y","-p","mason-context","mason-mcp"]}}}'
+
+# OpenAI Codex CLI (mason configured in ~/.codex/config.toml)
+codex exec --full-auto "$(mason-drift --refresh-prompt)"
+
+# Gemini CLI (mason configured in .gemini/settings.json)
+gemini --yolo -p "$(mason-drift --refresh-prompt)"
+```
+
+To close the loop in CI, this repo ships a reusable GitHub Actions workflow — detect on every push, refresh with your agent of choice, commit the updated map back:
+
+```yaml
+jobs:
+  mason:
+    uses: adrianczuczka/mason/.github/workflows/mason-refresh.yml@main
+    with:
+      agent-command: >-
+        claude -p "$MASON_REFRESH_PROMPT" --dangerously-skip-permissions
+        --strict-mcp-config --mcp-config
+        '{"mcpServers":{"mason":{"command":"npx","args":["-y","-p","mason-context","mason-mcp"]}}}'
+    secrets: inherit
+```
+
+Omit `agent-command` for detect-only mode: free, no credentials, fails the check when the map goes stale.
 
 ## Confluence sync
 

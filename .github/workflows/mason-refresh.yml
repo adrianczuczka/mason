@@ -1,0 +1,90 @@
+# Reusable workflow: keep the Mason concept map fresh.
+#
+# Detection is deterministic and free (mason-drift, no LLM). The refresh is
+# provider-agnostic: pass any agent CLI invocation as `agent-command` — the
+# refresh prompt is exposed as $MASON_REFRESH_PROMPT and the agent needs the
+# Mason MCP server configured (see README for Claude/Codex/Gemini snippets).
+# Without an agent-command the job is detect-only and fails when stale.
+#
+# Caller example:
+#   jobs:
+#     mason:
+#       uses: adrianczuczka/mason/.github/workflows/mason-refresh.yml@main
+#       with:
+#         agent-command: >-
+#           claude -p "$MASON_REFRESH_PROMPT" --dangerously-skip-permissions
+#           --strict-mcp-config --mcp-config
+#           '{"mcpServers":{"mason":{"command":"npx","args":["-y","-p","mason-context","mason-mcp"]}}}'
+#       secrets: inherit
+
+name: Mason map refresh
+
+on:
+  workflow_call:
+    inputs:
+      agent-command:
+        description: >-
+          Shell command that runs your coding agent on the refresh prompt
+          ($MASON_REFRESH_PROMPT). Empty = detect-only, fail when stale.
+        type: string
+        default: ""
+      fetch-depth:
+        description: >-
+          Checkout depth. Must reach the snapshot's base commit; 0 (full
+          history) is the safe default — shallow clones make mason-drift
+          report full-rebuild instead of guessing.
+        type: number
+        default: 0
+      commit-message:
+        type: string
+        default: "chore(mason): refresh concept map"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check drift
+        id: drift
+        run: |
+          set +e
+          npx -y -p mason-context mason-drift --dir .
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then exit 2; fi
+          echo "stale=$([ "$code" -eq 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Refresh the map with the configured agent
+        if: steps.drift.outputs.stale == 'true' && inputs.agent-command != ''
+        run: |
+          export MASON_REFRESH_PROMPT="$(npx -y -p mason-context mason-drift --dir . --refresh-prompt || true)"
+          ${{ inputs.agent-command }}
+
+      - name: Verify and commit the refreshed map
+        if: steps.drift.outputs.stale == 'true' && inputs.agent-command != ''
+        run: |
+          # The loop only counts as closed if the map is actually fresh now.
+          npx -y -p mason-context mason-drift --dir .
+          if [ -n "$(git status --porcelain -- .mason)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .mason
+            git commit -m "${{ inputs.commit-message }}"
+            git push
+          fi
+
+      - name: Fail when stale in detect-only mode
+        if: steps.drift.outputs.stale == 'true' && inputs.agent-command == ''
+        run: |
+          echo "Concept map is stale. Run a refresh (see README: 'The map maintains itself') or re-map via your assistant."
+          exit 1
