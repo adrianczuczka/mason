@@ -86,16 +86,18 @@ Clones are pinned to `commit` and cached in `.clones/` (gitignored).
 | `hono` | honojs/hono | 186 | $3.22 / 380s |
 | `vue-core` | vuejs/core | 483 | $5.63 / 766s |
 | `nest` | nestjs/nest | 1676 (incl. sample/integration noise) | $19.52 / 1668s |
+| `caddy` | caddyserver/caddy (Go) | 322 | $0.56 / 70s |
 
-Build cost scales linearly at roughly **$1.2 per 100 files**. Still missing: a
-non-web language target.
+Build cost scales roughly linearly (~$1.2 per 100 files) on the TS repos;
+caddy came in far under that — Go sources batched much more efficiently.
 
 **Findings so far** (sonnet, 2026-07; publish losses too):
-- Code-derivable Q&A is saturated: quality is parity on all three repos
-  (hono 8.8/8.7, vue-core 8.7/8.8, nest 8.8/8.5 baseline/mason — nest is a
-  mason *loss*, partly a rubric-overspecificity artifact on the template
-  choice). Mason wins first-action precision/recall on vue-core, loses both
-  slightly on nest.
+- Code-derivable Q&A is saturated: quality is parity on all four repos
+  (hono 8.8/8.7, vue-core 8.7/8.8, nest 8.8/8.5, caddy 8.8/8.8
+  baseline/mason — nest is a mason *loss*, partly a rubric-overspecificity
+  artifact on the template choice). Mason wins first-action precision/recall
+  on vue-core and caddy, loses both slightly on nest, and tends to answer
+  the hardest questions in fewer turns (caddy config_reload: 15 vs 26).
 - The separation is on non-code-derivable knowledge: decision-backed tasks
   went 9.0 (mason) vs 7.0 (baseline) — the baseline missed the recorded
   constraint entirely in 1 of 2 questions and needed 3× the turns when it
