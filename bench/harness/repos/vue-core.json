@@ -1,0 +1,75 @@
+{
+  "name": "vue-core",
+  "git": "https://github.com/vuejs/core",
+  "commit": "b5f8518379b77c3b62a7a9d2b52f6c76cda09bd5",
+  "note": "Medium real OSS target (~483 walked TS files, monorepo packages layout). Ground truth verified by exploration at the pinned commit, 2026-07-22.",
+  "questions": [
+    {
+      "id": "reactivity_core",
+      "category": "location",
+      "question": "Where does Vue's dependency tracking actually live — the code that records which effects depend on which reactive values and triggers them on change? Name the exact files and the key structures.",
+      "criteria": "Names packages/reactivity/src/dep.ts as the dependency-tracking core (Dep and Link classes, targetMap, track()/trigger()) and packages/reactivity/src/effect.ts for ReactiveEffect and the subscriber-side link traversal. Bonus: mentions the 3.5 doubly-linked link system, or baseHandlers.ts/collectionHandlers.ts as the proxy traps that call into track/trigger.",
+      "groundTruth": [
+        "packages/reactivity/src/dep.ts",
+        "packages/reactivity/src/effect.ts",
+        "packages/reactivity/src/baseHandlers.ts",
+        "packages/reactivity/src/collectionHandlers.ts"
+      ]
+    },
+    {
+      "id": "keyed_diff",
+      "category": "location",
+      "question": "Which file and function implement Vue's keyed children diffing algorithm, and what strategy does it use?",
+      "criteria": "Names packages/runtime-core/src/renderer.ts and patchKeyedChildren inside baseCreateRenderer, describing the two-end comparison plus longest-increasing-subsequence move minimization. Bonus: distinguishes patchUnkeyedChildren and the patchChildren dispatcher.",
+      "groundTruth": ["packages/runtime-core/src/renderer.ts"]
+    },
+    {
+      "id": "compiler_pipeline",
+      "category": "architecture",
+      "question": "Trace how a template string becomes a render function: which packages and files implement each stage of the compiler pipeline?",
+      "criteria": "Describes parse → transform → codegen with the right files: packages/compiler-core/src/parser.ts (baseParse, with tokenizer.ts), transform.ts (transform, transforms/ directory), codegen.ts (generate), orchestrated by baseCompile in compile.ts. Bonus: compiler-dom's compile() entry injecting DOM transforms (packages/compiler-dom/src/index.ts) or compiler-sfc wrapping it for .vue files.",
+      "groundTruth": [
+        "packages/compiler-core/src/compile.ts",
+        "packages/compiler-core/src/parser.ts",
+        "packages/compiler-core/src/transform.ts",
+        "packages/compiler-core/src/codegen.ts",
+        "packages/compiler-dom/src/index.ts"
+      ]
+    },
+    {
+      "id": "add_directive_task",
+      "category": "task",
+      "question": "I want to contribute a new built-in DOM directive similar to v-show (call it v-visible, toggling CSS visibility). Which files do I need to create or touch, and what should I use as a template?",
+      "criteria": "Identifies both halves: runtime side — create packages/runtime-dom/src/directives/vVisible.ts mimicking vShow.ts (ObjectDirective) and export from packages/runtime-dom/src/index.ts; compiler side — create packages/compiler-dom/src/transforms/vVisible.ts and register it in DOMDirectiveTransforms in packages/compiler-dom/src/index.ts. Bonus: mentions the generic directive infrastructure in packages/runtime-core/src/directives.ts or SSR handling via getSSRProps.",
+      "groundTruth": [
+        "packages/runtime-dom/src/directives/vShow.ts",
+        "packages/runtime-dom/src/index.ts",
+        "packages/compiler-dom/src/transforms/vShow.ts",
+        "packages/compiler-dom/src/index.ts",
+        "packages/runtime-core/src/directives.ts"
+      ]
+    },
+    {
+      "id": "reactivity_impact",
+      "category": "impact",
+      "question": "What would be affected if I changed the public behavior of packages/reactivity — say, altering when effects are triggered? Which packages and files depend on it most heavily?",
+      "criteria": "Identifies runtime-core as the tightest coupling (declares @vue/reactivity, re-exports its API, ~30 importing files) with the key dependents: apiWatch.ts, renderer.ts (ReactiveEffect drives the render loop), component.ts, apiComputed.ts. Notes runtime-dom depends directly and everything else (vue, server-renderer, compilers) reaches it transitively through runtime-core. Conveys blast-radius scale rather than naming one file.",
+      "groundTruth": [
+        "packages/runtime-core/src/apiWatch.ts",
+        "packages/runtime-core/src/renderer.ts",
+        "packages/runtime-core/src/component.ts",
+        "packages/runtime-core/src/index.ts"
+      ]
+    },
+    {
+      "id": "hydration_arch",
+      "category": "architecture",
+      "question": "How does SSR hydration work architecturally in this codebase — where does the hydration code live, and why does it live there rather than in the server-renderer package?",
+      "criteria": "Names packages/runtime-core/src/hydration.ts and explains the createHydrationFunctions() design: it closes over renderer internals and returns the [hydrate, hydrateNode] pair, wired lazily via createHydrationRenderer so client-only builds tree-shake it. Explains the placement: hydration must walk existing DOM and attach the same effects the client renderer would mount, so it needs renderer internals, not server code.",
+      "groundTruth": [
+        "packages/runtime-core/src/hydration.ts",
+        "packages/runtime-core/src/renderer.ts"
+      ]
+    }
+  ]
+}
