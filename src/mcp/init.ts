@@ -67,15 +67,15 @@ export function uninitializedResponse(action: string): string {
 export const CLAUDE_MD_SECTION = `<!-- mason:start -->
 ## Mason concept map
 
-This project has a Mason concept map (\`.mason/snapshot.json\`) served over MCP. Use it BEFORE exploring the codebase with grep, glob, or file reads:
+This project has a Mason concept map (\`.mason/snapshot.json\`) and decision store (\`.mason/decisions/\`) served over MCP. Use them BEFORE grep, glob, or file reads:
 
-- Given a task, bug, or change request → call \`get_context\` with the task text first. One call returns the relevant features, files, tests, blast radius, freshness, and recorded decisions.
-- Asked how something works or where it lives → call \`get_snapshot\` first.
-- Before editing any file → call \`get_impact\` for co-change history, references, and related tests.
-- Learned something the code alone can't tell you — a failed approach ("we tried X, it broke Y"), a deprecation ("don't extend Z"), a workaround and its reason, a convention settled in review → call \`save_decision\` to record it for the team. Best moments: the end of a debugging session, right after a design choice. Records are git-committed and PR-reviewed like code. Do NOT record anything derivable by reading the code, session trivia, or secrets.
-- Decisions returned by \`get_context\` are constraints — follow them. If one is marked stale, verify it still holds before relying on it.
+- Task, bug, or change request → \`get_context\` with the task text: relevant features, files, tests, blast radius, freshness, and decisions in one call.
+- "How does X work / where is Y" → \`get_snapshot\` first.
+- Before editing any file → \`get_impact\`.
+- Learned something the code can't tell you (a failed approach, a deprecation, a workaround's reason, a review-settled convention) → record it with \`save_decision\`. Never record code-derivable facts, session trivia, or secrets.
+- Decisions returned by \`get_context\` are constraints — follow them; verify any marked stale before relying on it.
 
-Fall back to manual exploration only for details the map doesn't answer.
+Fall back to manual exploration only for what the map doesn't answer.
 <!-- mason:end -->`;
 
 const SETUP_PLAYBOOK = `You are walking the user through one-time Mason setup for this project. \
@@ -134,9 +134,13 @@ If the credentials are rejected with a 401/403 the tool returns a friendly error
 PHASE 4 — Assistant instructions (recommended)
 Goal: make sure future assistant sessions actually use the map instead of re-exploring.
 
-Tell the user: "Assistants reliably follow project instructions (CLAUDE.md) but often ignore available tools. Mason works best if I add a short section to this project's CLAUDE.md telling assistants to consult the concept map first. Add it?"
+Tell the user: "Assistants reliably follow project instruction files but often ignore available tools. Mason works best if I add a short section to this project's instruction file telling assistants to consult the concept map first. Add it?"
 On no: skip to Phase 5.
-On yes: append the following section verbatim to the project's CLAUDE.md (create the file with just this section if it doesn't exist; if the \`<!-- mason:start -->\` marker is already present, replace the marked block instead of appending):
+On yes, pick the target file by what the project already uses:
+  - \`AGENTS.md\` exists → put the section there (it's the tool-agnostic standard). If a \`CLAUDE.md\` also exists and doesn't reference AGENTS.md, add a one-line pointer to it.
+  - only \`CLAUDE.md\` (or \`.claude/CLAUDE.md\`) exists → put the section there.
+  - neither exists → create \`CLAUDE.md\` with just the section.
+Append the following section verbatim; if the \`<!-- mason:start -->\` marker is already present in the target file, replace the marked block instead of appending:
 
 ${CLAUDE_MD_SECTION}
 

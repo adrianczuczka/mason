@@ -834,7 +834,9 @@ describe("MCP tools", () => {
       expect(data.playbook).toMatch(/PHASE 4 — Assistant instructions/);
       expect(data.playbook).toContain("<!-- mason:start -->");
       expect(data.playbook).toContain("<!-- mason:end -->");
-      expect(data.playbook).toMatch(/call `get_context` with the task text first/);
+      expect(data.playbook).toMatch(/`get_context` with the task text/);
+      // AGENTS.md is the tool-agnostic standard — the playbook must prefer it
+      expect(data.playbook).toMatch(/`AGENTS\.md` exists → put the section there/);
     });
 
     it("returns initialized=true after masonCompleteInit", async () => {
