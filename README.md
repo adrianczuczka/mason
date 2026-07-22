@@ -1,4 +1,4 @@
-# Mason – the context builder for LLMs 👷
+# Mason – the system of record for your codebase's AI assistants 👷
 
 [![npm version](https://img.shields.io/npm/v/mason-context)](https://www.npmjs.com/package/mason-context)
 [![CI](https://img.shields.io/github/actions/workflow/status/adrianczuczka/mason/ci.yml?branch=main)](https://github.com/adrianczuczka/mason/actions/workflows/ci.yml)
@@ -6,9 +6,9 @@
 [![license](https://img.shields.io/github/license/adrianczuczka/mason)](https://github.com/adrianczuczka/mason/blob/main/LICENSE)
 [![issues](https://img.shields.io/github/issues/adrianczuczka/mason)](https://github.com/adrianczuczka/mason/issues)
 
-### A persistent concept map for your AI coding assistant — so it stops re-exploring your codebase every session.
+### Persistent, provably-fresh context your assistant can't grep for: team decisions, change history, and a feature-to-file map — assembled per task in one call.
 
-**Up to 67% fewer tokens on architecture questions · same answer quality · MCP-only**
+**Modern agents are good at reading code. They're terrible at knowing what your team learned the hard way, what changes together, and whether yesterday's understanding still holds. Mason owns exactly that.**
 
 ```bash
 claude mcp add mason --scope user -- npx -p mason-context mason-mcp
@@ -18,17 +18,29 @@ Restart Claude Code, then ask: *"use mason to set up this project."* The assista
 
 Next session, your assistant loads the map instead of grepping 8 files to figure out what your app does.
 
+> **0.6.0 note:** Mason 0.6 adds decision records (`save_decision`), task-scoped assembly (`get_context`), map verification (`verify_snapshot`), the self-maintaining refresh loop, and richer uninitialized responses. If you set Mason up before 0.6, re-run setup once (ask your assistant to "run mason_init again") — it refreshes the marker-delimited CLAUDE.md section that routes assistants to the new tools.
+
 > **0.4.0 note:** Mason is MCP-only as of v0.4.0. The previous `mason <command>` CLI has been removed — everything runs through MCP tools, driven by your assistant. See [0.4.0 migration](#040-migration) below if you used the old CLI.
 
 ---
 
 ## The pain
 
-Every new conversation about your code, your assistant starts from zero. It greps for `auth`, reads three files, greps for `user`, reads three more, pieces together the architecture, then finally answers. Tomorrow you ask a different question — same dance. The understanding it built yesterday is gone.
+Agentic search keeps getting better at re-deriving what's *in* the code — but three kinds of context can't be re-derived, and today they evaporate:
+
+- **Decisions.** "We tried retrying 401s in 2023; it locked accounts." Your assistant re-suggests it next sprint, in every teammate's session.
+- **History.** Which files change together, which dirs are dead — knowledge that lives in thousands of commits, too expensive to mine per session.
+- **Freshness.** Any cached understanding — a wiki, a CLAUDE.md, a map — rots silently, and a confidently wrong assistant is worse than a slow one.
 
 ## The fix
 
-Mason persists a **feature-to-file map** in `.mason/snapshot.json`. One MCP tool call returns:
+Mason is an MCP server that maintains three git-committed, deterministic stores and assembles them per task:
+
+- **Concept map** (`.mason/snapshot.json`) — features and flows → files, built by your assistant, spot-checked by `verify_snapshot`
+- **Decision records** (`.mason/decisions/`) — team knowledge the code can't express, captured by `save_decision`, PR-reviewed like code
+- **Drift engine** — LLM-free proof of what's stale, per entry, with a self-maintaining refresh loop for CI
+
+Ask your assistant to do a task and one `get_context` call returns the relevant features, files, tests, blast radius (git co-change + references), matching decisions, and a freshness verdict. The map itself:
 
 ```json
 {
@@ -47,21 +59,25 @@ Mason persists a **feature-to-file map** in `.mason/snapshot.json`. One MCP tool
 
 The assistant jumps straight to the relevant files instead of exploring.
 
-**Where the map comes from:** Mason doesn't parse your code. Your assistant reads the project through Mason's analysis tools (`analyze_project`, `get_code_samples`, `full_analysis`) and writes the map itself. That means it captures architectural intent — what the code is *for* — not just symbols and call edges.
+**Where the map comes from:** Mason doesn't parse your code. Your assistant reads the project through Mason's analysis tools and writes the map itself — capturing architectural intent, not just symbols and call edges. Setup also adds a short section to your CLAUDE.md so every future session (any assistant, any teammate) consults the stores before exploring.
 
-## Benchmark
+## What the numbers say
 
-[deepeval](https://github.com/confident-ai/deepeval), Claude Sonnet, 164-file Kotlin Multiplatform project:
+Measured with real headless agent sessions in A/B arms (baseline always has a populated CLAUDE.md — beating a context-free agent is not a result). Full harness, pinned commits, and losses included: [bench/harness/](bench/harness/).
 
-| Question | With Mason | Without Mason | Token saving |
-|---|---|---|---|
-| List all features | 10,258 tok | 31,346 tok | **67%** |
-| Trace data flow | 12,010 tok | 15,258 tok | **21%** |
-| Compare platforms | 10,897 tok | 19,353 tok | **44%** |
-| Onboarding flow | 10,271 tok | 11,432 tok | **10%** |
-| **Average** | | | **36%** |
+- **Where Mason wins — knowledge that isn't in the code.** On tasks whose correct answer hinges on a recorded engineering decision (seeded fairly: the baseline had the same facts in a discoverable doc), Mason averaged **9.0/10 vs 7.0/10**. The baseline missed the constraint entirely half the time, and needed ~3× the turns when it found it; Mason surfaced it in one `get_context` call, every time.
+- **Stale-map safety.** Against a deliberately stale map, the drift flag + changed-file previews led the agent to verify and answer current-code truth — the "confidently wrong from a stale cache" failure did not occur.
+- **Where it's a wash — and we say so.** On questions agents can answer by reading code, quality is parity across hono (186 files), vuejs/core (483), and nestjs/nest (1676): 8.7–8.8 both arms, with Mason slightly *behind* on nest (8.5 vs 8.8). If your only questions are "how does X work", modern agents don't need a map.
+- **Cost of ownership, measured.** Map builds scale linearly at ~$1.20 per 100 files (Sonnet): $3.22 for hono, $5.63 for vue-core, $19.52 for nest. Incremental refreshes after drift are cents.
 
-Same answer quality (0.9/1.0 on every question, both paths). Reproduce: [bench/](bench/).
+## Decision records
+
+The store that makes Mason more than a map. When your assistant learns something the code can't express — a failed approach, a deprecation, a workaround's reason, a review-settled convention — it records it with `save_decision`:
+
+- One JSON file per record in `.mason/decisions/` — concurrent additions merge cleanly; conflicting edits to the same record surface to a human, which is the point
+- Git-committed and PR-reviewed: nothing enters team knowledge without the normal review gate
+- Anchored to files and drift-checked: when the anchor files change, the record is flagged for re-verification instead of silently going stale
+- Surfaced by `get_context` as constraints exactly when a task touches them — for every teammate, in every session, on any assistant
 
 ## MCP tools
 
