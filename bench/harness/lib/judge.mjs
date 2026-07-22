@@ -1,10 +1,25 @@
 import { spawn } from "node:child_process";
 
 /**
- * Score an answer against a rubric with an LLM judge (single non-agentic
- * claude -p call). Returns { score: 0-10, rationale } or { score: null }.
+ * Score an answer against a rubric with a 3-vote judge panel (independent
+ * non-agentic claude -p calls, median score). Single-judge variance proved
+ * too noisy: identical agent behavior scored 9 vs 6 across runs.
+ * Returns { score, rationale, votes } or { score: null }.
  */
-export function judgeAnswer({ question, criteria, answer, model = "haiku" }) {
+export async function judgeAnswer({ question, criteria, answer, model = "haiku", panel = 3 }) {
+  const votes = (
+    await Promise.all(
+      Array.from({ length: panel }, () => judgeOnce({ question, criteria, answer, model }))
+    )
+  ).filter((v) => v.score !== null);
+  if (votes.length === 0) return { score: null, rationale: "all judge votes unparseable", votes: [] };
+  const sorted = votes.map((v) => v.score).sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const medianVote = votes.find((v) => v.score === median);
+  return { score: median, rationale: medianVote.rationale, votes: sorted };
+}
+
+function judgeOnce({ question, criteria, answer, model }) {
   const prompt = [
     "You are grading an AI assistant's answer to a question about a codebase.",
     "",

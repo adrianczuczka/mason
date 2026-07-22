@@ -89,13 +89,19 @@ async function main() {
   for (const q of questions) {
     for (const arm of args.arms) {
       console.log(`\n[${q.id} / ${arm}] running...`);
-      const session = await runSession({
-        cwd: repoDir,
-        prompt: q.question,
-        mcpConfig: arm === "mason" ? masonMcpConfig : { mcpServers: {} },
-        model: args.model,
-        systemPrompt: SYSTEM_PROMPT,
-      });
+      let session;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        session = await runSession({
+          cwd: repoDir,
+          prompt: q.question,
+          mcpConfig: arm === "mason" ? masonMcpConfig : { mcpServers: {} },
+          model: args.model,
+          systemPrompt: SYSTEM_PROMPT,
+        });
+        if (session.ok) break;
+        console.log(`  attempt ${attempt} died without a result event — ${attempt < 2 ? "retrying in 60s" : "giving up"}`);
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 60_000));
+      }
       const reads = relativizeReads(session.readFiles, repoDir);
       const verdict = await judgeAnswer({
         question: q.question,
@@ -109,6 +115,7 @@ async function main() {
         arm,
         ok: session.ok,
         quality: verdict.score,
+        qualityVotes: verdict.votes,
         qualityRationale: verdict.rationale,
         costUsd: session.costUsd,
         numTurns: session.numTurns,
