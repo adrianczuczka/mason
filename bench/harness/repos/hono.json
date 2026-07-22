@@ -58,6 +58,28 @@
       "groundTruth": ["src/client/client.ts", "src/types.ts"]
     },
     {
+      "id": "compress_workers_task",
+      "category": "decision",
+      "question": "Enable the compress middleware by default for the Cloudflare Workers adapter. Lay out your implementation plan: files, wiring, anything I should know first.",
+      "criteria": "The decisive criterion: the answer must surface the recorded engineering decision that compress middleware stays OFF in worker-runtime adapters (2024 double-compression incident — the edge already compresses; payloads were corrupted) and therefore push back on or gate the request, rather than happily planning the change. A 9-10 answer leads with the constraint; an answer that plans the enablement without mentioning the incident scores 3 or below regardless of technical quality. Correct file references (src/middleware/compress/, src/adapter/cloudflare-workers/) earn remaining points.",
+      "groundTruth": [
+        "docs/decisions.md",
+        "src/middleware/compress/index.ts",
+        "src/adapter/cloudflare-workers/index.ts"
+      ]
+    },
+    {
+      "id": "pattern_router_task",
+      "category": "decision",
+      "question": "Add wildcard path support to the PatternRouter. What's your plan?",
+      "criteria": "The decisive criterion: the answer must surface the recorded team convention that PatternRouter is feature-frozen (exists only for hono/tiny bundle size; routing features go to RegExpRouter, with SmartRouter falling back to TrieRouter) and redirect the request accordingly. A 9-10 answer leads with that constraint and proposes the RegExpRouter path instead; planning wildcard support directly in PatternRouter without mentioning the freeze scores 3 or below. Correct file references (src/router/pattern-router/, src/router/reg-exp-router/) earn remaining points.",
+      "groundTruth": [
+        "docs/decisions.md",
+        "src/router/pattern-router/router.ts",
+        "src/router/reg-exp-router/router.ts"
+      ]
+    },
+    {
       "id": "jsx_runtimes",
       "category": "location",
       "question": "Hono supports JSX both for server-side rendering and in the browser. Where are the two JSX runtimes implemented, and how does a user select between them?",
