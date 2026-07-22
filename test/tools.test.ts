@@ -203,6 +203,33 @@ describe("MCP tools", () => {
       ).rejects.toBeTruthy();
     });
 
+    it("uninitialized response carries usable context inline", async () => {
+      await fs.mkdir(path.join(tmpDir, "src"));
+      await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+      await fs.writeFile(path.join(tmpDir, "src", "a.test.ts"), "// tests a\n");
+      await git(["add", "."], tmpDir);
+      await git(["commit", "-m", "feat: add a"], tmpDir);
+
+      const raw = await getSnapshot(tmpDir);
+      const data = JSON.parse(raw);
+
+      expect(data.initialized).toBe(false);
+      // Structure, git signals, and test pairing arrive in the same call so
+      // the assistant can act without a second round-trip.
+      expect(data.structure.totalFiles).toBeGreaterThan(0);
+      expect(Array.isArray(data.structure.directories)).toBe(true);
+      expect(Array.isArray(data.gitSignals)).toBe(true);
+      expect(data.testPairs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ test: "src/a.test.ts", source: "src/a.ts" }),
+        ])
+      );
+      // Still read-only
+      await expect(
+        fs.access(path.join(tmpDir, ".mason"))
+      ).rejects.toBeTruthy();
+    });
+
     it("returns exists:false when initialized but no snapshot exists yet", async () => {
       await markInitialized(tmpDir);
       const raw = await getSnapshot(tmpDir);

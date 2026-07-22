@@ -199,6 +199,55 @@ export async function getCodeSamples(
   return JSON.stringify(output, null, 2);
 }
 
+const UNINIT_MAX_DIRECTORIES = 40;
+const UNINIT_MAX_TEST_PAIRS = 30;
+
+/**
+ * Uninitialized response for READ-path tools. A bare "not initialized" wastes
+ * the call — the most common first contact anyone has with Mason. Return the
+ * cheap deterministic context inline (structure, git signals, test pairing)
+ * so the assistant can act immediately and offer setup afterwards. Write-path
+ * tools keep the bare gate (uninitializedResponse).
+ */
+async function uninitializedContextResponse(
+  rootDir: string,
+  action: string
+): Promise<string> {
+  const [structureRaw, analyzerResults, testMap] = await Promise.all([
+    getProjectStructure(rootDir),
+    runAll(await buildContext(rootDir)).catch(() => []),
+    import("../test-map.js")
+      .then((m) => m.buildTestMap(rootDir))
+      .catch(() => null),
+  ]);
+
+  const structure = JSON.parse(structureRaw);
+  structure.directories = (structure.directories ?? [])
+    .sort(
+      (a: { fileCount: number }, b: { fileCount: number }) =>
+        b.fileCount - a.fileCount
+    )
+    .slice(0, UNINIT_MAX_DIRECTORIES);
+
+  const gitSignals = analyzerResults.flatMap((r) =>
+    r.findings.map((f) => ({
+      category: f.category,
+      summary: f.summary,
+      evidence: f.evidence.slice(0, 5),
+    }))
+  );
+
+  return JSON.stringify({
+    initialized: false,
+    hint:
+      `No Mason concept map exists here yet. Use the context below plus your own reads to answer now — ` +
+      `then offer to set Mason up (\`mason_init\` walks the user through ${action}); don't start setup unprompted.`,
+    structure,
+    gitSignals,
+    testPairs: testMap?.paired?.slice(0, UNINIT_MAX_TEST_PAIRS) ?? [],
+  });
+}
+
 export async function getProjectStructure(dir: string): Promise<string> {
   const rootDir = path.resolve(dir);
 
@@ -287,7 +336,7 @@ export async function getSnapshot(dir: string): Promise<string> {
   const rootDir = path.resolve(dir);
 
   if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("building the concept map");
+    return uninitializedContextResponse(rootDir, "building the concept map");
   }
 
   const snapshot = await loadSnapshot(rootDir);
@@ -783,7 +832,7 @@ export async function getImpact(
 ): Promise<string> {
   const rootDir = path.resolve(dir);
   if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("analyzing change impact");
+    return uninitializedContextResponse(rootDir, "analyzing change impact");
   }
   const { analyzeImpact } = await import("../impact/impact.js");
   const result = await analyzeImpact(rootDir, files);
@@ -797,7 +846,7 @@ export async function getContext(
 ): Promise<string> {
   const rootDir = path.resolve(dir);
   if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("assembling task context");
+    return uninitializedContextResponse(rootDir, "assembling task context");
   }
   const { assembleContext } = await import("../context/assemble.js");
   const bundle = await assembleContext(rootDir, task, files);
