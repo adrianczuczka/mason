@@ -32,6 +32,14 @@ export interface CochangeEntry {
 export interface ReferenceEntry {
   file: string;
   matches: string[];
+  /**
+   * "import" when the name appears on an import/include/use line — a
+   * structural dependency; "mention" for any other textual hit (comments,
+   * strings, same-name-different-concept collisions). Imports sort first:
+   * a mention of "context" in a doc comment is not the same signal as
+   * `import { Context }`.
+   */
+  kind: "import" | "mention";
 }
 
 export interface TestEntry {
@@ -186,7 +194,11 @@ async function getReferences(
   const targetSet = new Set(targetFiles);
   const filesToSearch = allSourceFiles.filter((f) => !targetSet.has(f));
 
-  const results = new Map<string, Set<string>>();
+  const results = new Map<string, { matches: Set<string>; isImport: boolean }>();
+
+  // Language-agnostic import-line heuristic: covers JS/TS import/require,
+  // Python import/from, Go/Rust/Swift/Kotlin/Java import/use, C include.
+  const importLine = /^\s*(import\b|from\b.*\bimport\b|const\b.*=\s*require\(|use\b|#include\b|require\s*\()/;
 
   // Read files in batches to avoid too many open handles
   const batchSize = 50;
@@ -200,13 +212,22 @@ async function getReferences(
             path.join(rootDir, file),
             "utf-8"
           );
+          const lines = content.split("\n");
 
           for (const name of searchNames) {
             // Match the name as a word boundary (not part of another word)
             const regex = new RegExp(`\\b${escapeRegex(name)}\\b`);
-            if (regex.test(content)) {
-              if (!results.has(file)) results.set(file, new Set());
-              results.get(file)!.add(name);
+            if (!regex.test(content)) continue;
+            if (!results.has(file)) {
+              results.set(file, { matches: new Set(), isImport: false });
+            }
+            const entry = results.get(file)!;
+            entry.matches.add(name);
+            if (
+              !entry.isImport &&
+              lines.some((l) => regex.test(l) && importLine.test(l))
+            ) {
+              entry.isImport = true;
             }
           }
         } catch {
@@ -217,11 +238,15 @@ async function getReferences(
   }
 
   return [...results.entries()]
-    .map(([file, matches]) => ({
+    .map(([file, { matches, isImport }]) => ({
       file,
       matches: [...matches],
+      kind: (isImport ? "import" : "mention") as "import" | "mention",
     }))
-    .sort((a, b) => b.matches.length - a.matches.length);
+    .sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "import" ? -1 : 1;
+      return b.matches.length - a.matches.length;
+    });
 }
 
 async function getRelatedTests(
