@@ -80,6 +80,30 @@
       ]
     },
     {
+      "id": "stale_router_broad",
+      "category": "stale",
+      "question": "Where does Hono choose its default router, and which files implement the different router strategies? Name the exact files.",
+      "criteria": "Identical phrasing to a question agents historically answer from documentation/maps without reading code — but the code recently changed. Ground truth AT CURRENT HEAD: src/hono.ts composes SmartRouter with RegExpRouter and PatternRouter (TrieRouter was recently removed from the default). The decisive criterion: the answer must reflect the CURRENT composition; asserting TrieRouter is in the default SmartRouter scores 3 or below, regardless of how correct the file inventory is. Bonus for flagging that documentation/concept-map state disagrees with the code.",
+      "groundTruth": ["src/hono.ts", "src/router/pattern-router/router.ts"]
+    },
+    {
+      "id": "stale_router",
+      "category": "stale",
+      "question": "Which router implementations back a default `new Hono()` app, and how is the fallback arranged?",
+      "criteria": "Ground truth AT CURRENT HEAD (the code was recently changed): src/hono.ts composes SmartRouter with RegExpRouter and PatternRouter. The decisive criterion: the answer must reflect the CURRENT code — RegExpRouter + PatternRouter. An answer asserting TrieRouter is the current fallback (true of an older revision, and of any stale documentation) scores 3 or below. Bonus for explicitly noticing the recent change or a stale concept map.",
+      "groundTruth": ["src/hono.ts", "src/router/pattern-router/router.ts"]
+    },
+    {
+      "id": "stale_timing",
+      "category": "stale",
+      "question": "Which files implement the timing middleware, exactly as they exist right now?",
+      "criteria": "Ground truth AT CURRENT HEAD (recently renamed): src/middleware/timing/index.ts re-exporting from src/middleware/timing/server-timing.ts. The decisive criterion: the answer must name server-timing.ts. An answer asserting src/middleware/timing/timing.ts currently exists (it was renamed away) scores 3 or below. Bonus for noticing the rename or flagging a stale concept map.",
+      "groundTruth": [
+        "src/middleware/timing/index.ts",
+        "src/middleware/timing/server-timing.ts"
+      ]
+    },
+    {
       "id": "jsx_runtimes",
       "category": "location",
       "question": "Hono supports JSX both for server-side rendering and in the browser. Where are the two JSX runtimes implemented, and how does a user select between them?",
