@@ -1,0 +1,85 @@
+{
+  "name": "nest",
+  "git": "https://github.com/nestjs/nest",
+  "commit": "41d9f37b320a4021da007fcbf2d9d578625f399c",
+  "note": "Large real OSS target (~1676 walked TS files: packages 830 + integration 501 + sample 329 — realistic monorepo noise). Ground truth verified by exploration at the pinned commit, 2026-07-22.",
+  "questions": [
+    {
+      "id": "di_container",
+      "category": "location",
+      "question": "Which files implement NestJS's dependency injection: the container, the module scanning, and the actual provider instantiation? Name the exact files and their roles.",
+      "criteria": "Names packages/core/injector/container.ts (NestContainer registry), packages/core/scanner.ts (DependenciesScanner — recursive module walk before instantiation), packages/core/injector/injector.ts (Injector — resolveConstructorParams/instantiateClass), and packages/core/injector/instance-loader.ts (InstanceLoader driving instantiation per module). Bonus: module.ts or instance-wrapper.ts with correct roles.",
+      "groundTruth": [
+        "packages/core/injector/container.ts",
+        "packages/core/scanner.ts",
+        "packages/core/injector/injector.ts",
+        "packages/core/injector/instance-loader.ts",
+        "packages/core/injector/module.ts",
+        "packages/core/injector/instance-wrapper.ts"
+      ]
+    },
+    {
+      "id": "request_pipeline",
+      "category": "architecture",
+      "question": "Trace a request through NestJS's enhancer pipeline: in what order do guards, interceptors, pipes, and exception filters run, and which file orchestrates that order?",
+      "criteria": "Names packages/core/router/router-execution-context.ts (RouterExecutionContext.create) as the orchestrator and gives the verified order: guards first, interceptors wrapping the call, pipes running immediately before the controller method inside the interceptor-wrapped handler, exception filters wrapping one level up via router-proxy.ts / exceptions-handler.ts. An answer with the wrong order (e.g. pipes before guards) caps at 5.",
+      "groundTruth": [
+        "packages/core/router/router-execution-context.ts",
+        "packages/core/router/router-proxy.ts",
+        "packages/core/exceptions/exceptions-handler.ts",
+        "packages/core/router/routes-resolver.ts",
+        "packages/core/router/router-explorer.ts"
+      ]
+    },
+    {
+      "id": "decorators_metadata",
+      "category": "location",
+      "question": "Where do @Controller, @Injectable, and the HTTP method decorators like @Get live, and where are the metadata keys they write defined?",
+      "criteria": "Names packages/common/decorators/core/controller.decorator.ts, packages/common/decorators/core/injectable.decorator.ts, packages/common/decorators/http/request-mapping.decorator.ts (RequestMapping, exporting Get/Post/...), and packages/common/constants.ts as the metadata-constants file (PATH_METADATA, METHOD_METADATA, watermarks).",
+      "groundTruth": [
+        "packages/common/decorators/core/controller.decorator.ts",
+        "packages/common/decorators/core/injectable.decorator.ts",
+        "packages/common/decorators/http/request-mapping.decorator.ts",
+        "packages/common/constants.ts"
+      ]
+    },
+    {
+      "id": "add_transport_task",
+      "category": "task",
+      "question": "I want to contribute a new microservices transport to this repo (say, for ZeroMQ). Which directories and files do I create or touch, and what existing code should I use as a template?",
+      "criteria": "Identifies both halves: a server implementation in packages/microservices/server/ (new server-zeromq.ts extending Server from server.ts, mimicking server-mqtt.ts) registered in server-factory.ts, and a client proxy in packages/microservices/client/ (extending ClientProxy from client-proxy.ts, mimicking client-mqtt.ts) registered in client-proxy-factory.ts. Bonus: names the concrete methods to implement (listen/close/bindEvents; connect/publish/dispatchEvent).",
+      "groundTruth": [
+        "packages/microservices/server/server-mqtt.ts",
+        "packages/microservices/server/server.ts",
+        "packages/microservices/server/server-factory.ts",
+        "packages/microservices/client/client-mqtt.ts",
+        "packages/microservices/client/client-proxy.ts",
+        "packages/microservices/client/client-proxy-factory.ts"
+      ]
+    },
+    {
+      "id": "container_impact",
+      "category": "impact",
+      "question": "What would be affected if I changed the NestContainer / Injector internals in packages/core/injector — which parts of the codebase are the tightest couplings?",
+      "criteria": "Identifies nest-factory.ts (bootstrap constructs both), instance-loader.ts, module-ref.ts (runtime bridge), the router resolution pair (routes-resolver.ts / router-explorer.ts consuming controller instances), and instance-wrapper.ts as the most-imported injector primitive. Bonus: cross-package couplings — packages/microservices (microservices-module, listeners-controller) and packages/websockets/socket-module.ts import NestContainer directly. Conveys scale (dozens of importers), not just one file.",
+      "groundTruth": [
+        "packages/core/nest-factory.ts",
+        "packages/core/injector/instance-loader.ts",
+        "packages/core/injector/module-ref.ts",
+        "packages/core/router/router-explorer.ts",
+        "packages/core/injector/instance-wrapper.ts"
+      ]
+    },
+    {
+      "id": "repl_arch",
+      "category": "architecture",
+      "question": "How does the NestJS REPL work under the hood — what does it start, and how does it get access to the application's providers?",
+      "criteria": "Explains that repl() (packages/core/repl/repl.ts) starts no server — it creates a headless application context via NestFactory.createApplicationContext, then ReplContext (packages/core/repl/repl-context.ts) reaches into the app's private container field and walks container.getModules() to introspect providers/controllers. Bonus: native commands registered via repl-native-commands.ts / native-functions/.",
+      "groundTruth": [
+        "packages/core/repl/repl.ts",
+        "packages/core/repl/repl-context.ts",
+        "packages/core/repl/repl-native-commands.ts"
+      ]
+    }
+  ]
+}

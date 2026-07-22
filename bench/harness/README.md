@@ -78,10 +78,35 @@ Ground truth must be authored by someone who actually knows the repo — explore
 it first, don't guess. Aim for 4–8 questions covering all four categories.
 Clones are pinned to `commit` and cached in `.clones/` (gitignored).
 
-**Target suite** (per the roadmap): small ~150 files, medium ~800, large 2500+
-monorepo, one non-web language, plus `mason-self`. `mason-self` numbers are for
-smoke tests and dogfooding only — never publish them (the authors wrote the
-repo, the map, and the questions).
+**Current suite** (all pinned, exploration-verified ground truth):
+
+| config | repo | walked files | snapshot build (sonnet, 2026-07) |
+|---|---|---|---|
+| `mason-self` | this repo | ~40 | $0.80 / 142s — smoke only, never publish |
+| `hono` | honojs/hono | 186 | $3.22 / 380s |
+| `vue-core` | vuejs/core | 483 | $5.63 / 766s |
+| `nest` | nestjs/nest | 1676 (incl. sample/integration noise) | $19.52 / 1668s |
+
+Build cost scales linearly at roughly **$1.2 per 100 files**. Still missing: a
+non-web language target.
+
+**Findings so far** (sonnet, 2026-07; publish losses too):
+- Code-derivable Q&A is saturated: quality is parity on all three repos
+  (hono 8.8/8.7, vue-core 8.7/8.8, nest 8.8/8.5 baseline/mason — nest is a
+  mason *loss*, partly a rubric-overspecificity artifact on the template
+  choice). Mason wins first-action precision/recall on vue-core, loses both
+  slightly on nest.
+- The separation is on non-code-derivable knowledge: decision-backed tasks
+  went 9.0 (mason) vs 7.0 (baseline) — the baseline missed the recorded
+  constraint entirely in 1 of 2 questions and needed 3× the turns when it
+  found it.
+- Stale-map scenario: the mason arm consulted a deliberately stale map,
+  received the drift flag + changed-file previews, verified against source,
+  and answered current-code truth — the poisoning failure mode did not occur.
+- Adoption requires the CLAUDE.md section (salience hierarchy: project
+  instructions > tool descriptions > tool availability). The setup playbook
+  now installs the section itself, including in fully autonomous headless
+  inits.
 
 ## Stale-map scenario
 
