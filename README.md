@@ -223,7 +223,7 @@ jobs:
     secrets: inherit
 ```
 
-Omit `agent-command` for detect-only mode: no agent, no credentials — the job fails when the context files have drifted, which is a reasonable default for repos that want the signal before the automation. Note: PRs created with the default `GITHUB_TOKEN` don't trigger the repo's own CI; run your agent with PAT-backed auth if you need that.
+Omit `agent-command` for detect-only mode: no agent, no credentials — the job fails when the context files have drifted, which is a reasonable default for repos that want the signal before the automation. Two GitHub notes: the repo setting **"Allow GitHub Actions to create and approve pull requests"** (Settings → Actions → General) must be enabled for the PR step, and PRs created with the default `GITHUB_TOKEN` don't trigger the repo's own CI — run your agent with PAT-backed auth if you need that.
 
 ## Confluence sync
 

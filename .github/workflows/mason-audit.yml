@@ -18,6 +18,11 @@
 #           claude -p "$MASON_AUDIT_PROMPT" --allowedTools "Read,Grep,Glob,Edit"
 #       secrets: inherit
 #
+# Repo setting required: "Allow GitHub Actions to create and approve pull
+# requests" (Settings → Actions → General → Workflow permissions), or:
+#   gh api -X PUT repos/{owner}/{repo}/actions/permissions/workflow \
+#     -f default_workflow_permissions=write -F can_approve_pull_request_reviews=true
+#
 # Known limitation: PRs created with the default GITHUB_TOKEN do not trigger
 # the target repo's own CI on the PR. If you need that, run your agent with a
 # PAT-backed gh auth instead.
