@@ -9,7 +9,8 @@
     "mason-mcp": "dist/mason-mcp.js",
     "mason-context": "dist/mason-mcp.js",
     "mason-drift": "dist/mason-drift.js",
-    "mason-audit": "dist/mason-audit.js"
+    "mason-audit": "dist/mason-audit.js",
+    "mason-hook": "dist/mason-hook.js"
   },
   "scripts": {
     "build": "tsup",

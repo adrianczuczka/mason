@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "mason-hook-failures-are-always-silent-exit-0",
+  "title": "mason-hook failures are always silent exit 0",
+  "body": "The hook runs inside other people's Claude Code sessions on every Read/Edit/Write. Any nonzero exit, stderr noise, or malformed stdout would disrupt sessions repo-wide, so every failure path (malformed stdin, missing store, state-file write errors, unexpected exceptions) must resolve to exit 0 with no output. Never add a failure mode that surfaces to the session; log nothing. Also keep the hook fast (~100ms budget): no fast-glob sweeps, no co-change computation, no network.",
+  "category": "convention",
+  "files": [
+    "src/hook/hook.ts",
+    "src/hook/cli.ts",
+    "bin/mason-hook.ts"
+  ],
+  "createdAt": "2026-08-21T13:10:00.000Z",
+  "updatedAt": "2026-08-21T13:10:00.000Z",
+  "refreshedHash": "4baa7f750fe0d98575180bd1b82698fa0fef9a16",
+  "status": "active"
+}

@@ -7,6 +7,7 @@ export default defineConfig({
     "bin/mason-mcp.ts",
     "bin/mason-drift.ts",
     "bin/mason-audit.ts",
+    "bin/mason-hook.ts",
   ],
   format: ["esm"],
   target: "node20",

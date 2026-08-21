@@ -14,6 +14,7 @@ Mason is MCP-only (since v0.4.0). Entry points:
 - **MCP Server** (`bin/mason-mcp.ts` → `src/mcp/server.ts`) — tool server for AI assistants; all functionality lives here
 - **mason-drift** (`bin/mason-drift.ts` → `src/drift/cli.ts`) — headless CI staleness check for the concept map (exit 0 fresh / 1 stale / 2 error); read-only and LLM-free
 - **mason-audit** (`bin/mason-audit.ts` → `src/audit/cli.ts`) — headless CI audit of the repo's AI context files (CLAUDE.md, .claude/CLAUDE.md, AGENTS.md) against repo reality (exit 0 clean / 1 issues / 2 error); read-only, LLM-free, and works on repos with no Mason setup
+- **mason-hook** (`bin/mason-hook.ts` → `src/hook/cli.ts`) — Claude Code PostToolUse hook: injects decision records anchored to the file a session just read or edited; deterministic, per-session deduped, silent on no match (this repo dogfoods it via `.claude/settings.json`)
 - **mason** (`bin/mason.ts`) — deprecation shim that prints a migration message
 
 ### Core Modules
@@ -34,6 +35,9 @@ src/
 ├── drift/
 │   ├── drift.ts        # computeDrift — per-entry staleness vs git HEAD
 │   └── cli.ts          # mason-drift CLI (arg parsing, summary, exit codes)
+├── hook/
+│   ├── hook.ts         # Decision injection on file touch (PostToolUse)
+│   └── cli.ts          # mason-hook CLI (stdin JSON → hook output JSON)
 ├── impact/
 │   └── impact.ts       # Change impact: co-change, references, related tests
 ├── llm/

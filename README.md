@@ -225,6 +225,18 @@ jobs:
 
 Omit `agent-command` for detect-only mode: no agent, no credentials — the job fails when the context files have drifted, which is a reasonable default for repos that want the signal before the automation. Two GitHub notes: the repo setting **"Allow GitHub Actions to create and approve pull requests"** (Settings → Actions → General) must be enabled for the PR step, and PRs created with the default `GITHUB_TOKEN` don't trigger the repo's own CI — run your agent with PAT-backed auth if you need that.
 
+## Decision injection (mason-hook)
+
+Recorded knowledge only helps if it shows up. Retrieval tools depend on the model deciding to call them — and it often doesn't. `mason-hook` removes the gamble: it's a Claude Code `PostToolUse` hook that fires when a session reads or edits a file, looks up the decision records anchored to that file (exact path or directory prefix), and injects them into the model's context. Deterministic lookup, no LLM call, ~100ms, silent when nothing matches. Each decision is injected at most once per session, and records whose anchors drifted since verification carry a verify-before-relying marker.
+
+```bash
+npx -p mason-context mason-hook --print-config   # the settings block to add
+```
+
+Add the printed block to `.claude/settings.json` — the *committed* project settings, so every teammate's sessions get the same rail. The loop this closes: someone records a constraint once with `save_decision` ("this screen has a v1 and v2 — new work goes in v2 behind flag X"), and from then on any session that touches those files gets told, whether or not it thought to ask.
+
+For faster fires than `npx` resolution allows, install the package (`npm i -D mason-context`) and point the command at `node_modules/.bin/mason-hook`.
+
 ## Confluence sync
 
 Keep a Confluence wiki in sync with the concept map, in plain product language that PMs and designers can read. Each sync rewrites the snapshot through your assistant into PM-friendly descriptions, pushes one page per feature, and posts a "what changed since last sync" entry to a changelog page. Mason owns these pages and overwrites each one on every sync, so edit the code, not the page — manual edits to a page body are replaced. Re-running a sync with no code change is a no-op: it makes no Confluence edits at all.

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/dist/mason-hook.js\" ] && node \"$CLAUDE_PROJECT_DIR/dist/mason-hook.js\" || exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
