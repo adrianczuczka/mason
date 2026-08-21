@@ -12,7 +12,8 @@ Mason is a context engineering MCP server that maintains a persistent feature-to
 
 Mason is MCP-only (since v0.4.0). Entry points:
 - **MCP Server** (`bin/mason-mcp.ts` → `src/mcp/server.ts`) — tool server for AI assistants; all functionality lives here
-- **mason-drift** (`bin/mason-drift.ts` → `src/drift/cli.ts`) — headless CI staleness check (exit 0 fresh / 1 stale / 2 error); the only standalone binary, read-only and LLM-free
+- **mason-drift** (`bin/mason-drift.ts` → `src/drift/cli.ts`) — headless CI staleness check for the concept map (exit 0 fresh / 1 stale / 2 error); read-only and LLM-free
+- **mason-audit** (`bin/mason-audit.ts` → `src/audit/cli.ts`) — headless CI audit of the repo's AI context files (CLAUDE.md, .claude/CLAUDE.md, AGENTS.md) against repo reality (exit 0 clean / 1 issues / 2 error); read-only, LLM-free, and works on repos with no Mason setup
 - **mason** (`bin/mason.ts`) — deprecation shim that prints a migration message
 
 ### Core Modules
@@ -22,6 +23,13 @@ src/
 ├── analyzers/          # Pluggable analyzers (git-history)
 │   ├── index.ts        # Runner — executes all analyzers
 │   └── git-history.ts  # Commit conventions, hot files, stale dirs
+├── audit/              # mason-audit: context-file audit engine
+│   ├── audit.ts        # computeAudit orchestrator
+│   ├── claims.ts       # Markdown claim extraction (paths, counts, commands)
+│   ├── tree.ts         # ASCII directory-tree reconstruction
+│   ├── docs.ts         # Context-file discovery + git metadata
+│   ├── cli.ts          # mason-audit CLI (summary, --json, --fix-prompt)
+│   └── checks/         # One check per file + registry (issues vs advisories)
 ├── confluence/         # Confluence wiki sync (client, renderer, diff, sync)
 ├── drift/
 │   ├── drift.ts        # computeDrift — per-entry staleness vs git HEAD
@@ -43,8 +51,7 @@ src/
 ├── test-map.ts         # Test-to-source pairing by naming convention
 ├── types.ts            # Shared interfaces
 └── utils/
-    ├── git.ts          # Git repo detection
-    └── logger.ts       # Debug/info/warn logging
+    └── git.ts          # Git repo detection
 ```
 
 ## Development Commands
@@ -69,6 +76,7 @@ npm run test:watch     # Run tests in watch mode
 - Test fixtures in `test/fixtures/` — multi-language sample projects (Go, Python, Kotlin, React, Rust, Swift) used to test Mason's analysis capabilities
 - Test files map directly to source: `test/drift.test.ts` → `src/drift/drift.ts`
 - Tests use temp directories for git operations (create repos, make commits, verify analysis)
+- Benchmarks live in `bench/` — `bench/harness/` drives real headless claude sessions in baseline-vs-mason arms (superseded older deepeval harness sits in `bench/tests/`)
 
 ## Concept-Map Lifecycle (key patterns)
 

@@ -62,14 +62,14 @@ export async function exportToConfluence(
   const confluence = config.confluence;
   if (!confluence) {
     throw new Error(
-      'No Confluence credentials configured. Run "mason set-confluence" first.'
+      "No Confluence credentials configured. Ask your assistant to call mason_set_confluence first."
     );
   }
 
   const snapshot = await loadSnapshot(rootDir);
   if (!snapshot) {
     throw new Error(
-      'No snapshot found. Run "mason snapshot" first to build the concept map.'
+      "No snapshot found. Build the concept map first (ask your assistant to run mason_init and follow the playbook)."
     );
   }
 

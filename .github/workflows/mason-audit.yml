@@ -1,0 +1,172 @@
+# Reusable workflow: keep the repo's AI context files true.
+#
+# Detection is deterministic and free (mason-audit, no LLM). The fix is
+# provider-agnostic: pass any agent CLI invocation as `agent-command` — the
+# work order is exposed as $MASON_AUDIT_PROMPT and needs no MCP server or
+# Mason setup on the target repo. The agent's edits land as a small PR that
+# cites the evidence; nothing is ever committed to the audited branch.
+# Without an agent-command the job is a pure detector and fails when the
+# context files have drifted.
+#
+# Caller example:
+#   permissions: { contents: write, pull-requests: write }
+#   jobs:
+#     audit:
+#       uses: adrianczuczka/mason/.github/workflows/mason-audit.yml@main
+#       with:
+#         agent-command: >-
+#           claude -p "$MASON_AUDIT_PROMPT" --allowedTools "Read,Grep,Glob,Edit"
+#       secrets: inherit
+#
+# Known limitation: PRs created with the default GITHUB_TOKEN do not trigger
+# the target repo's own CI on the PR. If you need that, run your agent with a
+# PAT-backed gh auth instead.
+
+name: Mason context audit
+
+on:
+  workflow_call:
+    inputs:
+      agent-command:
+        description: >-
+          Shell command that runs your coding agent on the audit work order
+          ($MASON_AUDIT_PROMPT). Empty = detect-only, fail when issues exist.
+        type: string
+        default: ""
+      branch-name:
+        description: Head branch for the fix PR. A fixed name keeps runs idempotent.
+        type: string
+        default: "mason/context-audit"
+      pr-title:
+        type: string
+        default: "docs: fix stale context-file claims"
+      base-branch:
+        description: Base branch for the PR. Empty = the branch this run is on.
+        type: string
+        default: ""
+      checks:
+        description: >-
+          Comma-separated subset passed to --checks (e.g.
+          "deleted-reference,stale-count,dead-command" for certain-class only).
+          Empty = all checks.
+        type: string
+        default: ""
+      fetch-depth:
+        description: >-
+          Checkout depth. The evidence (deleting commits, rename detection,
+          doc-vs-manifest ranges) needs history; 0 (full) is the safe default.
+        type: number
+        default: 0
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AUDIT_CHECKS: ${{ inputs.checks != '' && format('--checks {0}', inputs.checks) || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+          ref: ${{ inputs.base-branch != '' && inputs.base-branch || (github.head_ref || github.ref_name) }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Audit context files
+        id: audit
+        run: |
+          set +e
+          npx -y -p mason-context mason-audit --dir . $AUDIT_CHECKS
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then exit 2; fi
+          echo "issues=$([ "$code" -eq 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          # Snapshot the evidence BEFORE the fix — by construction the issues
+          # are gone afterwards, and the PR body must cite what was found.
+          npx -y -p mason-context mason-audit --dir . --json $AUDIT_CHECKS > "$RUNNER_TEMP/audit.json" || true
+
+      - name: Skip when an audit PR is already open
+        id: gate
+        if: steps.audit.outputs.issues == 'true' && inputs.agent-command != ''
+        run: |
+          open=$(gh pr list --head "${{ inputs.branch-name }}" --state open --json number --jq length)
+          if [ "$open" -gt 0 ]; then
+            echo "An audit PR from ${{ inputs.branch-name }} is already open — nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fix the flagged claims with the configured agent
+        if: steps.audit.outputs.issues == 'true' && steps.gate.outputs.skip == 'false' && inputs.agent-command != ''
+        run: |
+          export MASON_AUDIT_PROMPT="$(npx -y -p mason-context mason-audit --dir . --fix-prompt $AUDIT_CHECKS || true)"
+          ${{ inputs.agent-command }}
+
+      - name: Verify the fix closed the loop
+        if: steps.audit.outputs.issues == 'true' && steps.gate.outputs.skip == 'false' && inputs.agent-command != ''
+        run: |
+          # The loop only counts as closed if the audit is clean now.
+          npx -y -p mason-context mason-audit --dir . $AUDIT_CHECKS
+          # Guard: the agent may touch ONLY the context files.
+          non_doc=$(git status --porcelain | awk '{print $2}' \
+            | grep -v -x -e 'CLAUDE.md' -e '.claude/CLAUDE.md' -e 'AGENTS.md' || true)
+          if [ -n "$non_doc" ]; then
+            echo "Agent modified non-doc files:"
+            echo "$non_doc"
+            exit 1
+          fi
+
+      - name: Open the fix PR
+        if: steps.audit.outputs.issues == 'true' && steps.gate.outputs.skip == 'false' && inputs.agent-command != ''
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Agent made no edits — nothing to open a PR for."
+            exit 1
+          fi
+          base="${{ inputs.base-branch != '' && inputs.base-branch || (github.head_ref || github.ref_name) }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "${{ inputs.branch-name }}"
+          for doc in CLAUDE.md .claude/CLAUDE.md AGENTS.md; do
+            [ -f "$doc" ] && git add "$doc"
+          done
+          git commit -m "${{ inputs.pr-title }}"
+          # Safe: this path only runs when no open PR exists for the branch,
+          # so a stale branch from a merged/closed PR is fine to overwrite.
+          git push -f origin "${{ inputs.branch-name }}"
+          {
+            echo "\`mason-audit\` found provably stale claims in this repo's AI context files. This PR fixes only those claims; diffs are minimal, nothing else was touched."
+            echo ""
+            echo "## Fixed"
+            jq -r '.issues[] | "- **\(.anchor.doc)\(if .anchor.line then ":\(.anchor.line)" else "" end)** – \(.message) _(\(.type), \(.confidence))_"' "$RUNNER_TEMP/audit.json"
+            echo ""
+            advisories=$(jq -r '.advisories | length' "$RUNNER_TEMP/audit.json")
+            if [ "$advisories" -gt 0 ]; then
+              echo "## Advisories (not changed by this PR – for human review)"
+              jq -r '.advisories[] | "- \(.message)"' "$RUNNER_TEMP/audit.json"
+              echo ""
+            fi
+            echo "<details><summary>Full audit report</summary>"
+            echo ""
+            echo '```json'
+            cat "$RUNNER_TEMP/audit.json"
+            echo '```'
+            echo "</details>"
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create \
+            --title "${{ inputs.pr-title }}" \
+            --body-file "$RUNNER_TEMP/body.md" \
+            --head "${{ inputs.branch-name }}" \
+            --base "$base"
+
+      - name: Fail when drifted in detect-only mode
+        if: steps.audit.outputs.issues == 'true' && inputs.agent-command == ''
+        run: |
+          echo "Context files have drifted from the code. Pass an agent-command to fix automatically, or run: npx -y -p mason-context mason-audit --dir ."
+          exit 1

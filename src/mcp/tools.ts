@@ -186,7 +186,7 @@ export async function getCodeSamples(
   const samples = await sampleFiles(rootDir, count);
 
   const output = {
-    note: "These are previews (first ~60 lines). Use get_file_content to read the full file if needed.",
+    note: "These are previews (first ~60 lines). Read the file directly with your own tools to see it in full.",
     files: samples.map((s) => ({
       path: s.path,
       reason: s.reason,
@@ -344,7 +344,7 @@ export async function getSnapshot(dir: string): Promise<string> {
   if (!snapshot) {
     return JSON.stringify({
       exists: false,
-      hint: "Project is initialized but no concept map exists yet. Call generate_snapshot, then save_snapshot.",
+      hint: "Project is initialized but no concept map exists yet. Run mason_init for the setup playbook (generate_snapshot_batch → save_partial_snapshot per batch, then reduce_snapshot and save_snapshot).",
     });
   }
 
@@ -709,7 +709,7 @@ export async function fullAnalysis(dir: string): Promise<string> {
   ]);
 
   const output: Record<string, unknown> = {
-    note: "Full project analysis. Code samples are previews (~60 lines). Use get_file_content to read any file in full.",
+    note: "Full project analysis. Code samples are previews (~60 lines). Read files directly with your own tools to see them in full.",
     analysis: JSON.parse(analysis),
     structure: JSON.parse(structure),
     codeSamples: JSON.parse(samples),
@@ -723,7 +723,7 @@ export async function fullAnalysis(dir: string): Promise<string> {
       flows: snapshot.flows,
     };
     output.note =
-      "Full project analysis with concept map. The concept map shows which files implement each feature and how data flows through them. Use it to jump straight to relevant files instead of exploring. Use get_file_content to read specific files.";
+      "Full project analysis with concept map. The concept map shows which files implement each feature and how data flows through them. Use it to jump straight to relevant files instead of exploring, then read them directly with your own tools.";
   }
 
   return JSON.stringify(output, null, 2);

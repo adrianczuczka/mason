@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # mason-audit's evidence (deleting commits, doc-vs-manifest ranges)
+          # needs real history.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -18,6 +22,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      # Dogfood: CI fails when Mason's own context files rot.
+      - name: Self-audit context files
+        run: node dist/mason-audit.js --dir .
 
   docker:
     runs-on: ubuntu-latest
