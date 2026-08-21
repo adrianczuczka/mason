@@ -8,7 +8,8 @@
     "mason": "dist/mason.js",
     "mason-mcp": "dist/mason-mcp.js",
     "mason-context": "dist/mason-mcp.js",
-    "mason-drift": "dist/mason-drift.js"
+    "mason-drift": "dist/mason-drift.js",
+    "mason-audit": "dist/mason-audit.js"
   },
   "scripts": {
     "build": "tsup",

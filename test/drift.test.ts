@@ -2,23 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { computeDrift } from "../src/drift/drift.js";
 import type { FeatureEntry, FlowEntry } from "../src/snapshot/snapshot.js";
-
-const exec = promisify(execFile);
-
-async function git(args: string[], cwd: string): Promise<string> {
-  const { stdout } = await exec("git", args, { cwd });
-  return stdout.trim();
-}
-
-async function commitAll(dir: string, message: string): Promise<string> {
-  await git(["add", "."], dir);
-  await git(["commit", "-m", message], dir);
-  return git(["rev-parse", "HEAD"], dir);
-}
+import { git, commitAll } from "./helpers.js";
 
 async function writeSnapshot(
   dir: string,

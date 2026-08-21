@@ -114,9 +114,9 @@ export async function getCurrentGitHash(rootDir: string): Promise<string> {
   }
 }
 
-const SOURCE_GLOB =
+export const SOURCE_GLOB =
   "**/*.{ts,tsx,js,jsx,kt,kts,java,py,go,rs,swift,rb,cs,cpp,c,dart}";
-const SOURCE_IGNORE = [
+export const SOURCE_IGNORE = [
   "**/node_modules/**", "**/dist/**", "**/build/**", "**/.gradle/**",
   "**/target/**", "**/.git/**", "**/vendor/**", "**/__pycache__/**",
   "**/venv/**", "**/.venv/**", "**/*.min.*", "**/*.map",
