@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "mason-audit-output-is-a-ci-contract-extend-additively-only",
+  "title": "mason-audit output is a CI contract – extend additively only",
+  "body": "External CI pipelines and the mason-audit.yml workflow consume the 0/1/2 exit codes and the --json AuditReport shape (version: 1). Issues drive exit 1; advisories NEVER affect the exit code – an advisory that gated exit codes would deadlock the workflow's verify step, because advisories can't be closed by editing the doc. Any new check must declare itself issue-class or advisory-class up front; new report fields must be optional keys; exit-code semantics never change. Same pattern as mason-drift.",
+  "category": "convention",
+  "files": [
+    "src/audit/cli.ts",
+    "src/audit/types.ts",
+    ".github/workflows/mason-audit.yml"
+  ],
+  "createdAt": "2026-08-21T10:10:00.000Z",
+  "updatedAt": "2026-08-21T10:10:00.000Z",
+  "refreshedHash": "33f37087075fd11cf9b5c11dec0d34ba0bdb5fb3",
+  "status": "active"
+}

@@ -1,6 +1,6 @@
 {
   "name": "mason-context",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "MCP server for codebase context engineering — feature-to-file concept maps, change impact, and Confluence wiki sync for AI coding assistants",
   "type": "module",
   "mcpName": "com.adrianczuczka/mason",

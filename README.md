@@ -138,7 +138,7 @@ When a lot of files drifted at once, the assistant runs a **scoped refresh** ins
 
 ### Drift checks in CI
 
-Because the check is deterministic, it also ships as a tiny standalone binary — the one exception to "MCP-only", read-only and LLM-free:
+Because the check is deterministic, it also ships as a tiny standalone binary — read-only and LLM-free:
 
 ```bash
 npx -p mason-context mason-drift --dir .          # exit 0 fresh · 1 stale · 2 error
@@ -179,6 +179,51 @@ jobs:
 ```
 
 Omit `agent-command` for detect-only mode: free, no credentials, fails the check when the map goes stale.
+
+## Context-file audit
+
+Your repo's AI context files — `CLAUDE.md`, `AGENTS.md` — are read by every agent on every task, and nobody owns them. Each merge makes them a little more wrong, and agents act on what they read: a stale claim becomes a misinformed edit. `mason-audit` keeps those files true. It finds claims that are provably out of date — deterministically, no LLM, no network — and works on any repo with a context file. No Mason setup required.
+
+```bash
+npx -p mason-context mason-audit --dir .           # exit 0 clean · 1 issues · 2 error
+npx -p mason-context mason-audit --json            # full report as JSON (additive-only schema)
+npx -p mason-context mason-audit --fix-prompt      # issues? print a work order for any agent
+npx -p mason-context mason-audit --checks deleted-reference,stale-count,dead-command
+```
+
+What it checks:
+
+| Check | Flags | Confidence |
+|---|---|---|
+| `deleted-reference` | a referenced path that no longer exists — including paths inside ASCII directory trees; renames resolve to the new path | certain (git history proves it) / likely (never tracked) |
+| `new-module` | a directory with source files that no context file mentions | likely |
+| `stale-count` | "6 packages" vs what the workspace manifest actually resolves to | certain |
+| `dead-command` | `npm run <script>` naming a script no package.json has | certain |
+| `deps-changed` | dependency manifests committed after the doc's last commit | advisory |
+| `decision-anchor-drift` | a decision record whose anchor files changed (only when `.mason/decisions/` exists) | advisory |
+
+Issues drive the exit code; **advisories never do** — they're facts an agent can't close by editing the doc, so they're reported for humans instead. Every issue carries a `doc:line` anchor and git-derived evidence (the deleting commit, the rename target, the actual count and its source). A claim you want left alone — say, a deliberate reference to a removed directory — gets an ignore marker: `<!-- mason:ignore -->` on the line, or `<!-- mason:ignore-start -->` / `<!-- mason:ignore-end -->` around a block.
+
+### The context files maintain themselves
+
+Same split as the concept map: detection is deterministic and free, the fix is any agent you already run. `--fix-prompt` emits a work order scoped to exactly the flagged claims — fix only these, minimal diffs, never invent content, never touch source code. The reusable workflow runs the audit, hands the work order to your agent, verifies the audit is clean afterwards (and that the agent touched nothing but the context files), then opens a PR citing the evidence — it never commits to the audited branch, and it skips cleanly when an audit PR is already open:
+
+```yaml
+name: Context audit
+on:
+  schedule: [{ cron: "0 6 * * 1" }]
+  workflow_dispatch:
+permissions: { contents: write, pull-requests: write }
+jobs:
+  audit:
+    uses: adrianczuczka/mason/.github/workflows/mason-audit.yml@main
+    with:
+      agent-command: >-
+        claude -p "$MASON_AUDIT_PROMPT" --allowedTools "Read,Grep,Glob,Edit"
+    secrets: inherit
+```
+
+Omit `agent-command` for detect-only mode: no agent, no credentials — the job fails when the context files have drifted, which is a reasonable default for repos that want the signal before the automation. Note: PRs created with the default `GITHUB_TOKEN` don't trigger the repo's own CI; run your agent with PAT-backed auth if you need that.
 
 ## Confluence sync
 
