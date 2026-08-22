@@ -8,6 +8,7 @@ export default defineConfig({
     "bin/mason-drift.ts",
     "bin/mason-audit.ts",
     "bin/mason-hook.ts",
+    "bin/mason-review.ts",
   ],
   format: ["esm"],
   target: "node20",

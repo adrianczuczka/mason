@@ -22,7 +22,7 @@ export async function commitAll(dir: string, message: string): Promise<string> {
 }
 
 export async function initGitRepo(dir: string): Promise<void> {
-  await git(["init"], dir);
+  await git(["init", "-b", "main"], dir);
   await git(["config", "user.email", "test@test.com"], dir);
   await git(["config", "user.name", "Test"], dir);
 }
