@@ -73,6 +73,9 @@ export function normalizePathToken(token: string): string | null {
   if (t.includes(":")) return null;
   const normalized = t.replace(/\/+$/, "");
   if (!normalized) return null;
+  // `server/src/test/kotlin/...` — a dots-only segment is an "and so on"
+  // placeholder, not a claim.
+  if (normalized.split("/").some((seg) => /^\.+$/.test(seg))) return null;
   if (normalized.includes("/")) return normalized;
   return ROOT_FILE_NAMES.has(normalized) ? normalized : null;
 }

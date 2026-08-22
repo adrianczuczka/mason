@@ -24,6 +24,8 @@ describe("normalizePathToken", () => {
     expect(normalizePathToken("/absolute/path")).toBeNull();
     expect(normalizePathToken("~/home/path")).toBeNull();
     expect(normalizePathToken("C:\\windows\\path")).toBeNull();
+    expect(normalizePathToken("server/src/test/kotlin/...")).toBeNull();
+    expect(normalizePathToken("src/.../deep.ts")).toBeNull();
   });
 
   it("accepts bare names only from the root-file allowlist", () => {
