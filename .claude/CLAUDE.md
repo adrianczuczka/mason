@@ -15,6 +15,7 @@ Mason is MCP-only (since v0.4.0). Entry points:
 - **mason-drift** (`bin/mason-drift.ts` → `src/drift/cli.ts`) — headless CI staleness check for the concept map (exit 0 fresh / 1 stale / 2 error); read-only and LLM-free
 - **mason-audit** (`bin/mason-audit.ts` → `src/audit/cli.ts`) — headless CI audit of the repo's AI context files (CLAUDE.md, .claude/CLAUDE.md, AGENTS.md) against repo reality (exit 0 clean / 1 issues / 2 error); read-only, LLM-free, and works on repos with no Mason setup
 - **mason-hook** (`bin/mason-hook.ts` → `src/hook/cli.ts`) — Claude Code PostToolUse hook: injects decision records anchored to the file a session just read or edited; deterministic, per-session deduped, silent on no match (this repo dogfoods it via `.claude/settings.json`)
+- **mason-review** (`bin/mason-review.ts` → `src/review/cli.ts`) — diff review vs a base ref (exit 0 clean / 1 missing co-change partners / 2 error): flags historical co-change partners absent from the diff and lists decision records whose anchors the diff touches
 - **mason** (`bin/mason.ts`) — deprecation shim that prints a migration message
 
 ### Core Modules
@@ -48,6 +49,10 @@ src/
 │   ├── tools.ts        # Tool implementations — the core logic
 │   ├── init.ts         # Init gating + setup playbook
 │   └── sampler.ts      # Smart file selection by architectural role
+├── review/
+│   ├── review.ts       # computeReview: diff vs base, touched decisions
+│   ├── cochange.ts     # Single-pass co-change matrix from git history
+│   └── cli.ts          # mason-review CLI (summary, --json, exit codes)
 ├── snapshot/
 │   ├── snapshot.ts     # Snapshot load/save, batch preparation
 │   ├── partials.ts     # Map-Reduce partials + scoped-refresh scope marker

@@ -237,6 +237,19 @@ Add the printed block to `.claude/settings.json` — the *committed* project set
 
 For faster fires than `npx` resolution allows, install the package (`npm i -D mason-context`) and point the command at `node_modules/.bin/mason-hook`.
 
+## Diff review (mason-review)
+
+A classic agent failure mode is the local edit that misses its coupled update — the serializer without the migration, the config without its consumer. The coupling is invisible to static analysis, but it's sitting in git history. `mason-review` diffs the current branch against a base ref and reports two things:
+
+```bash
+npx -p mason-context mason-review --base origin/main
+```
+
+- **Missing co-change partners** — files that changed together with a changed file in ≥60% of its commits (≥4 shared, 1500-commit window) but are absent from this diff. Evidence-based but heuristic-grade: a missing partner is a question to ask the diff, not proof of a bug. These drive exit 1.
+- **Touched decisions** — decision records whose anchor files the diff touches, listed as constraints to verify against. Informational; never affect the exit code.
+
+Deterministic, no LLM, one pass over git history (~100ms). Run it locally before pushing, or wire it into CI as an advisory check (`mason-review || true` if you want the signal without the gate).
+
 ## Confluence sync
 
 Keep a Confluence wiki in sync with the concept map, in plain product language that PMs and designers can read. Each sync rewrites the snapshot through your assistant into PM-friendly descriptions, pushes one page per feature, and posts a "what changed since last sync" entry to a changelog page. Mason owns these pages and overwrites each one on every sync, so edit the code, not the page — manual edits to a page body are replaced. Re-running a sync with no code change is a no-op: it makes no Confluence edits at all.
