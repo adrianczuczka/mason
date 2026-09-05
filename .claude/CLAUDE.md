@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Mason is a context engineering MCP server that maintains a persistent feature-to-file concept map (`.mason/snapshot.json`) so AI assistants can answer architecture questions without re-exploring the codebase every session. It also exposes change-impact analysis, drift detection, git history aggregation, and Confluence wiki sync.
+Mason is an MCP server for recorded engineering decisions, task context, change impact, and documentation audit/review. These work without initialization or a concept map. An optional feature-to-file map (`.mason/snapshot.json`) adds architecture navigation, with drift detection and verification. Confluence export is configured separately.
 
 **Tech stack:** TypeScript, Node 20+, ESM modules
 **Build:** tsup (bundler), vitest (testing)
@@ -10,12 +10,12 @@ Mason is a context engineering MCP server that maintains a persistent feature-to
 
 ## Architecture
 
-Mason is MCP-only (since v0.4.0). Entry points:
+Mason exposes an MCP server and standalone deterministic CLIs. Entry points:
 - **MCP Server** (`bin/mason-mcp.ts` → `src/mcp/server.ts`) — tool server for AI assistants; all functionality lives here
 - **mason-drift** (`bin/mason-drift.ts` → `src/drift/cli.ts`) — headless CI staleness check for the concept map (exit 0 fresh / 1 stale / 2 error); read-only and LLM-free
 - **mason-audit** (`bin/mason-audit.ts` → `src/audit/cli.ts`) — headless CI audit of the repo's AI context files (CLAUDE.md, .claude/CLAUDE.md, AGENTS.md) against repo reality (exit 0 clean / 1 issues / 2 error); read-only, LLM-free, and works on repos with no Mason setup
 - **mason-hook** (`bin/mason-hook.ts` → `src/hook/cli.ts`) — Claude Code PostToolUse hook: injects decision records anchored to the file a session just read or edited; deterministic, per-session deduped, silent on no match (this repo dogfoods it via `.claude/settings.json`)
-- **mason-review** (`bin/mason-review.ts` → `src/review/cli.ts`) — diff review vs a base ref (exit 0 clean / 1 missing co-change partners / 2 error): flags historical co-change partners absent from the diff and lists decision records whose anchors the diff touches
+- **mason-review** (`bin/mason-review.ts` → `src/review/cli.ts`) — diff review vs a base ref: flags absent historical co-change partners and touched decisions. Optional CI evidence imports preserve outcomes and provenance. Exit 0 no missing partners / 1 missing partners / 2 error; `--require-evidence` additionally gates on current, complete passing checks.
 - **mason** (`bin/mason.ts`) — deprecation shim that prints a migration message
 
 ### Core Modules
@@ -33,6 +33,12 @@ src/
 │   ├── cli.ts          # mason-audit CLI (summary, --json, --fix-prompt)
 │   └── checks/         # One check per file + registry (issues vs advisories)
 ├── confluence/         # Confluence wiki sync (client, renderer, diff, sync)
+├── context/            # Task retrieval + shared freshness/verification trust states
+├── decisions/          # Decision capture, provenance, review, and drift
+│   ├── decisions.ts    # Legacy/v2 store, proposal revisions, serialized writes
+│   ├── provenance.ts   # Validated history, approval, sources, owner, shared guidance
+│   ├── review.ts       # Prepared evidence and authorized verdicts with conflict checks
+│   └── drift.ts        # Committed and local anchor freshness
 ├── drift/
 │   ├── drift.ts        # computeDrift — per-entry staleness vs git HEAD
 │   └── cli.ts          # mason-drift CLI (arg parsing, summary, exit codes)
@@ -47,11 +53,14 @@ src/
 ├── mcp/
 │   ├── server.ts       # MCP tool definitions (Zod schemas)
 │   ├── tools.ts        # Tool implementations — the core logic
-│   ├── init.ts         # Init gating + setup playbook
+│   ├── init.ts         # Quickstart + optional map playbooks
+│   ├── onboarding.ts   # Read-only audit/review summaries and store status
 │   └── sampler.ts      # Smart file selection by architectural role
 ├── review/
 │   ├── review.ts       # computeReview: diff vs base, touched decisions
 │   ├── cochange.ts     # Single-pass co-change matrix from git history
+│   ├── evidence.ts     # Read-only CI imports, freshness, file/decision associations
+│   ├── evidence/       # Vitest JSON and SARIF parsers, report path normalization
 │   └── cli.ts          # mason-review CLI (summary, --json, exit codes)
 ├── snapshot/
 │   ├── snapshot.ts     # Snapshot load/save, batch preparation
@@ -60,7 +69,10 @@ src/
 ├── test-map.ts         # Test-to-source pairing by naming convention
 ├── types.ts            # Shared interfaces
 └── utils/
-    └── git.ts          # Git repo detection
+    ├── git.ts          # Git repo detection
+    ├── files.ts        # Shared Git-aware file selection and bounded reads
+    ├── paths.ts        # Path normalization, containment, and anchor matching
+    └── storage.ts      # Validated metadata paths and atomic JSON replacement
 ```
 
 ## Development Commands
@@ -69,12 +81,14 @@ src/
 npm run build          # Build with tsup
 npm run dev            # Build in watch mode
 npm test               # Run tests (vitest run)
+npm run test:evidence  # Run tests and record artifacts for mason-review
+npm run typecheck      # Check TypeScript without emitting files
 npm run test:watch     # Run tests in watch mode
 ```
 
 ## Code Conventions
 
-- **Conventional commits** required: `type(scope): description` (e.g., `feat(auth): add login endpoint`). 100% of recent commits follow this format.
+- **Conventional commits** required: `type(scope): description` (e.g., `feat(auth): add login endpoint`).
 - **ESM modules** — all imports use `.js` extensions (`import { foo } from "./bar.js"`)
 - **Zod** for runtime validation (MCP tool schemas)
 - **No classes** in most modules — functional style with exported async functions. Exception: analyzers use classes implementing an `Analyzer` interface.
@@ -86,11 +100,16 @@ npm run test:watch     # Run tests in watch mode
 - Test files map directly to source: `test/drift.test.ts` → `src/drift/drift.ts`
 - Tests use temp directories for git operations (create repos, make commits, verify analysis)
 - Benchmarks live in `bench/` — `bench/harness/` drives real headless claude sessions in baseline-vs-mason arms (superseded older deepeval harness sits in `bench/tests/`)
+- `bench/harness/run-patches.mjs` evaluates actual patches using the built-in Claude driver or a custom JSON agent adapter. `bench/harness/patches/` owns controlled tasks, fixtures, held-out grading, and reports. `npm run bench:validate` is offline; live runs use model calls. Never describe reference-patch validation as agent-performance evidence.
+- Repository scripts live in `scripts/`; `scripts/pack-mcpb.mjs` builds the MCP bundle. `scripts/test-evidence.mjs` runs Vitest and records its actual exit status, original commit, and checkout cleanliness before/after execution for CI review. Reports under `.mason/reports/` are ignored.
+- CI evidence uses a version 1 manifest with named expected checks and Vitest JSON or SARIF artifacts. Imports never execute commands or fetch URLs. Missing/invalid reports stay unavailable; stale or dirty/unknown runs never satisfy the optional gate. Imported provenance is an assertion, not authenticated execution. File matches and test pairs associate accepted decisions without asserting a violation. Review JSON stays version 1 with optional additive `evidence`; default exit codes stay unchanged.
 
 ## Concept-Map Lifecycle (key patterns)
 
 - **Map-Reduce build**: `generate_snapshot_batch` walks source files in batches; the assistant writes partials via `save_partial_snapshot`; `reduce_snapshot` returns everything for the assistant to merge; `save_snapshot` persists (replace mode when partials exist, merge mode otherwise).
-- **Drift detection**: `mason_check_drift` / `src/drift/drift.ts` compare the map against HEAD deterministically (git `--name-status -M` diff per distinct verification hash). Each feature/flow may carry a `refreshedHash` — the commit it was last verified against — so partially refreshed maps still report stale entries.
+- **Decision provenance**: new records are version 2 proposals; version 1 stays unreviewed until explicitly revised/reviewed. `review_decision` prepares record and code evidence before acceptance/reaffirmation/retirement. Verdicts require a named reviewer, reason, and matching token; acceptance also needs owner/source and committed anchors. Content changes reset acceptance, unchanged saves never re-verify, and prior revisions/reviews stay in the record history. These are recorded assertions, not authenticated approvals.
+- **Trust**: `src/context/trust.ts` separates freshness (`current`, `changed`, `unknown`) from verification (`unverified`, `passed`, `failed`). Primary readers and hooks must preserve uncertainty and failed verdicts. Unchanged anchors do not prove correctness.
+- **Drift detection**: `mason_check_drift` / `src/drift/drift.ts` compare the map against HEAD deterministically (git `--name-status -M` diff per distinct verification hash). Each feature/flow may carry a `refreshedHash` — the commit it was last verified against — so partially refreshed maps still report stale entries. Commit distance alone does not indicate drift; map-only and unrelated commits stay clean. Working-tree edits are reported separately from committed drift.
 - **Scoped refresh**: `generate_snapshot_batch` with a `files` list walks only the drift set and writes a scope marker (`.mason/partial-snapshots/scope.json`); `reduce_snapshot` then merges partials into the existing map instead of rebuilding.
 - **Incremental save**: `save_snapshot` merge mode accepts `removeFeatures`/`removeFlows` for renamed/deleted features and stamps refreshed entries with HEAD while backfilling untouched entries with the previous hash.
 - **Sampler**: `src/mcp/sampler.ts` selects representative files by role (config, entry point, viewmodel, repository, service, handler, middleware, test). Configurable via project-level `.mason/config.json` with custom sampling patterns.
@@ -101,15 +120,17 @@ npm run test:watch     # Run tests in watch mode
 LLM calls happen only in the Confluence sync rewrite (`src/confluence/rewrite.ts` via `src/llm/providers.ts`); the concept map itself is written by the connected assistant, not by Mason. Providers: claude (API or CLI), openai (API), ollama (CLI), gemini (CLI). Config stored at `~/.mason/config.json`.
 
 <!-- mason:start -->
-## Mason concept map
+## Mason project knowledge
 
-This project has a Mason concept map (`.mason/snapshot.json`) and decision store (`.mason/decisions/`) served over MCP. Use them BEFORE grep, glob, or file reads:
+Mason provides recorded decisions and file impact over MCP. A concept map is optional.
 
-- Task, bug, or change request → `get_context` with the task text: relevant features, files, tests, blast radius, freshness, and decisions in one call.
-- "How does X work / where is Y" → `get_snapshot` first.
-- Before editing any file → `get_impact`.
-- Learned something the code can't tell you (a failed approach, a deprecation, a workaround's reason, a review-settled convention) → record it with `save_decision`. Never record code-derivable facts, session trivia, or secrets.
-- Decisions returned by `get_context` are constraints — follow them; verify any marked stale before relying on it.
+- Task, bug, or change request → `get_context` with the task text and known files: matching decisions, related tests, impact, and any available map entries.
+- Before editing a file → `get_impact` to check references, tests, and historical change partners.
+- Learned something the code cannot explain (a failed approach, an incident's cause, a workaround's reason, a review-settled convention) → `save_decision` with rationale, anchors, and any known owner, sources, and recorder. It creates a proposal immediately without setup or a map. Never invent attribution or record code-derivable facts, session trivia, or secrets.
+- Consult trust metadata before relying on entries: unknown or changed freshness requires inspection, and failed verification means the description must be corrected. Check approval too: proposals are suggestions, legacy records are unreviewed, and accepted decisions are recorded constraints subject to freshness checks.
+- Asked to review or re-verify a decision → `review_decision` first to inspect content, sources, history, and code changes. Record acceptance, reaffirmation, or retirement only when authorized by the user or a cited team review, with the actual reviewer and reason. Never infer approval from unchanged code. Review and commit the local record through the normal project workflow.
+- For an architectural overview, use `get_snapshot` if a map is available. If `map.status` is missing or invalid, use available decisions and source evidence; do not start building a map unless requested.
+- `mason_init` returns documentation audit and committed-diff review results, plus a short setup guide. Pass `evidence` with local CI manifest paths to include test and analysis results; the CLI equivalent is `mason-review --evidence <manifest>`. State skipped, unavailable, stale, or unknown checks explicitly. Related accepted decisions identify review context, not proven violations.
 
-Fall back to manual exploration only for what the map doesn't answer.
+Inspect source for what the retrieved context does not answer.
 <!-- mason:end -->

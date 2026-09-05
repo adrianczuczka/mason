@@ -2,12 +2,19 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import fg from "fast-glob";
 
 const exec = promisify(execFile);
 import { runAll } from "../analyzers/index.js";
 import { isGitRepo } from "../utils/git.js";
-import { sampleFiles, readFullFile } from "./sampler.js";
+import { sampleFiles } from "./sampler.js";
+import { createFileAccess } from "../utils/files.js";
+import { readStoreJson, writeStoreJson } from "../utils/storage.js";
+import { sanitizeRepoPaths } from "../utils/paths.js";
+import { assessTrust, trustHint, type TrustState } from "../context/trust.js";
+import { decisionProvenance, decisionTrust, DECISION_GUIDANCE } from "../decisions/provenance.js";
+import type { UpsertDecisionInput } from "../decisions/decisions.js";
+import { reviewDecision as runDecisionReview, type ReviewDecisionInput } from "../decisions/review.js";
+import { computeDecisionDrift } from "../decisions/drift.js";
 import {
   loadSnapshot,
   saveSnapshot,
@@ -36,31 +43,16 @@ import {
   savePartial,
   saveScope,
 } from "../snapshot/partials.js";
-import type { Snapshot } from "../snapshot/snapshot.js";
+import type { Snapshot, FeatureEntry, FlowEntry } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
 import {
-  isInitialized,
   loadProjectMarker,
   saveProjectMarker,
   setupPlaybook,
-  uninitializedResponse,
   type ProjectMarker,
+  type InitMode,
 } from "./init.js";
-
-const IGNORE = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/.gradle/**",
-  "**/target/**",
-  "**/.git/**",
-  "**/vendor/**",
-  "**/__pycache__/**",
-  "**/venv/**",
-  "**/.venv/**",
-  "**/*.min.*",
-  "**/*.map",
-];
+import { inspectOnboarding } from "./onboarding.js";
 
 async function buildContext(dir: string): Promise<AnalyzerContext> {
   return {
@@ -101,6 +93,7 @@ export async function analyzeProject(dir: string): Promise<string> {
 
 async function detectProjectSnapshot(rootDir: string): Promise<Record<string, unknown>> {
   // Build config files present (what exists, not what's in them)
+  const access = await createFileAccess(rootDir);
   const buildFiles = [
     "package.json", "tsconfig.json",
     "build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle",
@@ -131,11 +124,7 @@ async function detectProjectSnapshot(rootDir: string): Promise<Record<string, un
   ];
   const testInfo: Record<string, number> = {};
   for (const pattern of testDirs) {
-    const files = await fg(`${pattern}/**/*`, {
-      cwd: rootDir,
-      ignore: IGNORE,
-      onlyFiles: true,
-    });
+    const files = await access.list(`${pattern}/**/*`);
     if (files.length > 0) {
       testInfo[pattern] = files.length;
     }
@@ -153,17 +142,14 @@ async function detectProjectSnapshot(rootDir: string): Promise<Record<string, un
     { pattern: "**/*_test.rs", label: "*_test.rs" },
   ];
   for (const { pattern, label } of testFilePatterns) {
-    const files = await fg(pattern, { cwd: rootDir, ignore: IGNORE });
+    const files = await access.list(pattern);
     if (files.length > 0) {
       testInfo[label] = files.length;
     }
   }
 
   // Source file counts by extension
-  const sourceFiles = await fg("**/*.{ts,tsx,js,jsx,kt,kts,java,py,go,rs,swift,rb,cs,cpp,c,dart}", {
-    cwd: rootDir,
-    ignore: IGNORE,
-  });
+  const sourceFiles = await access.list();
   const fileCounts: Record<string, number> = {};
   for (const file of sourceFiles) {
     const ext = path.extname(file).slice(1);
@@ -202,17 +188,8 @@ export async function getCodeSamples(
 const UNINIT_MAX_DIRECTORIES = 40;
 const UNINIT_MAX_TEST_PAIRS = 30;
 
-/**
- * Uninitialized response for READ-path tools. A bare "not initialized" wastes
- * the call — the most common first contact anyone has with Mason. Return the
- * cheap deterministic context inline (structure, git signals, test pairing)
- * so the assistant can act immediately and offer setup afterwards. Write-path
- * tools keep the bare gate (uninitializedResponse).
- */
-async function uninitializedContextResponse(
-  rootDir: string,
-  action: string
-): Promise<string> {
+/** Keep architecture requests useful when the optional map is absent. */
+async function unmappedContextResponse(rootDir: string): Promise<string> {
   const [structureRaw, analyzerResults, testMap] = await Promise.all([
     getProjectStructure(rootDir),
     runAll(await buildContext(rootDir)).catch(() => []),
@@ -238,10 +215,11 @@ async function uninitializedContextResponse(
   );
 
   return JSON.stringify({
-    initialized: false,
+    exists: false,
+    map: { status: "missing" },
     hint:
       `No Mason concept map exists here yet. Use the context below plus your own reads to answer now — ` +
-      `then offer to set Mason up (\`mason_init\` walks the user through ${action}); don't start setup unprompted.`,
+      `get_context, save_decision, and get_impact work without a map. For an optional map, mason_init with mode: "map" provides the generate_snapshot_batch workflow.`,
     structure,
     gitSignals,
     testPairs: testMap?.paired?.slice(0, UNINIT_MAX_TEST_PAIRS) ?? [],
@@ -252,11 +230,7 @@ export async function getProjectStructure(dir: string): Promise<string> {
   const rootDir = path.resolve(dir);
 
   // Get all files
-  const allFiles = await fg("**/*", {
-    cwd: rootDir,
-    ignore: IGNORE,
-    onlyFiles: true,
-  });
+  const allFiles = await (await createFileAccess(rootDir)).list("**/*");
 
   // Build directory summary with file counts and extension breakdown
   const dirInfo = new Map<
@@ -317,10 +291,11 @@ async function buildChangedFilePreviews(
   rootDir: string,
   changedFiles: string[]
 ): Promise<Array<{ path: string; totalLines: number; preview: string }>> {
+  const access = await createFileAccess(rootDir);
   const capped = changedFiles.slice(0, STALE_DIFF_MAX_FILES);
   const previews: Array<{ path: string; totalLines: number; preview: string }> = [];
   for (const filePath of capped) {
-    const full = await readFullFile(rootDir, filePath);
+    const full = await access.read(filePath);
     if (!full) continue;
     const lines = full.content.split("\n");
     previews.push({
@@ -335,17 +310,10 @@ async function buildChangedFilePreviews(
 export async function getSnapshot(dir: string): Promise<string> {
   const rootDir = path.resolve(dir);
 
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedContextResponse(rootDir, "building the concept map");
-  }
-
   const snapshot = await loadSnapshot(rootDir);
 
   if (!snapshot) {
-    return JSON.stringify({
-      exists: false,
-      hint: "Project is initialized but no concept map exists yet. Run mason_init for the setup playbook (generate_snapshot_batch → save_partial_snapshot per batch, then reduce_snapshot and save_snapshot).",
-    });
+    return unmappedContextResponse(rootDir);
   }
 
   // Staleness is per entry, not just top-level — a partially refreshed map
@@ -382,6 +350,7 @@ export async function getSnapshot(dir: string): Promise<string> {
 
   const output: Record<string, unknown> = {
     exists: true,
+    map: { status: "available" },
     updatedAt: snapshot.updatedAt,
     features: compactFeatures,
     flows: compactFlows,
@@ -391,16 +360,27 @@ export async function getSnapshot(dir: string): Promise<string> {
   // Compact decision index — titles only, no bodies (up to 150 × 1.5KB is
   // too heavy for the orientation call). Full text via get_context or the
   // record file itself.
-  const { loadDecisions } = await import("../decisions/decisions.js");
-  const decisionRecords = await loadDecisions(rootDir);
+  const { loadDecisionStore } = await import("../decisions/decisions.js");
+  const store = await loadDecisionStore(rootDir);
+  const decisionRecords = store.records;
+  const decisionDrift = await computeDecisionDrift(rootDir, decisionRecords);
+  const trust: { features: Record<string, TrustState>; flows: Record<string, TrustState>; decisions: Record<string, TrustState> } = {
+    features: Object.fromEntries(Object.entries(snapshot.features).map(([name, entry]) => [name, assessTrust(entry, drift?.featureFreshness?.[name] ?? "unknown")])),
+    flows: Object.fromEntries(Object.entries(snapshot.flows).map(([name, entry]) => [name, assessTrust(entry, drift?.flowFreshness?.[name] ?? "unknown")])),
+    decisions: Object.fromEntries(decisionRecords.filter(d => d.status === "active").map(d => [d.id, decisionTrust(d, decisionDrift.freshness?.[d.id] ?? "unknown")])),
+  };
+  output.trust = trust;
+  output.workingTree = drift?.workingTree;
+  output.diagnostics = store.diagnostics;
   if (decisionRecords.length > 0) {
     const compactDecisions: Record<
       string,
-      { title: string; category: string; files: string[] }
+      { title: string; category: string; files: string[] } & ReturnType<typeof decisionProvenance>
     > = {};
     for (const d of decisionRecords) {
       if (d.status !== "active") continue;
       compactDecisions[d.id] = {
+        ...decisionProvenance(d, decisionDrift.freshness?.[d.id] ?? "unknown"),
         title: d.title,
         category: d.category,
         files: d.files,
@@ -408,11 +388,20 @@ export async function getSnapshot(dir: string): Promise<string> {
     }
     output.decisions = compactDecisions;
     output.decisionsHint =
-      "Recorded team knowledge — get_context returns matching full bodies; records live at .mason/decisions/<id>.json.";
+      DECISION_GUIDANCE + " Full bodies via get_context; full history via review_decision.";
   }
 
   if (isStale && drift) {
     output.hint = driftHint(drift);
+    output.drift = {
+      historyAvailable: drift.historyAvailable,
+      staleFeatures: drift.staleFeatures,
+      staleFlows: drift.staleFlows,
+      unmappedFiles: drift.unmappedFiles,
+      ghostFiles: drift.ghostFiles,
+      renames: drift.renames,
+      recommendation: drift.recommendation,
+    };
     if (drift.historyAvailable && drift.changedFiles.length > 0) {
       const samples = await buildChangedFilePreviews(
         rootDir,
@@ -423,23 +412,16 @@ export async function getSnapshot(dir: string): Promise<string> {
         samples,
         truncated: drift.changedFiles.length > STALE_DIFF_MAX_FILES,
       };
-      output.drift = {
-        staleFeatures: drift.staleFeatures,
-        staleFlows: drift.staleFlows,
-        unmappedFiles: drift.unmappedFiles,
-        ghostFiles: drift.ghostFiles,
-        renames: drift.renames,
-        recommendation: drift.recommendation,
-      };
     }
   }
 
+  output.hint = [output.hint, trustHint([...Object.values(trust.features), ...Object.values(trust.flows), ...Object.values(trust.decisions)]), store.diagnostics.length ? "Some decision records are invalid; consult diagnostics." : ""].filter(Boolean).join(" ");
   return JSON.stringify(output);
 }
 
 function driftHint(report: DriftReport): string {
   if (!report.stale) {
-    return "Snapshot matches HEAD. No action needed.";
+    return "No committed changes affect the map. Consult verification and working-tree evidence before relying on it.";
   }
   if (!report.historyAvailable) {
     return "Snapshot is stale but its commit is unreachable (shallow clone or rewritten history), so per-feature drift cannot be computed. Re-run the Map-Reduce build: generate_snapshot_batch → save_partial_snapshot → reduce_snapshot → save_snapshot.";
@@ -464,20 +446,16 @@ function driftHint(report: DriftReport): string {
 export async function checkDrift(dir: string): Promise<string> {
   const rootDir = path.resolve(dir);
 
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("checking concept-map drift");
-  }
 
   const report = await computeDrift(rootDir);
   if (!report) {
     return JSON.stringify({
       exists: false,
-      hint: "No concept map exists yet. Build one first: generate_snapshot_batch → save_partial_snapshot → reduce_snapshot → save_snapshot.",
+      hint: "No concept map exists to check. Decisions and impact work without one; mason_init with mode: \"map\" provides the optional map workflow.",
     });
   }
 
-  // Additive: correctness state alongside freshness state. Drift proves the
-  // map is current; verification proves it was right to begin with.
+  // Report recorded correctness verdicts alongside freshness evidence.
   const snapshot = await loadSnapshot(rootDir);
   let verification: Record<string, unknown> | undefined;
   let hint = driftHint(report);
@@ -656,6 +634,7 @@ export async function reduceSnapshot(dir: string): Promise<string> {
           description: feat.description,
           files: feat.files,
           ...(feat.tests && feat.tests.length > 0 ? { tests: feat.tests } : {}),
+          type: normalizeFeatureType(feat.type),
         },
       ])
     );
@@ -733,10 +712,7 @@ function sanitizePaths(
   rootDir: string,
   files: string[]
 ): string[] {
-  return files.filter((f) => {
-    const resolved = path.resolve(rootDir, f);
-    return resolved.startsWith(rootDir) && !f.startsWith("/") && !f.includes("..");
-  });
+  return sanitizeRepoPaths(files);
 }
 
 export async function saveSnapshotData(
@@ -779,7 +755,27 @@ export async function saveSnapshotData(
   // Map-Reduce — incremental refresh of one feature — fall back to merge.
   const partials = await loadAllPartials(rootDir);
   const replaceMode = partials.length > 0;
-  const existing = replaceMode ? null : await loadSnapshot(rootDir);
+  const previous = await loadSnapshot(rootDir);
+  const existing = replaceMode ? null : previous;
+  // Copy-through entries must not silently lose a failed verification during
+  // a scoped rebuild. A changed description/path set requires a new verdict.
+  const preserveVerification = (next: FeatureEntry | FlowEntry, old?: FeatureEntry | FlowEntry) => {
+    if (!old) return;
+    const semantic = (entry: FeatureEntry | FlowEntry) => JSON.stringify({
+      description: entry.description,
+      files: "files" in entry ? entry.files : undefined,
+      chain: "chain" in entry ? entry.chain : undefined,
+      tests: "files" in entry ? entry.tests : undefined,
+      type: "files" in entry ? normalizeFeatureType(entry.type) : undefined,
+    });
+    if (semantic(next) !== semantic(old)) return;
+    next.verifiedAt = old.verifiedAt;
+    next.verifiedHash = old.verifiedHash;
+    next.verificationFailed = old.verificationFailed;
+    next.verificationNote = old.verificationNote;
+  };
+  for (const [name, entry] of Object.entries(features)) preserveVerification(entry, previous?.features[name]);
+  for (const [name, entry] of Object.entries(flows)) preserveVerification(entry, previous?.flows[name]);
 
   if (existing) {
     // Entries not re-sent in this call are only verified as of the previous
@@ -850,28 +846,17 @@ export async function configureProject(
   }
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  const configDir = path.join(rootDir, ".mason");
-  const configPath = path.join(configDir, "config.json");
-
-  // Load existing config and merge
-  let existing: Record<string, unknown> = {};
-  try {
-    const raw = await fs.readFile(configPath, "utf-8");
-    existing = JSON.parse(raw);
-  } catch {
-    // No existing config
-  }
+  const existing = (await readStoreJson(rootDir, ".mason/config.json") ?? {}) as Record<string, unknown>;
 
   if (config.patterns) existing.patterns = config.patterns;
   if (config.alwaysInclude) existing.alwaysInclude = config.alwaysInclude;
   if (config.ignore) existing.ignore = config.ignore;
 
-  await fs.mkdir(configDir, { recursive: true });
-  await fs.writeFile(configPath, JSON.stringify(existing, null, 2), "utf-8");
+  await writeStoreJson(rootDir, ".mason/config.json", existing);
 
   return JSON.stringify({
     status: "saved",
-    path: configPath,
+    path: path.join(rootDir, ".mason/config.json"),
     config: existing,
   });
 }
@@ -881,9 +866,6 @@ export async function getImpact(
   files: string[]
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedContextResponse(rootDir, "analyzing change impact");
-  }
   const { analyzeImpact } = await import("../impact/impact.js");
   const result = await analyzeImpact(rootDir, files);
   return JSON.stringify(result, null, 2);
@@ -903,9 +885,6 @@ export async function verifySnapshot(
   sample: number = VERIFY_DEFAULT_SAMPLE
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("verifying the concept map");
-  }
   const snapshot = await loadSnapshot(rootDir);
   if (!snapshot) {
     return JSON.stringify({
@@ -938,12 +917,13 @@ export async function verifySnapshot(
     return a.verifiedAt.localeCompare(b.verifiedAt);
   });
 
+  const access = await createFileAccess(rootDir);
   const picked = entries.slice(0, Math.max(1, sample));
   const toVerify = [];
   for (const entry of picked) {
     const skeletons: Array<{ path: string; content: string } | { path: string; missing: true }> = [];
     for (const filePath of entry.files.slice(0, VERIFY_MAX_FILES_PER_ENTRY)) {
-      const full = await readFullFile(rootDir, filePath);
+      const full = await access.read(filePath);
       if (full) {
         skeletons.push({
           path: full.path,
@@ -980,15 +960,13 @@ export async function saveVerification(
   verdicts: Record<string, { ok: boolean; note?: string }>
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("saving verification verdicts");
-  }
   const snapshot = await loadSnapshot(rootDir);
   if (!snapshot) {
     return JSON.stringify({ exists: false, hint: "No concept map exists." });
   }
 
   const now = new Date().toISOString();
+  const verifiedHash = await getCurrentGitHash(rootDir);
   const stamped: string[] = [];
   const unknown: string[] = [];
   const failed: string[] = [];
@@ -1000,6 +978,7 @@ export async function saveVerification(
       continue;
     }
     entry.verifiedAt = now;
+    entry.verifiedHash = verifiedHash;
     if (verdict.ok) {
       delete entry.verificationFailed;
       delete entry.verificationNote;
@@ -1027,23 +1006,16 @@ export async function saveVerification(
 
 export async function saveDecision(
   dir: string,
-  input: {
-    title: string;
-    body: string;
-    category: "decision" | "gotcha" | "deprecation" | "convention";
-    files?: string[];
-    id?: string;
-    supersedes?: string;
-    force?: boolean;
-  }
+  input: UpsertDecisionInput
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("recording team decisions");
-  }
   const { upsertDecision } = await import("../decisions/decisions.js");
   const result = await upsertDecision(rootDir, input);
   return JSON.stringify(result);
+}
+
+export async function reviewDecision(dir: string, input: ReviewDecisionInput): Promise<string> {
+  return JSON.stringify(await runDecisionReview(path.resolve(dir), input));
 }
 
 export async function getContext(
@@ -1052,44 +1024,26 @@ export async function getContext(
   files?: string[]
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedContextResponse(rootDir, "assembling task context");
-  }
   const { assembleContext } = await import("../context/assemble.js");
   const bundle = await assembleContext(rootDir, task, files);
-  if (!bundle) {
-    return JSON.stringify({
-      exists: false,
-      hint: "No concept map exists yet. Build one first: generate_snapshot_batch → save_partial_snapshot → reduce_snapshot → save_snapshot.",
-    });
-  }
   return JSON.stringify(bundle);
 }
 
 // ===== Init MCP tools =====
 
-export async function masonInit(dir: string): Promise<string> {
+export async function masonInit(dir: string, options: { mode?: InitMode; base?: string; evidence?: string[] } = {}): Promise<string> {
   const rootDir = path.resolve(dir);
   const marker = await loadProjectMarker(rootDir);
-
-  if (marker) {
-    return JSON.stringify(
-      {
-        initialized: true,
-        initializedAt: marker.initializedAt,
-        confluenceConfigured: marker.features?.confluence === true,
-        hint:
-          "This project is already set up for Mason. To refresh the concept map, call generate_snapshot_batch. To (re)configure Confluence, call mason_set_confluence directly.",
-      },
-      null,
-      2
-    );
-  }
-
+  const mode = options.mode ?? "quickstart";
+  const findings = await inspectOnboarding(rootDir, options.base, options.evidence);
   return JSON.stringify(
     {
-      initialized: false,
-      playbook: setupPlaybook(),
+      initialized: marker !== null,
+      ...(marker ? { initializedAt: marker.initializedAt } : {}),
+      confluenceConfigured: marker?.features?.confluence === true,
+      mode,
+      ...findings,
+      playbook: setupPlaybook(mode),
     },
     null,
     2
@@ -1101,11 +1055,13 @@ export async function masonCompleteInit(
   options: { confluenceConfigured?: boolean } = {}
 ): Promise<string> {
   const rootDir = path.resolve(dir);
+  const existing = await loadProjectMarker(rootDir);
   const marker: ProjectMarker = {
     version: 1,
-    initializedAt: new Date().toISOString(),
+    initializedAt: existing?.initializedAt ?? new Date().toISOString(),
     features: {
-      confluence: options.confluenceConfigured ?? false,
+      ...existing?.features,
+      confluence: options.confluenceConfigured ?? existing?.features?.confluence ?? false,
     },
   };
   await saveProjectMarker(rootDir, marker);
@@ -1113,7 +1069,7 @@ export async function masonCompleteInit(
     {
       status: "initialized",
       marker,
-      hint: "Setup complete. Future calls to other Mason tools will work normally.",
+      hint: "Assistant setup recorded. Save decisions as you learn, review and commit them, and retrieve them with get_context. A concept map is optional.",
     },
     null,
     2
@@ -1240,9 +1196,6 @@ export async function exportToConfluenceTool(
   }
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  if (!(await isInitialized(rootDir))) {
-    return uninitializedResponse("syncing to Confluence");
-  }
 
   const { loadConfig } = await import("../llm/config.js");
   const { exportToConfluence } = await import("../confluence/sync.js");
@@ -1252,7 +1205,7 @@ export async function exportToConfluenceTool(
     return JSON.stringify({
       status: "error",
       error:
-        'No Confluence credentials configured. Call mason_set_confluence first (or re-run mason_init and walk through the Confluence section).',
+        'No Confluence credentials configured. Call mason_set_confluence first.',
     });
   }
 

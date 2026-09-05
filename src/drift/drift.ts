@@ -8,6 +8,8 @@ import {
   listSourceFiles,
 } from "../snapshot/snapshot.js";
 import type { Snapshot } from "../snapshot/snapshot.js";
+import type { Freshness } from "../context/trust.js";
+import { matchingPaths } from "../utils/paths.js";
 
 const exec = promisify(execFile);
 
@@ -29,7 +31,18 @@ export interface FileChange {
 
 export type DriftRecommendation = "up-to-date" | "incremental" | "full-rebuild";
 
+export interface WorkingTreeReport {
+  available: boolean;
+  changedFiles: string[];
+  untrackedFiles: string[];
+}
+
 export interface DriftReport {
+  /** Live entry state; committed drift alone continues to drive CLI exit codes. */
+  featureFreshness?: Record<string, Freshness>;
+  flowFreshness?: Record<string, Freshness>;
+  workingTree?: WorkingTreeReport;
+  verification?: { neverVerified: number; failed: string[] };
   stale: boolean;
   snapshotHash: string;
   headHash: string;
@@ -56,53 +69,51 @@ export interface DriftReport {
   recommendation: DriftRecommendation;
 }
 
-export async function getChangesWithStatus(
-  resolvedRoot: string,
-  fromHash: string
-): Promise<FileChange[] | null> {
-  if (!fromHash || fromHash === "unknown") return null;
-  try {
-    const { stdout } = await exec(
-      "git",
-      ["diff", "--name-status", "-M", fromHash, "HEAD"],
-      { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }
-    );
-
-    const changes: FileChange[] = [];
-    for (const line of stdout.split("\n")) {
-      if (!line.trim()) continue;
-      const parts = line.split("\t");
-      // Mason's own metadata changes on every save — never count it as drift.
-      if (parts.some((p) => p.startsWith(".mason/"))) continue;
-      const code = parts[0];
-      if (code.startsWith("R") && parts.length >= 3) {
-        changes.push({
-          status: "renamed",
-          path: parts[2],
-          previousPath: parts[1],
-        });
-      } else if (code.startsWith("C") && parts.length >= 3) {
-        // A copy leaves the original in place — only the new path is a change.
-        changes.push({ status: "added", path: parts[2] });
-      } else if (code === "A" && parts.length >= 2) {
-        changes.push({ status: "added", path: parts[1] });
-      } else if (code === "D" && parts.length >= 2) {
-        changes.push({ status: "deleted", path: parts[1] });
-      } else if (parts.length >= 2) {
-        // M, T (typechange), and anything unrecognized count as modified.
-        changes.push({ status: "modified", path: parts[1] });
-      }
-    }
-    return changes;
-  } catch {
-    return null;
+function parseChanges(output: string): FileChange[] {
+  const fields = output.split("\0");
+  const changes: FileChange[] = [];
+  for (let i = 0; i < fields.length && fields[i];) {
+    const code = fields[i++];
+    const first = fields[i++];
+    if (!first) break;
+    const second = /^[RC]/.test(code) ? fields[i++] : undefined;
+    const change: FileChange = second
+      ? code.startsWith("R") ? { status: "renamed", path: second, previousPath: first } : { status: "added", path: second }
+      : { status: code === "A" ? "added" : code === "D" ? "deleted" : "modified", path: first };
+    if (change.path.startsWith(".mason/") && (!change.previousPath || change.previousPath.startsWith(".mason/"))) continue;
+    changes.push(change);
   }
+  return changes;
+}
+
+export function touchedPaths(changes: FileChange[]): string[] {
+  return [...new Set(changes.flatMap(c => c.previousPath ? [c.previousPath, c.path] : [c.path]))].sort();
+}
+
+export async function getChangesWithStatus(resolvedRoot: string, fromHash: string, toHash = "HEAD"): Promise<FileChange[] | null> {
+  if (!fromHash || fromHash === "unknown" || fromHash.startsWith("-") || !toHash || toHash === "unknown" || toHash.startsWith("-")) return null;
+  try {
+    const { stdout } = await exec("git", ["diff", "--name-status", "-z", "-M", fromHash, toHash, "--"], { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 });
+    return parseChanges(stdout);
+  } catch { return null; }
+}
+
+export async function getWorkingTree(resolvedRoot: string): Promise<WorkingTreeReport> {
+  try {
+    const [diff, untracked] = await Promise.all([
+      exec("git", ["diff", "--name-status", "-z", "-M", "HEAD", "--"], { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }),
+      exec("git", ["ls-files", "-z", "--others", "--exclude-standard"], { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }),
+    ]);
+    const untrackedFiles = untracked.stdout.split("\0").filter(f => f && !f.startsWith(".mason/"));
+    return { available: true, changedFiles: [...new Set([...touchedPaths(parseChanges(diff.stdout)), ...untrackedFiles])].sort(), untrackedFiles };
+  } catch { return { available: false, changedFiles: [], untrackedFiles: [] }; }
 }
 
 async function countCommitsBehind(
   resolvedRoot: string,
   fromHash: string
 ): Promise<number | null> {
+  if (!fromHash || fromHash === "unknown" || fromHash.startsWith("-")) return null;
   try {
     const { stdout } = await exec(
       "git",
@@ -148,140 +159,76 @@ async function findGhostFiles(
  * Fully deterministic — git + filesystem only, no LLM involved.
  * Returns null when no snapshot exists.
  */
-export async function computeDrift(
-  rootDir: string
-): Promise<DriftReport | null> {
-  const resolvedRoot = path.resolve(rootDir);
-  const snapshot = await loadSnapshot(resolvedRoot);
+export async function computeDrift(rootDir: string): Promise<DriftReport | null> {
+  const root = path.resolve(rootDir);
+  const snapshot = await loadSnapshot(root);
   if (!snapshot) return null;
-
-  const headHash = await getCurrentGitHash(resolvedRoot);
-  const totalFeatures = Object.keys(snapshot.features).length;
-  const totalFlows = Object.keys(snapshot.flows).length;
-
-  // Each entry is only verified as of its refreshedHash (falling back to the
-  // top-level gitHash), so drift is evaluated per distinct hash — a partially
-  // refreshed map can be fresh at the top level and still hold stale entries.
-  const hashFor = (entry: { refreshedHash?: string }): string =>
-    entry.refreshedHash ?? snapshot.gitHash;
-
-  const distinctHashes = new Set<string>([snapshot.gitHash]);
-  for (const feature of Object.values(snapshot.features)) {
-    distinctHashes.add(hashFor(feature));
-  }
-  for (const flow of Object.values(snapshot.flows)) {
-    distinctHashes.add(hashFor(flow));
-  }
-  distinctHashes.delete("unknown");
-
-  const staleHashes =
-    headHash === "unknown"
-      ? []
-      : [...distinctHashes].filter((h) => h !== headHash);
-  const stale = staleHashes.length > 0;
-
-  const report: DriftReport = {
-    stale,
-    snapshotHash: snapshot.gitHash,
-    headHash,
-    commitsBehind: stale ? null : 0,
-    historyAvailable: true,
-    changedFiles: [],
-    staleFeatures: {},
-    staleFlows: {},
-    totalFeatures,
-    totalFlows,
-    unmappedFiles: [],
-    ghostFiles: [],
-    renames: [],
-    recommendation: "up-to-date",
-  };
-
-  if (!stale) return report;
-
+  const [headHash, workingTree] = await Promise.all([getCurrentGitHash(root), getWorkingTree(root)]);
+  const hashFor = (entry: { refreshedHash?: string }) => entry.refreshedHash ?? snapshot.gitHash;
+  const entries = [...Object.values(snapshot.features), ...Object.values(snapshot.flows)];
+  const hashes = new Set([snapshot.gitHash, ...entries.map(hashFor)]);
+  const changesByHash = new Map<string, FileChange[] | null>();
+  await Promise.all([...hashes].map(async hash => {
+    changesByHash.set(hash, hash === headHash && headHash !== "unknown" ? [] : await getChangesWithStatus(root, hash));
+  }));
+  const historyAvailable = headHash !== "unknown" && [...changesByHash.values()].every(changes => changes !== null);
   const mappedFiles = collectMappedFiles(snapshot);
-  report.ghostFiles = await findGhostFiles(resolvedRoot, mappedFiles);
+  const report: DriftReport = {
+    stale: !historyAvailable,
+    snapshotHash: snapshot.gitHash, headHash,
+    commitsBehind: 0, historyAvailable,
+    changedFiles: [], staleFeatures: {}, staleFlows: {},
+    totalFeatures: Object.keys(snapshot.features).length,
+    totalFlows: Object.keys(snapshot.flows).length,
+    unmappedFiles: [], ghostFiles: await findGhostFiles(root, mappedFiles), renames: [],
+    recommendation: historyAvailable ? "up-to-date" : "full-rebuild",
+    featureFreshness: {}, flowFreshness: {}, workingTree,
+    verification: {
+      neverVerified: entries.filter(e => !e.verifiedAt).length,
+      failed: [...Object.entries(snapshot.features), ...Object.entries(snapshot.flows)].filter(([, e]) => e.verificationFailed).map(([name]) => name),
+    },
+  };
+  const counts = await Promise.all([...hashes].map(hash => hash === headHash ? 0 : countCommitsBehind(root, hash)));
+  const knownCounts = counts.filter((n): n is number => n !== null);
+  report.commitsBehind = knownCounts.length ? Math.max(...knownCounts) : null;
 
-  const changesByHash = new Map<string, FileChange[]>();
-  const touchedByHash = new Map<string, Set<string>>();
-  for (const hash of staleHashes) {
-    const changes = await getChangesWithStatus(resolvedRoot, hash);
-    if (changes === null) {
-      // One unreachable base commit is enough to make per-entry drift
-      // uncomputable — we know the map is stale but not how.
-      report.historyAvailable = false;
-      report.recommendation = "full-rebuild";
-      return report;
-    }
-    changesByHash.set(hash, changes);
-    // Every path a change touches, old and new — an entry referencing either
-    // side of a rename is stale.
-    const touched = new Set<string>();
-    for (const change of changes) {
-      touched.add(change.path);
-      if (change.previousPath) touched.add(change.previousPath);
-    }
-    touchedByHash.set(hash, touched);
-  }
-
-  // The oldest verification state in the map is the honest answer to "how
-  // far behind is this snapshot".
-  const commitCounts = await Promise.all(
-    staleHashes.map((hash) => countCommitsBehind(resolvedRoot, hash))
-  );
-  const validCounts = commitCounts.filter((c): c is number => c !== null);
-  report.commitsBehind =
-    validCounts.length > 0 ? Math.max(...validCounts) : null;
-
-  const emptySet = new Set<string>();
-  const touchedFor = (entry: { refreshedHash?: string }): Set<string> =>
-    touchedByHash.get(hashFor(entry)) ?? emptySet;
-
+  const check = (name: string, files: string[], hash: string, staleEntries: Record<string, string[]>, freshness: Record<string, Freshness>) => {
+    const changes = changesByHash.get(hash);
+    const committedHits = changes ? matchingPaths(files, touchedPaths(changes)) : [];
+    if (committedHits.length) staleEntries[name] = committedHits;
+    const localHits = matchingPaths(files, workingTree.changedFiles);
+    freshness[name] = files.length === 0 || changes === null || changes === undefined || !workingTree.available ? "unknown"
+      : committedHits.length || localHits.length || files.some(f => report.ghostFiles.includes(f)) ? "changed" : "current";
+  };
   for (const [name, feature] of Object.entries(snapshot.features)) {
-    const touched = touchedFor(feature);
-    const hits = [...feature.files, ...(feature.tests ?? [])].filter((f) =>
-      touched.has(f)
-    );
-    if (hits.length > 0) report.staleFeatures[name] = [...new Set(hits)];
+    check(name, [...feature.files, ...(feature.tests ?? [])], hashFor(feature), report.staleFeatures, report.featureFreshness!);
   }
   for (const [name, flow] of Object.entries(snapshot.flows)) {
-    const touched = touchedFor(flow);
-    const hits = flow.chain.filter((f) => touched.has(f));
-    if (hits.length > 0) report.staleFlows[name] = [...new Set(hits)];
+    check(name, flow.chain, hashFor(flow), report.staleFlows, report.flowFreshness!);
   }
 
-  const allChanges = [...changesByHash.values()].flat();
-  report.changedFiles = [...new Set(allChanges.map((c) => c.path))].sort();
-
-  // New source files (added, or the new side of a rename) missing from the map.
-  const sourceFileSet = new Set(await listSourceFiles(resolvedRoot));
-  const newPaths = allChanges
-    .filter((c) => c.status === "added" || c.status === "renamed")
-    .map((c) => c.path);
-  report.unmappedFiles = [...new Set(newPaths)]
-    .filter((p) => sourceFileSet.has(p) && !mappedFiles.has(p))
-    .sort();
-
-  const renameKeys = new Set<string>();
+  const allChanges = [...changesByHash.values()].flatMap(changes => changes ?? []);
+  report.changedFiles = [...new Set(allChanges.map(c => c.path))].sort();
+  // Complete coverage, including omissions from a map saved at HEAD. Untracked
+  // files remain in workingTree and never change the committed-drift exit code.
+  const sourceFiles = new Set(await listSourceFiles(root));
+  let committedFiles: Set<string> = new Set();
+  try {
+    const { stdout } = await exec("git", ["ls-tree", "-r", "--name-only", "-z", "HEAD"], { cwd: root, maxBuffer: 50 * 1024 * 1024 });
+    committedFiles = new Set(stdout.split("\0").filter(Boolean));
+  } catch { report.historyAvailable = false; report.stale = true; }
+  report.unmappedFiles = [...sourceFiles].filter(f => committedFiles.has(f) && !mappedFiles.has(f)).sort();
+  const renames = new Map<string, { from: string; to: string }>();
   for (const change of allChanges) {
-    if (change.status !== "renamed" || !change.previousPath) continue;
-    const key = `${change.previousPath} ${change.path}`;
-    if (renameKeys.has(key)) continue;
-    renameKeys.add(key);
-    report.renames.push({ from: change.previousPath, to: change.path });
+    if (change.status === "renamed" && change.previousPath) renames.set(`${change.previousPath}\0${change.path}`, { from: change.previousPath, to: change.path });
   }
-
-  const changedMapped = new Set<string>([
-    ...Object.values(report.staleFeatures).flat(),
-    ...Object.values(report.staleFlows).flat(),
-  ]);
-  const changedFraction =
-    mappedFiles.size > 0 ? changedMapped.size / mappedFiles.size : 0;
-  report.recommendation =
-    changedMapped.size >= FULL_REBUILD_MIN_CHANGED_MAPPED_FILES &&
-    changedFraction > FULL_REBUILD_FRACTION
-      ? "full-rebuild"
-      : "incremental";
-
+  report.renames = [...renames.values()];
+  const changedMapped = new Set([...Object.values(report.staleFeatures).flat(), ...Object.values(report.staleFlows).flat()]);
+  // A locally deleted file is a live-edit warning, not committed map drift.
+  const committedGhosts = report.ghostFiles.filter(f => !workingTree.changedFiles.includes(f));
+  report.stale ||= changedMapped.size > 0 || report.unmappedFiles.length > 0 || committedGhosts.length > 0;
+  if (!report.historyAvailable) report.recommendation = "full-rebuild";
+  else if (!report.stale) report.recommendation = "up-to-date";
+  else report.recommendation = changedMapped.size >= FULL_REBUILD_MIN_CHANGED_MAPPED_FILES && changedMapped.size / Math.max(1, mappedFiles.size) > FULL_REBUILD_FRACTION ? "full-rebuild" : "incremental";
   return report;
 }

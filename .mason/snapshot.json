@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-07-22T14:18:53.690Z",
-  "gitHash": "3a041f742d84d0f3e797d7e440b665148bb52acb",
+  "updatedAt": "2026-09-05T07:59:20.259Z",
+  "gitHash": "49af6a39bb76ac0d5cca66abb33994b47635087f",
   "features": {
     "MCP server entry point": {
       "description": "Starts the Mason MCP stdio server that exposes all tools to AI assistants",
@@ -10,10 +10,11 @@
         "bin/mason-mcp.ts",
         "src/mcp/server.ts"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "drift detection CLI": {
-      "description": "Headless CI check comparing the concept map against git HEAD, deterministic and LLM-free",
+      "description": "Checks relevant committed map changes and source coverage, reporting local edits and verification failures separately; map-only and unrelated commits stay current.",
       "files": [
         "bin/mason-drift.ts",
         "src/drift/cli.ts",
@@ -23,14 +24,16 @@
         "test/drift.test.ts",
         "test/drift-cli.test.ts"
       ],
-      "type": "capability"
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "legacy CLI migration shim": {
       "description": "Prints a migration message for users who still invoke the removed standalone mason CLI",
       "files": [
         "bin/mason.ts"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "git history analysis": {
       "description": "Analyzer that mines git history for commit conventions, hot files, and stale directories",
@@ -42,7 +45,8 @@
       "tests": [
         "test/git-history.test.ts"
       ],
-      "type": "capability"
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "Confluence wiki sync": {
       "description": "Syncs the concept map to a Confluence space, rewriting it into product-readable language for PMs and designers",
@@ -57,36 +61,47 @@
       "tests": [
         "test/confluence.test.ts"
       ],
-      "type": "capability"
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "task context assembly": {
-      "description": "get_context: scores the concept map against a task description and returns relevant features, files, tests, blast radius, and decisions",
+      "description": "Retrieves decisions without a concept map, distinguishing proposals, accepted constraints, and unreviewed legacy knowledge with owner, source, last review, freshness, and verification evidence. Adds bounded file/directory impact and tests, while preserving missing/invalid map diagnostics.",
       "files": [
         "src/context/assemble.ts",
-        "src/context/lexical.ts"
+        "src/context/lexical.ts",
+        "src/context/trust.ts"
       ],
       "tests": [
-        "test/context.test.ts"
+        "test/context.test.ts",
+        "test/adoption.test.ts"
       ],
-      "type": "capability"
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "team decisions log": {
-      "description": "Records team knowledge the code alone can't express (failed approaches, deprecations, conventions) and tracks staleness against anchor files",
+      "description": "Captures version 2 proposals with owner/source attribution, preserves content revisions and review history, and keeps version 1 knowledge explicitly unreviewed. Validates approval against history and serializes writes; unchanged saves never refresh review evidence.",
       "files": [
         "src/decisions/decisions.ts",
-        "src/decisions/drift.ts"
+        "src/decisions/drift.ts",
+        "src/decisions/provenance.ts"
       ],
       "tests": [
-        "test/decisions.test.ts"
+        "test/decisions.test.ts",
+        "test/provenance.test.ts"
       ],
-      "type": "capability"
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "change impact analysis": {
       "description": "get_impact: co-change history, references, and related tests for a file before editing it",
       "files": [
         "src/impact/impact.ts"
       ],
-      "type": "capability"
+      "tests": [
+        "test/impact.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "LLM provider config": {
       "description": "Multi-provider LLM call plumbing (claude, openai, ollama, gemini) and config stored at ~/.mason/config.json",
@@ -94,14 +109,8 @@
         "src/llm/config.ts",
         "src/llm/providers.ts"
       ],
-      "type": "infrastructure"
-    },
-    "init gating": {
-      "description": "Tracks whether a project has completed Mason setup via .mason/project.json",
-      "files": [
-        "src/mcp/init.ts"
-      ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "smart file sampler": {
       "description": "Selects representative files by architectural role (config, entry point, viewmodel, repository, etc.) for snapshot batches",
@@ -111,10 +120,11 @@
       "tests": [
         "test/sampler.test.ts"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "MCP tool implementations": {
-      "description": "Core logic behind every MCP tool exposed by the server, including snapshot verification",
+      "description": "Implements all MCP tools, including map-independent decision capture, task context and impact, quickstart checks, and optional map lifecycle and verification.",
       "files": [
         "src/mcp/tools.ts"
       ],
@@ -122,16 +132,18 @@
         "test/tools.test.ts",
         "test/verify.test.ts"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "concept-map snapshot storage": {
-      "description": "Load/save of the persistent snapshot, partial-snapshot accumulation, and batch/reduce/refresh system prompts",
+      "description": "Validates and atomically stores concept maps and Map-Reduce partials; supports scoped refreshes while retaining failed verdicts for unchanged entries.",
       "files": [
         "src/snapshot/partials.ts",
         "src/snapshot/prompt.ts",
         "src/snapshot/snapshot.ts"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "test-to-source pairing": {
       "description": "Pairs test files with source files by naming convention",
@@ -141,28 +153,47 @@
       "tests": [
         "test/test-map.test.ts"
       ],
-      "type": "capability"
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "shared types": {
       "description": "Shared analyzer/finding interfaces used across the analyzers module",
       "files": [
         "src/types.ts"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "git repo detection": {
       "description": "Detects whether a directory is a git repository",
       "files": [
         "src/utils/git.ts"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "benchmark harness": {
-      "description": "deepeval-based benchmark comparing Mason snapshot answers against grep/exploration answers for token savings and quality",
+      "description": "Evaluates read-only answers and actual code patches in baseline-versus-Mason arms. Patch tasks use isolated deterministic fixtures, held-out behavioral grading, mutation controls, configurable coding-agent adapters, saved diffs and transcripts, and human-reviewed unnecessary-intervention metrics. Offline validation is distinct from live effectiveness evidence.",
       "files": [
+        "bench/harness/lib/adapter.mjs",
+        "bench/harness/lib/judge.mjs",
+        "bench/harness/lib/metrics.mjs",
+        "bench/harness/lib/session.mjs",
+        "bench/harness/lib/setup.mjs",
+        "bench/harness/patches/fixture.mjs",
+        "bench/harness/patches/grade.mjs",
+        "bench/harness/patches/report.mjs",
+        "bench/harness/patches/tasks.mjs",
+        "bench/harness/patches/validate.mjs",
+        "bench/harness/run-patches.mjs",
+        "bench/harness/run.mjs",
         "bench/tests/test_mason.py"
       ],
-      "type": "infrastructure"
+      "tests": [
+        "test/patch-benchmark.test.ts"
+      ],
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "Go API test fixture": {
       "description": "Sample Go API project used as a fixture to test Mason's multi-language analysis",
@@ -176,7 +207,8 @@
         "test/fixtures/go-api/internal/service/UserService_test.go",
         "test/fixtures/go-api/main.go"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "Kotlin Multiplatform test fixture": {
       "description": "Sample KMP app fixture (Android, iOS, and shared modules) used to test Mason's multi-language analysis",
@@ -199,7 +231,8 @@
         "test/fixtures/kotlin-multiplatform/shared/build.gradle.kts",
         "test/fixtures/kotlin-multiplatform/shared/src/commonMain/kotlin/NetworkModule.kt"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "Python Django test fixture": {
       "description": "Sample Django project fixture used to test Mason's multi-language analysis",
@@ -217,14 +250,16 @@
         "test/fixtures/python-django/tests/test_models.py",
         "test/fixtures/python-django/tests/test_views.py"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "minimal Python test fixture": {
       "description": "Minimal single-file Python project fixture used to test Mason's baseline analysis",
       "files": [
         "test/fixtures/minimal/main.py"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "Node React test fixture": {
       "description": "Sample Node/React project fixture used to test Mason's multi-language analysis",
@@ -247,7 +282,8 @@
         "test/fixtures/node-react/src/components/__tests__/Button.test.tsx",
         "test/fixtures/node-react/src/hooks/__tests__/useAuth.test.ts"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "Rust workspace test fixture": {
       "description": "Sample Rust workspace fixture used to test Mason's multi-language analysis",
@@ -262,40 +298,158 @@
       "tests": [
         "test/fixtures/rust-workspace/core/tests/model_test.rs"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "test fixture path helper": {
       "description": "Resolves absolute paths to fixture directories for tests",
       "files": [
         "test/helpers.ts"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "build tooling": {
       "description": "tsup bundler config for the three CLI entry points, and vitest test runner config",
       "files": [
         "tsup.config.ts",
-        "vitest.config.ts"
+        "vitest.config.ts",
+        "scripts/pack-mcpb.mjs"
       ],
-      "type": "infrastructure"
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    },
+    "AI context audit": {
+      "description": "Finds stale claims in repository instruction files with deterministic Git evidence, separating issues from advisories. Decision-anchor advisories retain approval, provenance, and review requirements.",
+      "files": [
+        "src/audit/audit.ts",
+        "src/audit/checks/dead-command.ts",
+        "src/audit/checks/decision-anchor.ts",
+        "src/audit/checks/deleted-reference.ts",
+        "src/audit/checks/deps-changed.ts",
+        "src/audit/checks/index.ts",
+        "src/audit/checks/new-module.ts",
+        "src/audit/checks/stale-count.ts",
+        "src/audit/claims.ts",
+        "src/audit/cli.ts",
+        "src/audit/docs.ts",
+        "src/audit/git.ts",
+        "src/audit/tree.ts",
+        "src/audit/types.ts",
+        "bin/mason-audit.ts"
+      ],
+      "tests": [
+        "test/audit-claims.test.ts",
+        "test/audit-cli.test.ts",
+        "test/audit.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    },
+    "decision injection hook": {
+      "description": "Injects anchored decision knowledge with approval, owner/source, and freshness labels after supported Claude tool calls. Deduplicates per repository/session/record revision, reinjects changed approvals, and withdraws records retired after the session saw them.",
+      "files": [
+        "src/hook/cli.ts",
+        "src/hook/hook.ts",
+        "bin/mason-hook.ts"
+      ],
+      "tests": [
+        "test/hook.test.ts",
+        "test/provenance.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    },
+    "diff review": {
+      "description": "Reviews a committed diff for absent historical co-change partners and touched decisions. Optional CI artifacts add test and analysis outcomes, freshness, and knowledge associations; an explicit flag gates on current complete evidence while preserving default exit codes.",
+      "files": [
+        "src/review/cli.ts",
+        "src/review/cochange.ts",
+        "src/review/review.ts",
+        "bin/mason-review.ts"
+      ],
+      "tests": [
+        "test/review.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    },
+    "safe repository file and metadata access": {
+      "description": "Shares canonical path checks, Git-aware file selection, sensitive-file exclusions, bounded reads, anchor matching, and atomic metadata replacement across Mason tools.",
+      "files": [
+        "src/utils/files.ts",
+        "src/utils/paths.ts",
+        "src/utils/storage.ts"
+      ],
+      "tests": [
+        "test/reliability.test.ts"
+      ],
+      "type": "infrastructure",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    },
+    "project onboarding": {
+      "description": "Returns read-only documentation audit and committed-diff review findings, store status, and a short decision-capture setup guide. Full architecture map builds are an explicit option; initialization markers record instruction setup and do not gate tools.",
+      "files": [
+        "src/mcp/init.ts",
+        "src/mcp/onboarding.ts"
+      ],
+      "tests": [
+        "test/adoption.test.ts",
+        "test/tools.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    },
+    "decision review": {
+      "description": "Prepares decision history, committed changes, local edits, and bounded source/diff evidence before recording acceptance, reaffirmation, or retirement. Verdicts identify reviewer and rationale, reject stale prepared revisions, and preserve the review baseline through metadata commits. Assertions are recorded, not authenticated.",
+      "files": [
+        "src/decisions/review.ts"
+      ],
+      "tests": [
+        "test/provenance.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    },
+    "CI evidence review": {
+      "description": "Imports local Vitest JSON and SARIF artifacts with declared run provenance, preserves failed/skipped/unavailable and stale/unknown states, and links findings to changed files and accepted decisions. The repository test producer records actual exit status and checkout state for its CI review.",
+      "files": [
+        "src/review/evidence.ts",
+        "src/review/evidence/types.ts",
+        "src/review/evidence/paths.ts",
+        "src/review/evidence/vitest.ts",
+        "src/review/evidence/sarif.ts",
+        "scripts/test-evidence.mjs"
+      ],
+      "tests": [
+        "test/evidence.test.ts",
+        "test/evidence-producer.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     }
   },
   "flows": {
     "drift check flow": {
-      "description": "CI entry point runs the deterministic drift check against git HEAD",
+      "description": "Loads a validated map, computes relevant committed drift and live changes, and reports freshness separately from correctness verification.",
       "chain": [
-        "bin/mason-drift.ts",
-        "src/drift/cli.ts",
-        "src/drift/drift.ts"
-      ]
+        "src/snapshot/snapshot.ts",
+        "src/drift/drift.ts",
+        "src/context/trust.ts",
+        "src/drift/cli.ts"
+      ],
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "decision staleness flow": {
-      "description": "Flags active decisions whose anchor files changed since last verified",
+      "description": "Loads validated records, compares each anchor against committed and working-tree changes, and carries freshness uncertainty into retrieval, review, and hooks.",
       "chain": [
+        "src/decisions/decisions.ts",
         "src/decisions/drift.ts",
-        "src/drift/drift.ts",
-        "src/decisions/decisions.ts"
-      ]
+        "src/utils/paths.ts",
+        "src/context/assemble.ts",
+        "src/hook/hook.ts"
+      ],
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "MCP server startup flow": {
       "description": "Binary boots the MCP stdio server which registers all tool implementations",
@@ -303,7 +457,8 @@
         "bin/mason-mcp.ts",
         "src/mcp/server.ts",
         "src/mcp/tools.ts"
-      ]
+      ],
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "Confluence sync flow": {
       "description": "Loads the snapshot, diffs against sync state, and pushes rendered pages to Confluence",
@@ -312,10 +467,11 @@
         "src/confluence/diff.ts",
         "src/confluence/renderer.ts",
         "src/confluence/client.ts"
-      ]
+      ],
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "get_context assembly flow": {
-      "description": "Scores the task description against the snapshot and enriches with drift, impact, and decisions",
+      "description": "Loads valid decisions independently of map availability, scores task and file anchors, preserves missing/invalid map diagnostics and decision trust, and enriches matches with impact and tests.",
       "chain": [
         "src/context/assemble.ts",
         "src/context/lexical.ts",
@@ -323,7 +479,33 @@
         "src/drift/drift.ts",
         "src/impact/impact.ts",
         "src/decisions/decisions.ts"
-      ]
+      ],
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    },
+    "decision review flow": {
+      "description": "Loads a decision and prepares code evidence, checks a verdict against the prepared record and Git revision, and appends an attributed review to validated history under a serialized write.",
+      "chain": [
+        "src/mcp/server.ts",
+        "src/mcp/tools.ts",
+        "src/decisions/review.ts",
+        "src/decisions/provenance.ts",
+        "src/decisions/decisions.ts",
+        "src/utils/storage.ts"
+      ],
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    },
+    "CI evidence review flow": {
+      "description": "The test producer records a run manifest; review loads bounded local artifacts, normalizes outcomes and paths, associates accepted decisions, and renders combined CLI or MCP results with explicit freshness and optional CI gating.",
+      "chain": [
+        "scripts/test-evidence.mjs",
+        "src/review/review.ts",
+        "src/review/evidence.ts",
+        "src/review/evidence/vitest.ts",
+        "src/review/evidence/sarif.ts",
+        "src/review/cli.ts",
+        "src/mcp/onboarding.ts"
+      ],
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     }
   }
 }

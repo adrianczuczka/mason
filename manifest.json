@@ -3,8 +3,8 @@
   "name": "mason",
   "display_name": "Mason",
   "version": "0.9.0",
-  "description": "Context engineering MCP server — concept maps for codebases, change impact, and Confluence wiki sync. Concept maps built via Map-Reduce for complete coverage. MCP-only.",
-  "long_description": "Mason persists a feature-to-file concept map in `.mason/snapshot.json` so AI assistants can answer architecture questions without grepping the codebase from scratch. Also exposes change impact analysis (co-change history, references, related tests) and git history aggregation (hot files, stale dirs, commit patterns).",
+  "description": "Recorded engineering decisions, change impact, and documentation audits for coding assistants. Useful from the first task, with optional architecture maps.",
+  "long_description": "Mason retrieves lessons and constraints from .mason/decisions/, checks their freshness, and combines them with references, related tests, and Git change history. Audit documentation and review committed changes without setup. Add an optional feature/flow map for architecture navigation.",
   "author": {
     "name": "Adrian Czuczka",
     "url": "https://github.com/adrianczuczka"
@@ -36,23 +36,26 @@
   "tools": [
     {
       "name": "mason_init",
-      "description": "Start here. Checks if Mason is set up for this project. If not, returns a `playbook` of questions the assistant must walk the user through (concept map setup). Once the walkthrough is done, call `mason_complete_init`. Idempotent.",
+      "description": "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Read-only, deterministic, and usable without a map. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. mode: map returns the full Map-Reduce build workflow. Repeat calls refresh findings even after setup.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "mode": { "type": "string", "enum": ["quickstart", "map"], "default": "quickstart", "description": "Quickstart checks and setup guide, or an explicit architecture map build" },
+          "base": { "type": "string", "description": "Git ref for committed-diff review; defaults to an available main branch ref" },
+          "evidence": { "type": "array", "items": { "type": "string" }, "maxItems": 10, "description": "Repository-local CI evidence manifests to include in the review. Imports Vitest JSON and SARIF without executing check commands." }
         },
         "required": ["dir"]
       }
     },
     {
       "name": "mason_complete_init",
-      "description": "Mark the project as initialized. Call after walking the user through the playbook returned by mason_init. Writes .mason/project.json.",
+      "description": "Record completion of assistant instruction setup in .mason/project.json. Other tools work without this marker. Repeated calls preserve the original setup time and existing settings; pass confluenceConfigured only to change that setting.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "confluenceConfigured": { "type": "boolean", "description": "True if Confluence was successfully configured during init", "default": false }
+          "confluenceConfigured": { "type": "boolean", "description": "Set the Confluence setup status; omit to preserve the existing value" }
         },
         "required": ["dir"]
       }
@@ -74,7 +77,7 @@
     },
     {
       "name": "export_to_confluence",
-      "description": "Sync the concept map to Confluence as product-readable wiki pages: index page, one page per feature, and a changelog. Hand edits outside mason:start/end markers are preserved. Requires mason_set_confluence.",
+      "description": "Sync the concept map to Confluence as product-readable wiki pages: index page, one page per feature, and a changelog. Mason replaces managed page bodies, including manual edits. Requires mason_set_confluence.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -90,7 +93,7 @@
     },
     {
       "name": "get_snapshot",
-      "description": "CALL THIS FIRST — before grep or reading files — for any question about the codebase's features, architecture, data flows, or where something is implemented. Returns the persistent feature-to-file concept map in one cheap, LLM-free call, replacing 5-10 exploration round-trips. Reports drift when stale. Requires init.",
+      "description": "Return the optional feature-to-file architecture map with drift and trust evidence. If no map exists, returns exists:false plus project structure, Git signals, and test pairs. Decision capture, get_context, and get_impact still work. No initialization required.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -101,7 +104,7 @@
     },
     {
       "name": "get_context",
-      "description": "CALL THIS FIRST when given a task, bug, or change request. One call returns the matching features/flows with their files, related tests, blast radius for the key files (git co-change + references), and per-entry freshness — replacing a get_snapshot + get_impact + test-hunting sequence. Pass the task in natural language; optionally pass files to anchor the match. Requires init.",
+      "description": "Assemble task context: matching decisions with rationale, approval, owner, sources, last review, and freshness, plus related tests, file impact, and any available map entries. Proposals are suggestions; legacy records are unreviewed; accepted decisions are constraints subject to freshness. No initialization or map required. Pass task and optional files. map.status and diagnostics preserve missing or invalid knowledge. Impact covers up to three unique files, expanding directory anchors.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -229,7 +232,7 @@
     },
     {
       "name": "save_decision",
-      "description": "CALL THIS when you learn something the code alone can't tell you: a failed approach, a deprecation, a workaround's reason, or a review-settled convention. Records are git-committed to .mason/decisions/ and PR-reviewed; get_context surfaces them on matching tasks. Also handles updates (id), re-verification (same id + content), and supersession (supersedes). Requires init.",
+      "description": "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. No setup or map required. Writes a local record and preserves content history. Changes reset acceptance to proposed; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede an accepted record; review its replacement and retire the original separately.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -237,17 +240,42 @@
           "title": { "type": "string", "description": "Short, specific headline — becomes the stable record id (max 80 chars)" },
           "body": { "type": "string", "description": "The knowledge itself: what was tried/decided, why, and what to avoid (max 1500 chars)" },
           "category": { "type": "string", "enum": ["decision", "gotcha", "deprecation", "convention"] },
-          "files": { "type": "array", "items": { "type": "string" }, "description": "Repo-relative anchor files; if these change the decision is flagged for re-verification" },
-          "id": { "type": "string", "description": "Existing decision id to update or re-verify" },
+          "files": { "type": "array", "items": { "type": "string" }, "description": "Repo-relative files or directory prefixes; changes flag the decision for re-verification across retrieval, hooks, and review" },
+          "id": { "type": "string", "description": "Existing id to revise; unchanged content does not re-verify" },
           "supersedes": { "type": "string", "description": "Id of a decision this one replaces" },
+          "owner": { "type": ["string", "null"], "minLength": 1, "maxLength": 200, "description": "Responsible person or team; null clears it. Required for acceptance." },
+          "sources": { "type": "array", "maxItems": 20, "description": "Known source references; omit to preserve, [] clears", "items": {
+            "type": "object", "properties": {
+              "kind": { "type": "string", "enum": ["pull_request", "issue", "incident", "discussion", "document", "other"] },
+              "reference": { "type": "string", "minLength": 1, "maxLength": 1000 },
+              "note": { "type": "string", "minLength": 1, "maxLength": 500 }
+            }, "required": ["kind", "reference"], "additionalProperties": false
+          } },
+          "actor": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Known person or agent recording this revision; omit when unknown" },
           "force": { "type": "boolean", "description": "Save even when a near-duplicate was detected" }
         },
         "required": ["dir", "title", "body", "category"]
       }
     },
     {
+      "name": "review_decision",
+      "description": "Prepare a decision review: returns the full record and history, provenance, committed changes, local edits, bounded source/diff previews, and a reviewToken. Then record accept, reaffirm, or retire with that token, the authorized reviewer, and a reason. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "id": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+$", "description": "Decision id from get_context or save_decision" },
+          "action": { "type": "string", "enum": ["prepare", "accept", "reaffirm", "retire"], "default": "prepare", "description": "Prepare is read-only; other actions record an authorized review" },
+          "reviewer": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Actual reviewer, required for a verdict" },
+          "note": { "type": "string", "minLength": 1, "maxLength": 1500, "description": "Review rationale, required for a verdict" },
+          "reviewToken": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "Token from preparation; rejects stale record or code revisions" }
+        },
+        "required": ["dir", "id"]
+      }
+    },
+    {
       "name": "mason_check_drift",
-      "description": "Check how far the concept map has drifted from HEAD. Deterministic (git + filesystem, no LLM). Returns stale features/flows with the changed files behind them, unmapped new files, ghost files, renames, and a recommendation: up-to-date, incremental, or full-rebuild.",
+      "description": "Distinguishes committed drift, working-tree changes, and verification failures. Unrelated or map-only commits do not make the map stale. Check how far the concept map has drifted from HEAD. Deterministic (git + filesystem, no LLM). Returns stale features/flows with the changed files behind them, unmapped new files, ghost files, renames, and a recommendation: up-to-date, incremental, or full-rebuild.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -258,7 +286,7 @@
     },
     {
       "name": "verify_snapshot",
-      "description": "Spot-check the concept map's correctness: returns a sample of entries (never-verified and least-recently-verified first) with skeletons of their claimed files, for the assistant to judge whether the files implement what each entry claims. Report verdicts via save_verification. Requires init.",
+      "description": "Spot-check the concept map's correctness: returns a sample of entries (never-verified and least-recently-verified first) with skeletons of their claimed files, for the assistant to judge whether the files implement what each entry claims. Report verdicts via save_verification.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -270,7 +298,7 @@
     },
     {
       "name": "save_verification",
-      "description": "Record verify_snapshot verdicts: ok entries are stamped verifiedAt; failures are flagged and surface in mason_check_drift until re-mapped. Requires init.",
+      "description": "Record verify_snapshot verdicts: ok entries are stamped verifiedAt and verifiedHash; failures surface in get_context, get_snapshot, and mason_check_drift until corrected.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -293,7 +321,7 @@
     },
     {
       "name": "get_impact",
-      "description": "CALL THIS BEFORE editing or refactoring any file. Returns git co-change history, references, and related tests — blast-radius signals you cannot get by reading the file itself. Also answers 'what would break if I changed X?'.",
+      "description": "Trace the impact of changing files: historical co-change partners, references, and related tests. Deterministic, read-only, and usable without initialization, saved decisions, or a concept map.",
       "inputSchema": {
         "type": "object",
         "properties": {

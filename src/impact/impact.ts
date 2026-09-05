@@ -1,27 +1,10 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import fg from "fast-glob";
+import { createFileAccess, SOURCE_GLOB } from "../utils/files.js";
+import { normalizeRepoPath } from "../utils/paths.js";
 
 const exec = promisify(execFile);
-
-const IGNORE = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/.gradle/**",
-  "**/target/**",
-  "**/.git/**",
-  "**/vendor/**",
-  "**/__pycache__/**",
-  "**/venv/**",
-  "**/.venv/**",
-  "**/generated/**",
-];
-
-const SOURCE_EXTENSIONS =
-  "*.{ts,tsx,js,jsx,kt,kts,java,py,go,rs,swift,rb,cs,cpp,c,h,dart,gradle.kts,gradle}";
 
 export interface CochangeEntry {
   file: string;
@@ -82,29 +65,25 @@ async function resolveTargetFiles(
   targets: string[]
 ): Promise<string[]> {
   const resolved: string[] = [];
+  const access = await createFileAccess(rootDir);
 
   for (const target of targets) {
     // If it contains a path separator, use as-is
     if (target.includes("/")) {
-      resolved.push(target);
+      const normalized = normalizeRepoPath(target);
+      if (normalized) resolved.push(normalized);
       continue;
     }
 
     // Otherwise, search for the filename
-    const matches = await fg(`**/${target}`, {
-      cwd: rootDir,
-      ignore: IGNORE,
-    });
+    const matches = await access.list(`**/${target}`);
 
     if (matches.length > 0) {
       resolved.push(matches[0]);
     } else {
       // Try without extension
       const noExt = target.replace(/\.[^.]+$/, "");
-      const extMatches = await fg(`**/${noExt}.*`, {
-        cwd: rootDir,
-        ignore: IGNORE,
-      });
+      const extMatches = await access.list(`**/${noExt}.*`);
       if (extMatches.length > 0) {
         resolved.push(extMatches[0]);
       } else {
@@ -185,10 +164,8 @@ async function getReferences(
     searchNames.add(basename);
   }
 
-  const allSourceFiles = await fg(`**/${SOURCE_EXTENSIONS}`, {
-    cwd: rootDir,
-    ignore: IGNORE,
-  });
+  const access = await createFileAccess(rootDir);
+  const allSourceFiles = await access.list(SOURCE_GLOB);
 
   // Exclude target files from search
   const targetSet = new Set(targetFiles);
@@ -208,10 +185,9 @@ async function getReferences(
     await Promise.all(
       batch.map(async (file) => {
         try {
-          const content = await fs.readFile(
-            path.join(rootDir, file),
-            "utf-8"
-          );
+          const full = await access.read(file);
+          if (!full) return;
+          const content = full.content;
           const lines = content.split("\n");
 
           for (const name of searchNames) {
@@ -268,7 +244,7 @@ async function getRelatedTests(
     "**/*_test.rs",
   ];
 
-  const testFiles = await fg(testPatterns, { cwd: rootDir, ignore: IGNORE });
+  const testFiles = await (await createFileAccess(rootDir)).list(testPatterns);
   const results: TestEntry[] = [];
 
   for (const target of targetFiles) {

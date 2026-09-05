@@ -35,6 +35,8 @@ interface CochangeMatrix {
 
 async function buildMatrix(resolvedRoot: string): Promise<CochangeMatrix | null> {
   try {
+    const { stdout: shallow } = await exec("git", ["rev-parse", "--is-shallow-repository"], { cwd: resolvedRoot });
+    if (shallow.trim() === "true") return null;
     const { stdout } = await exec(
       "git",
       ["log", `-n${HISTORY_COMMITS}`, "--format=%x01", "--name-only", "-M"],
@@ -75,12 +77,13 @@ async function buildMatrix(resolvedRoot: string): Promise<CochangeMatrix | null>
 export async function findMissingPartners(
   resolvedRoot: string,
   changedFiles: string[],
-  existsOnDisk: (relPath: string) => Promise<boolean>
+  existsOnDisk: (relPath: string) => Promise<boolean>,
+  allChangedFiles: string[] = changedFiles
 ): Promise<CochangeFinding[] | null> {
   const matrix = await buildMatrix(resolvedRoot);
   if (!matrix) return null;
 
-  const changedSet = new Set(changedFiles);
+  const changedSet = new Set(allChangedFiles);
   const findings: CochangeFinding[] = [];
 
   for (const changedFile of changedFiles) {

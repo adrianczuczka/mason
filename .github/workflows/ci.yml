@@ -21,7 +21,32 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm test
+      - run: npm run typecheck
+      - name: Tests with recorded CI evidence
+        id: tests
+        run: npm run test:evidence
+      - name: Review imported test evidence
+        if: always() && steps.tests.outcome != 'skipped'
+        env:
+          MASON_REVIEW_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # Fall back for an initial push. Test failures retain their own failed step.
+          base="$MASON_REVIEW_BASE"
+          if ! git rev-parse --verify "$base^{commit}" >/dev/null 2>&1; then
+            base=HEAD
+          fi
+          set +e
+          node dist/mason-review.js --dir . --base "$base" --evidence .mason/reports/evidence.json --require-evidence > .mason/reports/review.txt
+          review_status=$?
+          cat .mason/reports/review.txt
+          {
+            echo '### Mason review'
+            echo '```text'
+            cat .mason/reports/review.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Co-change suggestions are advisory in this repo. Incomplete evidence is an error.
+          if [ "$review_status" -ne 0 ] && [ "$review_status" -ne 1 ]; then exit "$review_status"; fi
       # Dogfood: CI fails when Mason's own context files rot.
       - name: Self-audit context files
         run: node dist/mason-audit.js --dir .

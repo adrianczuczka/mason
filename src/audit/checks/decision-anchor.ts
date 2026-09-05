@@ -1,5 +1,6 @@
 import { computeDecisionDrift } from "../../decisions/drift.js";
-import { loadDecisions } from "../../decisions/decisions.js";
+import { loadDecisionStore } from "../../decisions/decisions.js";
+import { decisionProvenance } from "../../decisions/provenance.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
 
@@ -14,7 +15,9 @@ export async function checkDecisionAnchors(
   const result = emptyResult();
   if (!ctx.decisionsPresent) return result;
 
-  const records = await loadDecisions(ctx.root);
+  const store = await loadDecisionStore(ctx.root);
+  const records = store.records;
+  for (const diagnostic of store.diagnostics) result.skipped.push({ check: "decision-anchor-drift", reason: `${diagnostic.path}: ${diagnostic.message}` });
   const drift = await computeDecisionDrift(ctx.root, records);
   if (!drift.historyAvailable) {
     result.skipped.push({
@@ -27,9 +30,10 @@ export async function checkDecisionAnchors(
   for (const [id, changedFiles] of Object.entries(drift.staleDecisions)) {
     const record = byId.get(id);
     if (!record) continue;
+    const provenance = decisionProvenance(record, drift.freshness?.[id] ?? "unknown");
     result.advisories.push({
       type: "decision-anchor-drift",
-      message: `decision "${record.title}" has anchor files that changed since it was verified – needs human re-verification`,
+      message: `decision "${record.title}" (${provenance.approval}) has anchor files that changed since its evidence baseline – needs human review`,
       anchor: {
         doc: `.mason/decisions/${id}.json`,
         line: null,
@@ -37,6 +41,7 @@ export async function checkDecisionAnchors(
       },
       evidence: {
         kind: "decision-anchor",
+        provenance,
         decisionId: id,
         title: record.title,
         changedFiles,

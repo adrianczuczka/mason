@@ -57,6 +57,7 @@ jobs:
       - name: Check drift
         id: drift
         run: |
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           set +e
           npx -y -p mason-context mason-drift --dir .
           code=$?
@@ -72,14 +73,31 @@ jobs:
 
       - name: Verify and commit the refreshed map
         if: steps.drift.outputs.stale == 'true' && inputs.agent-command != ''
+        env:
+          MASON_BASE_HEAD: ${{ steps.drift.outputs.head }}
+          MASON_COMMIT_MESSAGE: ${{ inputs.commit-message }}
         run: |
-          # The loop only counts as closed if the map is actually fresh now.
+          # Reject agent commits and any edits outside the intended map artifact.
+          test "$(git rev-parse HEAD)" = "$MASON_BASE_HEAD"
+          node --input-type=module <<'JS'
+          import { execFileSync } from 'node:child_process';
+          const entries = execFileSync('git', ['status', '--porcelain=v1', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+          for (let i = 0; i < entries.length; i++) {
+            const status = entries[i].slice(0, 2);
+            const file = entries[i].slice(3);
+            if (file !== '.mason/snapshot.json' || /[RCD]/.test(status)) {
+              throw new Error(`Refresh modified an unexpected path: ${file}`);
+            }
+          }
+          JS
           npx -y -p mason-context mason-drift --dir .
-          if [ -n "$(git status --porcelain -- .mason)" ]; then
+          if [ -n "$(git status --porcelain -- .mason/snapshot.json)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add .mason
-            git commit -m "${{ inputs.commit-message }}"
+            git add -- .mason/snapshot.json
+            git commit -m "$MASON_COMMIT_MESSAGE"
+            # A map-only commit must not make the map stale again.
+            npx -y -p mason-context mason-drift --dir .
             git push
           fi
 

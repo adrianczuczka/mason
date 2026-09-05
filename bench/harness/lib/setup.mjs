@@ -58,7 +58,7 @@ export async function ensureSnapshot(repoDir, masonMcpConfig, model) {
   const res = await runSession({
     cwd: repoDir,
     prompt:
-      "Set up Mason for this project. Call mason_init and follow the returned " +
+      "Set up Mason for this project. Call mason_init with mode: \"map\" and follow the returned " +
       "playbook completely: run the full Map-Reduce loop (generate_snapshot_batch " +
       "→ save_partial_snapshot for every batch, then reduce_snapshot → save_snapshot), " +
       "and finish with mason_complete_init. Do not ask me any questions — make " +

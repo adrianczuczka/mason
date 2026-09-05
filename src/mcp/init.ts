@@ -1,5 +1,5 @@
-import fs from "node:fs/promises";
-import path from "node:path";
+import { z } from "zod";
+import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 
 export interface ProjectMarker {
   version: 1;
@@ -9,84 +9,64 @@ export interface ProjectMarker {
   };
 }
 
-function masonDir(rootDir: string): string {
-  return path.join(rootDir, ".mason");
+const markerSchema = z.object({
+  version: z.literal(1), initializedAt: z.string(),
+  features: z.object({ confluence: z.boolean().optional() }).optional(),
+}).passthrough();
+
+export async function loadProjectMarker(rootDir: string): Promise<ProjectMarker | null> {
+  const raw = await readStoreJson(rootDir, ".mason/project.json");
+  return raw === null ? null : markerSchema.parse(raw);
 }
 
-function markerPath(rootDir: string): string {
-  return path.join(masonDir(rootDir), "project.json");
+export async function saveProjectMarker(rootDir: string, marker: ProjectMarker): Promise<void> {
+  await writeStoreJson(rootDir, ".mason/project.json", markerSchema.parse(marker));
 }
 
-export async function loadProjectMarker(
-  rootDir: string
-): Promise<ProjectMarker | null> {
-  try {
-    const raw = await fs.readFile(markerPath(rootDir), "utf-8");
-    const parsed = JSON.parse(raw);
-    if (parsed.version !== 1) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-export async function saveProjectMarker(
-  rootDir: string,
-  marker: ProjectMarker
-): Promise<void> {
-  await fs.mkdir(masonDir(rootDir), { recursive: true });
-  await fs.writeFile(
-    markerPath(rootDir),
-    JSON.stringify(marker, null, 2),
-    "utf-8"
-  );
-}
-
-export async function isInitialized(rootDir: string): Promise<boolean> {
-  const marker = await loadProjectMarker(rootDir);
-  return marker !== null;
-}
-
-export function uninitializedResponse(action: string): string {
-  return JSON.stringify(
-    {
-      initialized: false,
-      hint: `This project hasn't been set up for Mason yet. Call \`mason_init\` first; it will walk the user through ${action}.`,
-    },
-    null,
-    2
-  );
-}
-
-/**
- * The section the setup playbook offers to add to the project's CLAUDE.md.
- * This is Mason's salience channel: benchmark runs showed assistants ignore
- * MCP tool descriptions in favor of grep muscle memory, but reliably follow
- * project instructions. Marker-delimited so a future init can update it.
- */
+/** Marker-delimited project instructions make the tools useful in later sessions. */
 export const CLAUDE_MD_SECTION = `<!-- mason:start -->
-## Mason concept map
+## Mason project knowledge
 
-This project has a Mason concept map (\`.mason/snapshot.json\`) and decision store (\`.mason/decisions/\`) served over MCP. Use them BEFORE grep, glob, or file reads:
+Mason provides recorded decisions and file impact over MCP. A concept map is optional.
 
-- Task, bug, or change request → \`get_context\` with the task text: relevant features, files, tests, blast radius, freshness, and decisions in one call.
-- "How does X work / where is Y" → \`get_snapshot\` first.
-- Before editing any file → \`get_impact\`.
-- Learned something the code can't tell you (a failed approach, a deprecation, a workaround's reason, a review-settled convention) → record it with \`save_decision\`. Never record code-derivable facts, session trivia, or secrets.
-- Decisions returned by \`get_context\` are constraints — follow them; verify any marked stale before relying on it.
+- Task, bug, or change request → \`get_context\` with the task text and known files: matching decisions, related tests, impact, and any available map entries.
+- Before editing a file → \`get_impact\` to check references, tests, and historical change partners.
+- Learned something the code cannot explain (a failed approach, an incident's cause, a workaround's reason, a review-settled convention) → \`save_decision\` with rationale, anchors, and any known owner, sources, and recorder. It creates a proposal immediately without setup or a map. Never invent attribution or record code-derivable facts, session trivia, or secrets.
+- Consult trust metadata before relying on entries: unknown or changed freshness requires inspection, and failed verification means the description must be corrected. Check approval too: proposals are suggestions, legacy records are unreviewed, and accepted decisions are recorded constraints subject to freshness checks.
+- Asked to review or re-verify a decision → \`review_decision\` first to inspect content, sources, history, and code changes. Record acceptance, reaffirmation, or retirement only when authorized by the user or a cited team review, with the actual reviewer and reason. Never infer approval from unchanged code. Review and commit the local record through the normal project workflow.
+- For an architectural overview, use \`get_snapshot\` if a map is available. If \`map.status\` is missing or invalid, use available decisions and source evidence; do not start building a map unless requested.
+- \`mason_init\` returns documentation audit and committed-diff review results, plus a short setup guide. Pass \`evidence\` with local CI manifest paths to include test and analysis results; the CLI equivalent is \`mason-review --evidence <manifest>\`. State skipped, unavailable, stale, or unknown checks explicitly. Related accepted decisions identify review context, not proven violations.
 
-Fall back to manual exploration only for what the map doesn't answer.
+Inspect source for what the retrieved context does not answer.
 <!-- mason:end -->`;
 
-const SETUP_PLAYBOOK = `You are walking the user through one-time Mason setup for this project. \
-Mason persists a concept map of this codebase so future questions don't re-explore from scratch. \
-The map is built via a Map-Reduce pattern so it covers the WHOLE codebase, not just a sample. \
-Surface each question to the user in plain language and wait for their answer before proceeding.
+export type InitMode = "quickstart" | "map";
 
-CONSENT
-Tell the user: "Mason will read your codebase in batches and build a concept map at .mason/snapshot.json. This can take a while — Mason makes several tool calls in sequence. Proceed?"
-On no: stop. Mason setup is opt-in.
-On yes: continue with the phases below.
+const ASSISTANT_SETUP = `ASSISTANT INSTRUCTIONS
+If the user requested Mason setup, add the section below to the project's instruction file. If they only requested inspection or a review, return the findings and leave files unchanged.
+Use the file the project already follows:
+  - \`AGENTS.md\` exists → put the section there. If a \`CLAUDE.md\` also exists and does not reference AGENTS.md, add a one-line pointer to it.
+  - only \`CLAUDE.md\` (or \`.claude/CLAUDE.md\`) exists → put the section there.
+  - neither exists → create \`AGENTS.md\` with the section.
+If the \`<!-- mason:start -->\` marker already exists, replace the marked block instead of appending.
+
+${CLAUDE_MD_SECTION}
+
+FINALIZE
+After installing assistant instructions, call \`mason_complete_init(dir)\` to record setup. The marker records onboarding; decision capture, context, and impact already work without it. Summarize the findings, any edits, and any checks that could not run.`;
+
+const QUICKSTART_PLAYBOOK = `Start with the audit and review results included in this response. No concept map is required.
+
+1. Explain the actionable findings with their source evidence. Separate audit issues, advisories, and skipped checks. The review covers committed changes from the merge base to HEAD; workingTree paths are not included in that review. An unavailable or empty check is not proof that the project is correct. Use the CLI for full output if a summary is truncated.
+2. Address findings within the user's requested scope. Inspect relevant source and tests. Do not invent a decision just to populate the store.
+3. When the task reveals a real lesson or constraint, call \`save_decision\` with title, body, category, anchors, and known owner/source/actor information. Missing attribution can be added later. The tool writes a local proposal; editing it preserves revision history and requires a new acceptance. An unchanged save never refreshes its evidence. When decision review is requested, \`review_decision\` prepares the record and code evidence before any authorized verdict. Review and commit records through the normal workflow. Retrieve it on the next relevant task with \`get_context(dir, task, files)\`.
+
+${ASSISTANT_SETUP}
+
+OPTIONAL ARCHITECTURE MAP
+A full map adds feature and flow navigation. Build it only if the user requests it, by calling \`mason_init(dir, mode: "map")\`. Decision capture and task context do not depend on that build.`;
+
+const MAP_PLAYBOOK = `The user has requested a full architecture map. Follow this Map-Reduce workflow to cover the codebase. Report the audit and review findings included in this response before beginning.
 
 PHASE 1 — Map (loop until done)
 Goal: process every file in the codebase, batch by batch, producing a partial concept map per batch.
@@ -115,45 +95,10 @@ Goal: merge all partial maps into one coherent product-shaped catalog.
   2. Follow the instructions to produce a unified \`features\` and \`flows\` map. Specifically: merge platform variants ("home Android" + "home iOS" → "home screen"), dedupe near-duplicates, reconcile descriptions, and ensure every file from every partial appears somewhere in the final map.
   3. Call \`save_snapshot(dir, features, flows)\` ONCE with the unified map. Mason detects that partials exist and replaces the snapshot wholesale (rather than merging with any earlier state) and then clears the partials. Do not call \`save_snapshot\` more than once per Map-Reduce run.
 
-PHASE 3 — Confluence sync (optional)
-Goal: optionally configure Confluence so the concept map can be exported as a product-readable wiki later.
+${ASSISTANT_SETUP}
 
-Tell the user: "Mason can keep a Confluence wiki in sync with the concept map, rewriting it into product-readable language for PMs and designers. Want to set that up now? You can also skip and configure it later by asking your assistant to 'set up Confluence for this project'."
-On no: skip to Phase 4.
-On yes:
-  1. Ask the user for the Atlassian site URL (e.g. \`acme.atlassian.net\` or \`https://acme.atlassian.net\`).
-  2. Ask for the user's Atlassian account email.
-  3. Tell the user: "Generate an API token at https://id.atlassian.com/manage-profile/security/api-tokens (label it 'Mason') and paste it here. WARNING: the token will be visible in this chat history; if that's not acceptable, skip Confluence and configure it elsewhere."
-  4. Call \`mason_set_confluence({ baseUrl, email, apiToken })\` — no spaceKey on the first call. The tool validates credentials and returns a list of spaces.
-  5. Show the spaces to the user (key + name) and ask which one to use.
-  6. Call \`mason_set_confluence({ baseUrl, email, apiToken, spaceKey })\` with the chosen spaceKey to persist.
-  7. Confirm Confluence is configured. Mention they can run \`export_to_confluence\` whenever they want to sync.
+If a build is interrupted, its partials remain in \`.mason/partial-snapshots/\`. Re-run \`mason_init(dir, mode: "map")\` to obtain this workflow again.`;
 
-If the credentials are rejected with a 401/403 the tool returns a friendly error — re-ask the user for a fresh token or correct email.
-
-PHASE 4 — Assistant instructions (recommended)
-Goal: make sure future assistant sessions actually use the map instead of re-exploring.
-
-Tell the user: "Assistants reliably follow project instruction files but often ignore available tools. Mason works best if I add a short section to this project's instruction file telling assistants to consult the concept map first. Add it?"
-On no: skip to Phase 5.
-On yes, pick the target file by what the project already uses:
-  - \`AGENTS.md\` exists → put the section there (it's the tool-agnostic standard). If a \`CLAUDE.md\` also exists and doesn't reference AGENTS.md, add a one-line pointer to it.
-  - only \`CLAUDE.md\` (or \`.claude/CLAUDE.md\`) exists → put the section there.
-  - neither exists → create \`CLAUDE.md\` with just the section.
-Append the following section verbatim; if the \`<!-- mason:start -->\` marker is already present in the target file, replace the marked block instead of appending:
-
-${CLAUDE_MD_SECTION}
-
-PHASE 5 — Finalize
-  1. Call \`mason_complete_init(dir, { confluenceConfigured: true | false })\` — true if Phase 3 ended with status "saved", false otherwise.
-  2. Confirm to the user that setup is complete and they can now ask architectural questions, request impact analysis, or sync to Confluence (if configured).
-
-Notes:
-- Read tools (\`get_snapshot\`, \`get_impact\`) refuse to run until \`mason_complete_init\` has been called. Do not skip Phase 5.
-- If the user aborts mid-flow, the partials persist in \`.mason/partial-snapshots/\`; the next \`mason_init\` run can pick up where it left off.
-- \`mason_init\` is idempotent — already-initialized projects return \`{ initialized: true, confluenceConfigured: ... }\`.
-- The user can reconfigure Confluence later by asking their assistant to call \`mason_set_confluence\` directly.`;
-
-export function setupPlaybook(): string {
-  return SETUP_PLAYBOOK;
+export function setupPlaybook(mode: InitMode = "quickstart"): string {
+  return mode === "map" ? MAP_PLAYBOOK : QUICKSTART_PLAYBOOK;
 }

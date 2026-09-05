@@ -2,29 +2,38 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { getChangesWithStatus } from "../drift/drift.js";
-import { loadDecisions } from "../decisions/decisions.js";
+import { getChangesWithStatus, touchedPaths } from "../drift/drift.js";
+import { decisionProvenance } from "../decisions/provenance.js";
+import { loadDecisionStore } from "../decisions/decisions.js";
+import { matchingPaths } from "../utils/paths.js";
+import { computeDecisionDrift } from "../decisions/drift.js";
+import type { Freshness } from "../context/trust.js";
+import type { StoreDiagnostic } from "../utils/storage.js";
 import type { DecisionRecord } from "../decisions/decisions.js";
 import { findMissingPartners } from "./cochange.js";
 import type { CochangeFinding } from "./cochange.js";
+import { collectReviewEvidence, type ReviewEvidence } from "./evidence.js";
+import { getCurrentGitHash } from "../snapshot/snapshot.js";
 
 const exec = promisify(execFile);
 
 /** Diffs larger than this are refactors; partner analysis would be noise. */
 const MAX_ANALYZED_FILES = 50;
 
-export interface TouchedDecision {
+export interface TouchedDecision extends Partial<ReturnType<typeof decisionProvenance>> {
   id: string;
   title: string;
   body: string;
   category: string;
   anchors: string[];
+  freshness?: Freshness;
   touchedFiles: string[];
 }
 
 export interface ReviewReport {
   /** Additive-only schema. */
   version: 1;
+  diagnostics?: StoreDiagnostic[];
   root: string;
   base: string;
   mergeBase: string;
@@ -35,14 +44,17 @@ export interface ReviewReport {
   touchedDecisions: TouchedDecision[];
   historyAvailable: boolean;
   truncated: boolean;
+  /** Optional imported CI results. Does not change the legacy review exit codes. */
+  evidence?: ReviewEvidence;
 }
 
 async function resolveMergeBase(
   resolvedRoot: string,
-  base: string
+  base: string,
+  head: string
 ): Promise<string | null> {
   try {
-    const { stdout } = await exec("git", ["merge-base", base, "HEAD"], {
+    const { stdout } = await exec("git", ["merge-base", base, head], {
       cwd: resolvedRoot,
     });
     return stdout.trim() || null;
@@ -70,12 +82,7 @@ function anchorsTouched(
   record: DecisionRecord,
   changedFiles: string[]
 ): string[] {
-  return changedFiles.filter((file) =>
-    record.files.some((anchor) => {
-      const a = anchor.replace(/\/+$/, "");
-      return a === file || file.startsWith(`${a}/`);
-    })
-  );
+  return matchingPaths(record.files, changedFiles);
 }
 
 /**
@@ -86,22 +93,19 @@ function anchorsTouched(
  */
 export async function computeReview(
   rootDir: string,
-  base: string
+  base: string,
+  options: { evidence?: string[] } = {}
 ): Promise<ReviewReport | null> {
   const resolvedRoot = path.resolve(rootDir);
-  const mergeBase = await resolveMergeBase(resolvedRoot, base);
+  const head = await getCurrentGitHash(resolvedRoot);
+  if (head === "unknown") return null;
+  const mergeBase = await resolveMergeBase(resolvedRoot, base, head);
   if (!mergeBase) return null;
 
-  const changes = await getChangesWithStatus(resolvedRoot, mergeBase);
+  const changes = await getChangesWithStatus(resolvedRoot, mergeBase, head);
   if (changes === null) return null;
 
-  const changedFiles = [
-    ...new Set(
-      changes
-        .filter((c) => c.status !== "deleted")
-        .map((c) => c.path)
-    ),
-  ].sort();
+  const changedFiles = touchedPaths(changes);
 
   const report: ReviewReport = {
     version: 1,
@@ -114,7 +118,27 @@ export async function computeReview(
     historyAvailable: true,
     truncated: false,
   };
-  if (changedFiles.length === 0) return report;
+  const store = await loadDecisionStore(resolvedRoot);
+  report.diagnostics = store.diagnostics;
+  const decisionDrift = await computeDecisionDrift(resolvedRoot, store.records);
+  if (options.evidence !== undefined) {
+    report.evidence = await collectReviewEvidence(resolvedRoot, options.evidence, changedFiles, store.records, decisionDrift.freshness, head);
+    if (store.diagnostics.length) {
+      report.evidence.diagnostics.push("Invalid decision records make knowledge associations incomplete; consult review diagnostics.");
+      if (report.evidence.status === "passed") report.evidence.status = "incomplete";
+    }
+  }
+  const finalize = async () => {
+    if (report.evidence && await getCurrentGitHash(resolvedRoot) !== head) {
+      report.evidence.diagnostics.push("HEAD changed during the review; rerun to obtain consistent change and knowledge associations.");
+      for (const check of report.evidence.checks) check.freshness = "unknown";
+      report.evidence.summary.stale = 0;
+      report.evidence.summary.unknown = report.evidence.checks.length;
+      if (report.evidence.status !== "unavailable") report.evidence.status = "incomplete";
+    }
+    return report;
+  };
+  if (changedFiles.length === 0) return finalize();
 
   let analyzed = changedFiles;
   if (changedFiles.length > MAX_ANALYZED_FILES) {
@@ -132,7 +156,8 @@ export async function computeReview(
       } catch {
         return false;
       }
-    }
+    },
+    changedFiles
   );
   if (partners === null) {
     report.historyAvailable = false;
@@ -140,21 +165,23 @@ export async function computeReview(
     report.missingPartners = partners;
   }
 
-  const decisions = await loadDecisions(resolvedRoot);
+  const decisions = store.records;
   for (const record of decisions) {
     if (record.status !== "active" || record.files.length === 0) continue;
     const touched = anchorsTouched(record, changedFiles);
     if (touched.length > 0) {
       report.touchedDecisions.push({
+        ...decisionProvenance(record, decisionDrift.freshness?.[record.id] ?? "unknown"),
         id: record.id,
         title: record.title,
         body: record.body,
         category: record.category,
         anchors: record.files,
+        freshness: decisionDrift.freshness?.[record.id] ?? "unknown",
         touchedFiles: touched,
       });
     }
   }
 
-  return report;
+  return finalize();
 }

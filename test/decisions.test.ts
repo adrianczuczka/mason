@@ -161,7 +161,7 @@ describe("decisions", () => {
       expect((await loadDecisions(tmpDir)).length).toBe(2);
     });
 
-    it("updates by id preserving createdAt, bumping updatedAt and refreshedHash", async () => {
+    it("revises by id preserving createdAt and the last review baseline", async () => {
       await upsertDecision(tmpDir, {
         title: "API client owns serialization",
         body: "Serialization lives in the client, not call sites.",
@@ -181,11 +181,11 @@ describe("decisions", () => {
       expect(result.status).toBe("updated");
       const [after] = await loadDecisions(tmpDir);
       expect(after.createdAt).toBe(before.createdAt);
-      expect(after.refreshedHash).toBe(newHead);
+      expect(after.refreshedHash).toBe(before.refreshedHash);
       expect(after.body).toMatch(/enforced in review/);
     });
 
-    it("re-verifies on same id + unchanged content, re-pinning to HEAD", async () => {
+    it("leaves review evidence unchanged on same id and content", async () => {
       await upsertDecision(tmpDir, {
         title: "API client owns serialization",
         body: "Serialization lives in the client, not call sites.",
@@ -201,9 +201,9 @@ describe("decisions", () => {
         body: before.body,
         category: before.category,
       });
-      expect(result.status).toBe("reverified");
+      expect(result.status).toBe("unchanged");
       const [after] = await loadDecisions(tmpDir);
-      expect(after.refreshedHash).toBe(newHead);
+      expect(after.refreshedHash).toBe(before.refreshedHash);
     });
 
     it("supersedes: old record kept, marked superseded, linked to the new one", async () => {
@@ -408,7 +408,7 @@ describe("decisions", () => {
 
       expect(Object.keys(bundle.decisions)).toContain("session-quirk");
       expect(bundle.decisions["session-quirk"].stale).toBe(true);
-      expect(bundle.hint).toMatch(/verify each still holds/);
+      expect(bundle.decisions["session-quirk"].trust.freshness).toBe("changed");
     });
 
     it("decisions appear in NoMatchBundle when no feature matches", async () => {
@@ -476,6 +476,7 @@ describe("decisions", () => {
       const snapshot = JSON.parse(await fs.readFile(snapshotPath, "utf-8"));
       snapshot.gitHash = newHead;
       snapshot.features["user authentication"].refreshedHash = newHead;
+      snapshot.features.api = { description: "API", files: ["src/api.ts"], refreshedHash: newHead };
       await fs.writeFile(snapshotPath, JSON.stringify(snapshot));
 
       const out: string[] = [];

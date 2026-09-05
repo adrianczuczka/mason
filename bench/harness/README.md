@@ -1,5 +1,13 @@
 # Mason agentic benchmark harness
 
+For actual code changes, use the [patch benchmark](patches/README.md): ten
+controlled tasks, private behavioral checks, independent checkouts, configurable
+coding-agent adapters, and reviewable false-positive judgments. Validate it
+offline with `npm run bench:validate` from the repository root.
+
+The remainder of this document describes the original **read-only Q&A** harness.
+Its scores do not establish better patches or fewer regressions.
+
 Measures Mason against a **fair baseline** by driving real headless Claude Code
 sessions, not simulated contexts. This supersedes the hand-fed A/B comparison in
 `bench/tests/test_mason.py`, which picks the file sets itself — here the agent

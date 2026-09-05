@@ -1,22 +1,10 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import fg from "fast-glob";
+import { createFileAccess, SOURCE_EXTENSIONS } from "../utils/files.js";
+export type { ProjectConfig } from "../utils/files.js";
 
 const exec = promisify(execFile);
-
-const SOURCE_EXTENSIONS = [
-  "ts", "tsx", "js", "jsx", "mts", "mjs",
-  "kt", "kts", "java",
-  "py",
-  "go",
-  "rs",
-  "swift",
-  "rb",
-  "cs", "cpp", "c", "h",
-  "dart",
-];
 
 const CONFIG_FILES = [
   // Build & project config
@@ -121,36 +109,7 @@ const ARCHITECTURAL_PATTERNS = [
   { glob: "**/*Command.*", category: "usecase", reason: "command (CQRS pattern)" },
 ];
 
-const IGNORE_PATTERNS = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/.gradle/**",
-  "**/target/**",
-  "**/.git/**",
-  "**/vendor/**",
-  "**/__pycache__/**",
-  "**/venv/**",
-  "**/.venv/**",
-  "**/*.min.*",
-  "**/*.map",
-  "**/package-lock.json",
-  "**/yarn.lock",
-  "**/pnpm-lock.yaml",
-  "**/*.lock",
-  "**/*.generated.*",
-  "**/generated/**",
-  "**/R.java",
-  "**/BuildConfig.java",
-];
-
 const PREVIEW_LINES = 60;
-
-export interface ProjectConfig {
-  patterns?: string[];
-  alwaysInclude?: string[];
-  ignore?: string[];
-}
 
 export interface SampledFile {
   path: string;
@@ -160,40 +119,13 @@ export interface SampledFile {
   reason: string;
 }
 
-async function loadProjectConfig(
-  rootDir: string
-): Promise<ProjectConfig> {
-  try {
-    const raw = await fs.readFile(
-      path.join(rootDir, ".mason", "config.json"),
-      "utf-8"
-    );
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-async function getTrackedFiles(rootDir: string): Promise<Set<string> | null> {
-  try {
-    const { stdout } = await exec("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
-      cwd: rootDir,
-      maxBuffer: 10_000_000,
-    });
-    return new Set(stdout.trim().split("\n").filter(Boolean));
-  } catch {
-    return null; // Not a git repo — skip filtering
-  }
-}
-
 export async function sampleFiles(
   rootDir: string,
   maxFiles: number = 25
 ): Promise<SampledFile[]> {
   const selected = new Map<string, string>(); // path -> reason
-  const projectConfig = await loadProjectConfig(rootDir);
-  const ignorePatterns = [...IGNORE_PATTERNS, ...(projectConfig.ignore ?? [])];
-  const trackedFiles = await getTrackedFiles(rootDir);
+  const access = await createFileAccess(rootDir);
+  const projectConfig = access.config;
 
   // 0. Always-include files from project config (highest priority)
   for (const filePath of projectConfig.alwaysInclude ?? []) {
@@ -208,9 +140,7 @@ export async function sampleFiles(
   let configCount = 0;
   for (const pattern of CONFIG_FILES) {
     if (configCount >= 5) break;
-    const matches = await fg(pattern, {
-      cwd: rootDir,
-      ignore: ignorePatterns,
+    const matches = await access.list(pattern, {
       deep: 3,
     });
     for (const match of matches) {
@@ -234,9 +164,7 @@ export async function sampleFiles(
   ];
   let moduleBuildCount = 0;
   for (const pattern of moduleBuildPatterns) {
-    const matches = await fg(pattern, {
-      cwd: rootDir,
-      ignore: ignorePatterns,
+    const matches = await access.list(pattern, {
       deep: 4,
     });
     // Skip root-level files (already captured as config)
@@ -255,9 +183,7 @@ export async function sampleFiles(
   let entryCount = 0;
   for (const pattern of ENTRY_POINT_PATTERNS) {
     if (entryCount >= 2) break;
-    const matches = await fg(pattern, {
-      cwd: rootDir,
-      ignore: ignorePatterns,
+    const matches = await access.list(pattern, {
       deep: 5,
     });
     for (const match of matches) {
@@ -313,9 +239,7 @@ export async function sampleFiles(
     if (patternCount >= 8 || selected.size >= maxFiles) break;
     if (seenCategories.has(pattern.category)) continue;
 
-    const matches = await fg(pattern.glob, {
-      cwd: rootDir,
-      ignore: ignorePatterns,
+    const matches = await access.list(pattern.glob, {
     });
 
     if (matches.length > 0) {
@@ -333,9 +257,7 @@ export async function sampleFiles(
   // 5b. Custom patterns from project config
   for (const customGlob of projectConfig.patterns ?? []) {
     if (selected.size >= maxFiles) break;
-    const matches = await fg(customGlob, {
-      cwd: rootDir,
-      ignore: ignorePatterns,
+    const matches = await access.list(customGlob, {
     });
     for (const match of matches) {
       if (selected.size >= maxFiles) break;
@@ -364,9 +286,7 @@ export async function sampleFiles(
   let testCount = 0;
   for (const group of testPatternGroups) {
     if (testCount >= 3 || selected.size >= maxFiles) break;
-    const testFiles = await fg(group.patterns, {
-      cwd: rootDir,
-      ignore: ignorePatterns,
+    const testFiles = await access.list(group.patterns, {
     });
     if (testFiles.length > 0) {
       for (const file of testFiles) {
@@ -381,9 +301,7 @@ export async function sampleFiles(
 
   // 7. Directory breadth — fill remaining slots with one file per top-level dir
   const sourceGlobs = SOURCE_EXTENSIONS.map((ext) => `**/*.${ext}`);
-  const allSourceFiles = await fg(sourceGlobs, {
-    cwd: rootDir,
-    ignore: ignorePatterns,
+  const allSourceFiles = await access.list(sourceGlobs, {
   });
 
   const dirRepresentatives = new Map<string, string>();
@@ -406,22 +324,16 @@ export async function sampleFiles(
   const results: SampledFile[] = [];
   for (const [filePath, reason] of selected) {
     try {
-      const fullPath = path.resolve(rootDir, filePath);
-      if (!fullPath.startsWith(path.resolve(rootDir))) continue;
-      if (isSensitiveFile(filePath)) continue;
-      if (trackedFiles && !trackedFiles.has(filePath)) continue; // respect .gitignore
-      const stat = await fs.stat(fullPath);
-      if (stat.size > 100_000) continue;
-
-      const content = await fs.readFile(fullPath, "utf-8");
-      const lines = content.split("\n");
+      const full = await access.read(filePath);
+      if (!full || Buffer.byteLength(full.content) > 100_000) continue;
+      const lines = full.content.split("\n");
       const preview = lines.slice(0, PREVIEW_LINES).join("\n");
 
       results.push({
         path: filePath,
         preview,
         totalLines: lines.length,
-        sizeBytes: stat.size,
+        sizeBytes: Buffer.byteLength(full.content),
         reason,
       });
     } catch {
@@ -432,43 +344,9 @@ export async function sampleFiles(
   return results;
 }
 
-const SENSITIVE_PATTERNS = [
-  /^\.env$/,
-  /^\.env\./,
-  /\.pem$/,
-  /\.key$/,
-  /\.p12$/,
-  /\.pfx$/,
-  /\.jks$/,
-  /id_rsa/,
-  /id_ed25519/,
-  /credentials\./,
-  /secret/i,
-  /\.keystore$/,
-  /local\.properties$/,
-];
-
-function isSensitiveFile(filePath: string): boolean {
-  const basename = path.basename(filePath);
-  return SENSITIVE_PATTERNS.some((p) => p.test(basename));
-}
-
 export async function readFullFile(
   rootDir: string,
   filePath: string
 ): Promise<{ path: string; content: string; totalLines: number } | null> {
-  try {
-    const fullPath = path.join(path.resolve(rootDir), filePath);
-    if (!fullPath.startsWith(path.resolve(rootDir))) return null;
-    if (isSensitiveFile(filePath)) return null;
-
-    const content = await fs.readFile(fullPath, "utf-8");
-    return {
-      path: filePath,
-      content,
-      totalLines: content.split("\n").length,
-    };
-  } catch {
-    return null;
-  }
+  return (await createFileAccess(rootDir)).read(filePath);
 }

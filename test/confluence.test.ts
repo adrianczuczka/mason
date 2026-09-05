@@ -1068,13 +1068,13 @@ describe("Confluence MCP tools", () => {
   });
 
   describe("exportToConfluenceTool", () => {
-    it("refuses to run on un-initialized projects", async () => {
+    it("requires Confluence credentials without requiring initialization", async () => {
       const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "mason-export-test-"));
       try {
         const raw = await exportToConfluenceTool(tmp);
         const data = JSON.parse(raw);
-        expect(data.initialized).toBe(false);
-        expect(data.hint).toMatch(/mason_init/);
+        expect(data.status).toBe("error");
+        expect(data.error).toMatch(/No Confluence credentials/);
       } finally {
         await fs.rm(tmp, { recursive: true, force: true });
       }

@@ -1,3 +1,5 @@
+import type { decisionProvenance } from "../decisions/provenance.js";
+
 export type IssueType =
   | "deleted-reference"
   | "new-module"
@@ -81,6 +83,7 @@ export type Evidence =
     }
   | {
       kind: "decision-anchor";
+      provenance?: ReturnType<typeof decisionProvenance>;
       decisionId: string;
       title: string;
       changedFiles: string[];

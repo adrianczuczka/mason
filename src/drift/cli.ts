@@ -65,7 +65,10 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 export function formatDriftSummary(report: DriftReport): string {
   if (!report.stale) {
-    return `Concept map is up to date (HEAD ${report.headHash.slice(0, 7)}).`;
+    const lines = [`Concept map is up to date against committed source (HEAD ${report.headHash.slice(0, 7)}).`];
+    if (report.workingTree?.changedFiles.length) lines.push(`Working tree has ${report.workingTree.changedFiles.length} changed files; live context checks report these separately.`);
+    if (report.verification?.failed.length) lines.push(`Verification FAILED: ${report.verification.failed.join(", ")}. Correct these entries before relying on them.`);
+    return lines.join("\n");
   }
 
   const lines: string[] = [];
@@ -195,7 +198,11 @@ export async function runDriftCli(
   }
 
   const rootDir = path.resolve(args.dir);
-  const report = await computeDrift(rootDir);
+  let report: DriftReport | null;
+  try { report = await computeDrift(rootDir); } catch (error) {
+    io.err(error instanceof Error ? error.message : String(error));
+    return 2;
+  }
 
   if (!report) {
     io.err(
@@ -226,12 +233,15 @@ export async function runDriftCli(
 
   if (args.json) {
     const output: DriftReport & { decisions?: DecisionDriftReport } = report;
-    if (decisionDrift.totalDecisions > 0) {
+    if (decisionDrift.totalDecisions > 0 || decisionDrift.diagnostics?.length) {
       output.decisions = decisionDrift;
     }
     io.out(JSON.stringify(output, null, 2));
   } else {
     const lines = [formatDriftSummary(report)];
+    for (const diagnostic of decisionDrift.diagnostics ?? []) lines.push(`Invalid decision record ${diagnostic.path}: ${diagnostic.message}`);
+    const unknownIds = Object.entries(decisionDrift.freshness ?? {}).filter(([, state]) => state === "unknown").map(([id]) => id);
+    if (unknownIds.length) lines.push(`Decision freshness unknown: ${unknownIds.join(", ")}. Verify before relying on them.`);
     const staleIds = Object.keys(decisionDrift.staleDecisions);
     if (staleIds.length > 0) {
       lines.push(

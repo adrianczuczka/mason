@@ -6,21 +6,32 @@
 [![license](https://img.shields.io/github/license/adrianczuczka/mason)](https://github.com/adrianczuczka/mason/blob/main/LICENSE)
 [![issues](https://img.shields.io/github/issues/adrianczuczka/mason)](https://github.com/adrianczuczka/mason/issues)
 
-### Persistent, provably-fresh context your assistant can't grep for: team decisions, change history, and a feature-to-file map — assembled per task in one call.
+### Give coding assistants the lessons your team already learned, the changes they might miss, and evidence of what is still current.
 
-**Modern agents are good at reading code. They're terrible at knowing what your team learned the hard way, what changes together, and whether yesterday's understanding still holds. Mason owns exactly that.**
+Start with useful checks in an existing Git repository — no setup, map build, or model calls:
+
+```bash
+npx -p mason-context mason-audit --dir .
+npx -p mason-context mason-review --dir . --base origin/main
+```
+
+The audit checks claims in `AGENTS.md` and `CLAUDE.md` against the repository. The review checks committed changes from the merge base to HEAD for missing historical change partners and touched decisions. Choose the base branch you normally review against. Missing context files, unavailable history, and skipped checks are reported explicitly; these commands do not certify a patch's correctness.
+
+To capture and retrieve lessons while coding, connect Mason to your assistant:
 
 ```bash
 claude mcp add mason --scope user -- npx -p mason-context mason-mcp
 ```
 
-Restart Claude Code, then ask: *"use mason to set up this project."* The assistant calls `mason_init`, walks you through a quick Q&A to build the concept map, and you're done.
+Restart Claude Code, then ask: *"Use Mason to check this project and set up decision capture."* `mason_init` returns the audit and review findings plus a short guide for adding Mason instructions to the project's existing `AGENTS.md` or `CLAUDE.md`. It does not build a map by default.
 
-Next session, your assistant loads the map instead of grepping 8 files to figure out what your app does.
+After resolving a real incident or settling a constraint, ask your assistant to record the reason with `save_decision`. On the next related task, `get_context` retrieves it as a proposal with file impact, tests, and trust evidence. Use `review_decision` when you are ready to record acceptance. Both work immediately, even without running setup.
 
-> **0.6.0 note:** Mason 0.6 adds decision records (`save_decision`), task-scoped assembly (`get_context`), map verification (`verify_snapshot`), the self-maintaining refresh loop, and richer uninitialized responses. If you set Mason up before 0.6, re-run setup once (ask your assistant to "run mason_init again") — it refreshes the marker-delimited CLAUDE.md section that routes assistants to the new tools.
+For architecture navigation, ask: *"Build a Mason concept map."* The assistant calls `mason_init` with `mode: "map"` for the full Map-Reduce workflow.
 
-> **0.4.0 note:** Mason is MCP-only as of v0.4.0. The previous `mason <command>` CLI has been removed — everything runs through MCP tools, driven by your assistant. See [0.4.0 migration](#040-migration) below if you used the old CLI.
+> **Existing installations:** Re-run `mason_init` and update the marker-delimited assistant instructions to use the shorter onboarding path. Existing maps and decisions continue to work. `mason_complete_init` preserves the original setup date and settings when omitted.
+
+> **0.4.0 note:** The previous `mason <command>` CLI was removed in v0.4.0. Setup and map editing use MCP; dedicated drift, audit, hook, and review binaries support automation. See [0.4.0 migration](#040-migration) below if you used the old CLI.
 
 ---
 
@@ -34,13 +45,13 @@ Agentic search keeps getting better at re-deriving what's *in* the code — but 
 
 ## The fix
 
-Mason is an MCP server that maintains three git-committed, deterministic stores and assembles them per task:
+Mason is an MCP server that assembles repository knowledge per task and checks it against source and Git evidence:
 
-- **Concept map** (`.mason/snapshot.json`) — features and flows → files, built by your assistant, spot-checked by `verify_snapshot`
-- **Decision records** (`.mason/decisions/`) — team knowledge the code can't express, captured by `save_decision`, PR-reviewed like code
-- **Drift engine** — LLM-free proof of what's stale, per entry, with a self-maintaining refresh loop for CI
+- **Decision records** (`.mason/decisions/`) — lessons and constraints captured by `save_decision`, ready for normal code review and commit
+- **Optional concept map** (`.mason/snapshot.json`) — features and flows → files, built by your assistant, spot-checked by `verify_snapshot`
+- **Drift engine** — LLM-free evidence of what changed, per entry, with a self-maintaining refresh loop for CI
 
-Ask your assistant to do a task and one `get_context` call returns the relevant features, files, tests, blast radius (git co-change + references), matching decisions, and a freshness verdict. The map itself:
+One `get_context` call retrieves matching decisions with their full rationale and trust evidence. Known file paths or matched decision anchors provide tests and impact; an available map adds relevant features and flows. An optional map looks like:
 
 ```json
 {
@@ -59,11 +70,13 @@ Ask your assistant to do a task and one `get_context` call returns the relevant 
 
 The assistant jumps straight to the relevant files instead of exploring.
 
-**Where the map comes from:** Mason doesn't parse your code. Your assistant reads the project through Mason's analysis tools and writes the map itself — capturing architectural intent, not just symbols and call edges. Setup also adds a short section to your CLAUDE.md so every future session (any assistant, any teammate) consults the stores before exploring.
+**Where the map comes from:** Mason doesn't parse your code. Your assistant reads the project through Mason's analysis tools and writes the map itself — capturing architectural intent, not just symbols and call edges. Setup adds a short section to your project's assistant instructions so future sessions consult the available knowledge.
 
 ## What the numbers say
 
 Measured with real headless agent sessions in A/B arms (baseline always has a populated CLAUDE.md — beating a context-free agent is not a result). Full harness, pinned commits, and losses included: [bench/harness/](bench/harness/).
+
+These measurements concern read-only answers. The new [patch benchmark](bench/harness/patches/README.md) grades actual code changes, companion updates, and constraint preservation. Its offline checks validate the harness; live patch improvements and false-positive rates remain unmeasured.
 
 - **Where Mason wins — knowledge that isn't in the code.** On tasks whose correct answer hinges on a recorded engineering decision (seeded fairly: the baseline had the same facts in a discoverable doc), Mason averaged **9.0/10 vs 7.0/10**. The baseline missed the constraint entirely half the time, and needed ~3× the turns when it found it; Mason surfaced it in one `get_context` call, every time.
 - **Stale-map safety.** Against a deliberately stale map, the drift flag + changed-file previews led the agent to verify and answer current-code truth — the "confidently wrong from a stale cache" failure did not occur.
@@ -72,28 +85,58 @@ Measured with real headless agent sessions in A/B arms (baseline always has a po
 
 ## Decision records
 
-The store that makes Mason more than a map. When your assistant learns something the code can't express — a failed approach, a deprecation, a workaround's reason, a review-settled convention — it records it with `save_decision`:
+Capture a lesson with `save_decision`: what happened, why it matters, and the files or directories it applies to. Add `owner`, `sources`, and `actor` when known. None are required to capture a proposal, and missing attribution stays explicit.
 
-- One JSON file per record in `.mason/decisions/` — concurrent additions merge cleanly; conflicting edits to the same record surface to a human, which is the point
-- Git-committed and PR-reviewed: nothing enters team knowledge without the normal review gate
-- Anchored to files and drift-checked: when the anchor files change, the record is flagged for re-verification instead of silently going stale
-- Surfaced by `get_context` as constraints exactly when a task touches them — for every teammate, in every session, on any assistant
+| Approval | How assistants should use it |
+|---|---|
+| `proposed` | A suggestion that needs review; the default for new records. |
+| `accepted` | A recorded team constraint, still subject to freshness checks. |
+| `unreviewed` | Legacy knowledge with no recorded acceptance. Check its source before treating it as adopted. |
+
+Acceptance is separate from lifecycle: retired and superseded records remain in history but leave active retrieval. `get_context`, `get_snapshot`, hooks, and `mason-review` expose approval and provenance alongside freshness. A hook session also receives changes in approval and withdrawals of records it previously saw.
+
+For example, an assistant can call `save_decision` with:
+
+```json
+{
+  "dir": "/path/to/project",
+  "title": "Delivery retries require an idempotency key",
+  "body": "Unkeyed retries duplicated customer orders during incident 42. Retry only when the request carries an idempotency key.",
+  "category": "gotcha",
+  "files": ["src/delivery.ts"],
+  "owner": "Delivery team",
+  "sources": [{ "kind": "incident", "reference": "incidents/42" }]
+}
+```
+
+Then ask your assistant to **review that decision**. `review_decision` with its `id` returns the full record, revision and review history, changes since its evidence baseline, local edits, and bounded source/diff previews. Source references are citations to inspect; Mason does not fetch or validate their contents. Supported source kinds are `pull_request`, `issue`, `incident`, `discussion`, `document`, and `other`.
+
+After the user or cited team review authorizes a verdict, call `review_decision` again with `action: "accept"`, the actual `reviewer`, a `note` explaining the reason, and the returned `reviewToken`. Acceptance needs an owner, at least one source, readable Git HEAD, and no uncommitted changes to the anchors. Unrelated local work can remain. If the decision or code revision changed since preparation, prepare and inspect it again.
+
+When anchored code changes later, use the same preparation flow and `action: "reaffirm"` to record that the accepted decision still holds, or `action: "retire"` to withdraw it. Retirement preserves history and can be recorded when Git history is unavailable. A reviewer may establish a new acceptance baseline when old history is unreachable; that gap stays recorded in the review event. Anchorless knowledge retains unknown code freshness even after acceptance.
+
+Tools preserve earlier content and review events in each `.mason/decisions/<id>.json` file. Reviews record the reviewer, reason, timestamp, revision, and code baseline. Editing content, anchors, owner, or sources creates a new proposed revision and retains the earlier accepted version in history. Saving identical content is a no-op: it does not silently reaffirm or refresh the decision. A proposal cannot supersede an accepted constraint; review the replacement, then explicitly retire the original.
+
+**Existing records:** Version 1 records remain readable and explicitly unreviewed, without automatic file rewrites or invented attribution. Their first revision or review upgrades them to version 2 with an import event marking the missing earlier history. Old clients that only understand version 1 must be upgraded before consuming new records. Use the tools to revise records; inconsistent content/history is reported as invalid.
+
+Mason records assertions of review; it does not authenticate reviewer identity, verify approval in linked systems, or commit files. Review and commit these records through your normal PR process. The history is a review trail, not a tamper-proof approval service.
 
 ## MCP tools
 
 | Tool | Purpose |
 |---|---|
-| `mason_init` | **Start here.** Returns the Map-Reduce setup playbook. Idempotent. |
-| `mason_complete_init` | Marks the project as initialized once the playbook is done. |
+| `mason_init` | Read-only audit/review findings and quickstart guide; optional `base` for review, `evidence` for local CI manifests, `mode: "map"` for an architecture build. |
+| `mason_complete_init` | Records assistant instruction setup; preserves prior settings on repeated calls. |
 | `generate_snapshot_batch` | Map step — returns one batch of files for the assistant to summarize. |
 | `save_partial_snapshot` | Persists the partial map for one batch. |
 | `reduce_snapshot` | Reduce step — returns every partial + instructions to merge into a unified map. |
 | `save_snapshot` | Persist the final unified map. Clears partials. |
 | `mason_set_confluence` | Configure Confluence credentials — two-step: list spaces, then persist. |
 | `export_to_confluence` | Sync the concept map to Confluence as PM-readable wiki pages. |
-| `get_snapshot` | **First call for any architecture question.** Loads the concept map — feature → file lookup — in one LLM-free call. |
-| `get_context` | **First call for any task or bug.** Matching features + files + tests + blast radius + freshness + recorded decisions, in one call. |
-| `save_decision` | Record knowledge the code can't express — failed approaches, deprecations, conventions. Git-committed, PR-reviewed, drift-checked. |
+| `get_snapshot` | Architecture navigation when a map is available. Loads the concept map — feature → file lookup — in one LLM-free call. |
+| `get_context` | Decisions with approval, provenance, file impact, tests, and trust for a task; adds features/flows when a map exists. No setup required. |
+| `save_decision` | Capture or revise proposals with rationale, anchors, owner, sources, and revision history. No setup required. |
+| `review_decision` | Prepare record/code evidence, then record authorized acceptance, reaffirmation, or retirement against that revision. |
 | `mason_check_drift` | Feature-level staleness report — what changed since the snapshot, and whether to refresh incrementally or rebuild. |
 | `verify_snapshot` | Spot-check map correctness — sampled entries + file skeletons for the assistant to judge, least-recently-verified first. |
 | `save_verification` | Record verification verdicts — failures flag entries for re-mapping until fixed. |
@@ -102,9 +145,9 @@ The store that makes Mason more than a map. When your assistant learns something
 | `full_analysis` | One-shot orientation for unmapped projects: structure + samples + tests + git. |
 | `get_code_samples` | Smart file previews selected by architectural role. |
 
-The init / write tools refuse to run until `mason_init` has completed. The read-only diagnostics (`analyze_project`, `full_analysis`, `get_code_samples`) work without init.
+Tools operate on the data they need; none require the initialization marker. Decision capture and impact need no concept map. Map verification and drift require a map; Confluence export requires credentials and a map.
 
-Setup also offers to add a short marker-delimited section to your project's CLAUDE.md telling assistants to consult the map before exploring — assistants follow project instructions far more reliably than they discover MCP tools on their own.
+Setup installs a short marker-delimited section in the existing `AGENTS.md`, otherwise `CLAUDE.md` or `.claude/CLAUDE.md`; if none exists, it creates `AGENTS.md`. It routes assistants to decisions and impact, with map navigation when available.
 
 ### How the concept map is built
 
@@ -114,7 +157,7 @@ To stay accurate on codebases of any size, Mason uses a **Map-Reduce** pattern i
 - **Reduce**: `reduce_snapshot` returns all the partials plus instructions to merge them into one product-shaped catalog — combining platform variants ("home Android" + "home iOS" → "home screen"), deduplicating, and ensuring no file is dropped.
 - **Save**: `save_snapshot` persists the unified map and cleans up the partials.
 
-The result: every source file is represented exactly once in the final snapshot. A 200-file project takes ~5 batches; a 1000-file monorepo takes ~20.
+The goal is complete source coverage. Drift checking reports eligible committed source files omitted from the snapshot, including omissions from a map saved at HEAD. A 200-file project takes ~5 batches; a 1000-file monorepo takes ~20.
 
 ## Change impact
 
@@ -130,11 +173,30 @@ Ask your assistant *"what would be affected if I changed WeatherRepository?"* an
 
 A concept map that silently goes stale is worse than no map — your assistant confidently jumps to files that no longer do what the map says. `mason_check_drift` compares the map against HEAD (pure git + filesystem, no LLM call) and reports drift at the **feature level**: which features are stale and which files changed under them, new source files not yet mapped, ghost files the map still references, and renames. It ends with a recommendation — `up-to-date`, `incremental` (re-map just the stale entries), or `full-rebuild` (re-run the Map-Reduce playbook).
 
-Ask your assistant *"is the concept map still fresh?"* — and if it isn't, the same report tells it exactly which entries to regenerate. `get_snapshot` includes the same drift report whenever it detects a stale map, so a stale map self-heals in the course of normal use.
+Ask your assistant *"is the concept map still fresh?"* — and if it isn't, the same report tells it exactly which entries to regenerate. `get_snapshot` includes the same drift report whenever it detects a stale map, so the assistant can inspect and refresh affected entries.
 
 Incremental refreshes are safe against partial updates: every entry a refresh touches is stamped with the commit it was verified against, so entries skipped in one refresh keep reporting as stale instead of silently riding along on the map's new hash. Features that disappear from the codebase can be deleted from the map with `save_snapshot`'s `removeFeatures`/`removeFlows` — renames stop leaving zombie entries behind.
 
 When a lot of files drifted at once, the assistant runs a **scoped refresh** instead of a full rebuild: `generate_snapshot_batch` accepts a `files` list, so the Map-Reduce loop walks only the drifted files and the reduce step merges the result into the existing map. 60 drifted files in a 1000-file monorepo means ~2 batches, not 20.
+
+### Reading trust signals
+
+`get_context` reports `map.status` as `available`, `missing`, or `invalid`. The legacy `exists` field indicates usable map availability only: `exists: false` can still include decisions, impact, and tests. Without a usable map, map freshness is `null`, and an invalid map produces diagnostics while valid decisions remain retrievable. An empty decision match is not a clean audit. Impact covers up to three unique targets, expanding directory anchors to eligible source files; use `get_impact` for a larger explicit file list.
+
+Freshness and correctness are separate. `get_context` returns a `trust` object for each matched entry; `get_snapshot` includes a trust index for features, flows, and decisions.
+
+| Field | Meaning |
+|---|---|
+| `freshness: current` | No changes detected in the inspected anchors. This does not prove the description is correct. |
+| `freshness: changed` | Anchored files changed, including edits in the working tree. Inspect the current code. |
+| `freshness: unknown` | Evidence is unavailable, such as missing history or an anchorless decision. Verify before relying on it. |
+| `verification: unverified` | No correctness verdict has been recorded. |
+| `verification: passed` | An assistant recorded a passing verdict; check its freshness and verification point before reuse. |
+| `verification: failed` | A known incorrect entry. The failure and its reason remain visible until corrected. |
+
+Git commit distance is informational: unrelated commits and committing the refreshed map do not make the map stale. `mason-drift` exit codes still describe **committed map drift**; working-tree changes, decision warnings, and verification results are reported separately. A clean drift exit is not a correctness approval.
+
+Snapshot, decision, and partial stores are validated on load and replaced atomically on save. Invalid snapshots produce errors. Invalid decision records appear in diagnostics while valid records remain available; repair the invalid records before writing more decisions.
 
 ### Drift checks in CI
 
@@ -164,7 +226,7 @@ codex exec --full-auto "$(mason-drift --refresh-prompt)"
 gemini --yolo -p "$(mason-drift --refresh-prompt)"
 ```
 
-To close the loop in CI, this repo ships a reusable GitHub Actions workflow — detect on every push, refresh with your agent of choice, commit the updated map back:
+To close the loop in CI, this repo ships a reusable GitHub Actions workflow — detect on every push, refresh with your agent of choice, verify that only the snapshot changed, commit it, check freshness again, and push the updated map:
 
 ```yaml
 jobs:
@@ -233,7 +295,7 @@ Recorded knowledge only helps if it shows up. Retrieval tools depend on the mode
 npx -p mason-context mason-hook --print-config   # the settings block to add
 ```
 
-Add the printed block to `.claude/settings.json` — the *committed* project settings, so every teammate's sessions get the same rail. The loop this closes: someone records a constraint once with `save_decision` ("this screen has a v1 and v2 — new work goes in v2 behind flag X"), and from then on any session that touches those files gets told, whether or not it thought to ask.
+Add the printed block to `.claude/settings.json` — the *committed* project settings, so every teammate's sessions get the same rail. The loop this closes: someone captures a proposal with `save_decision` and records acceptance with `review_decision` ("this screen has a v1 and v2 — new work goes in v2 behind flag X"), and from then on any session that touches those files gets told, whether or not it thought to ask.
 
 For faster fires than `npx` resolution allows, install the package (`npm i -D mason-context`) and point the command at `node_modules/.bin/mason-hook`.
 
@@ -246,15 +308,83 @@ npx -p mason-context mason-review --base origin/main
 ```
 
 - **Missing co-change partners** — files that changed together with a changed file in ≥60% of its commits (≥4 shared, 1500-commit window) but are absent from this diff. Evidence-based but heuristic-grade: a missing partner is a question to ask the diff, not proof of a bug. These drive exit 1.
-- **Touched decisions** — decision records whose anchor files the diff touches, listed as constraints to verify against. Informational; never affect the exit code.
+- **Touched decisions** — decision records whose file or directory anchors the diff touches, including deleted paths and both sides of renames, listed with approval, owner, sources, last review, and freshness. Proposals and legacy records are distinguished from accepted constraints. Informational; never affect the exit code.
 
-Deterministic, no LLM, one pass over git history (~100ms). Run it locally before pushing, or wire it into CI as an advisory check (`mason-review || true` if you want the signal without the gate).
+Deterministic, no LLM, one pass over git history. Run it locally before pushing, or wire it into CI as an advisory check (`mason-review || true` if you want the signal without the gate).
+
+### Combine CI evidence with project knowledge
+
+Import existing check results into the same review:
+
+```bash
+npx -p mason-context mason-review --base origin/main \
+  --evidence .mason/reports/evidence.json
+```
+
+The review shows each check's outcome, command, source, and tested commit. Findings link to changed files and relevant **accepted, active decisions**, including their owner and freshness. Failing tests can also link through Mason's test-to-source pairs, with the pairing confidence shown. These associations give reviewers context; they do not establish that a decision was violated. Proposed and legacy decisions remain visible separately in the touched-decision list.
+
+Supported artifacts are [Vitest JSON reporter output](https://vitest.dev/guide/reporters#json-reporter) for tests and [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html) for static analysis, security, complexity, or duplication findings. Mason imports results from those tools; it does not run their commands or infer a score for checks you have not supplied. JUnit and tool-specific non-SARIF analysis formats are not yet supported.
+
+Create a manifest beside your artifacts. Replace the example commit and checkout path with values captured **when the check ran**, and record its actual exit code:
+
+```json
+{
+  "version": 1,
+  "checks": [
+    {
+      "id": "unit-tests",
+      "kind": "tests",
+      "tool": "vitest",
+      "command": "npm test -- --reporter=json --outputFile=.mason/reports/vitest.json",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "workingTreeClean": true,
+      "sourceRoot": "/runner/work/project",
+      "source": "https://ci.example.com/runs/42",
+      "exitCode": 0,
+      "report": { "format": "vitest-json", "path": ".mason/reports/vitest.json" }
+    },
+    {
+      "id": "security",
+      "kind": "security",
+      "tool": "your-security-scanner",
+      "command": "your scanner command",
+      "status": "skipped",
+      "reason": "Security scanning is not configured in this job."
+    }
+  ]
+}
+```
+
+For a completed analysis check, use `report.format: "sarif"`, its report path, and the same run provenance fields. Give every expected check a unique `id`; use `status: "skipped"` or `"unavailable"` with a reason when it did not run. Omitted checks cannot be detected. `status` defaults to `"completed"`. A successful SARIF invocation can supply completion evidence when an exit code is absent; Vitest imports require a recorded exit code for complete evidence.
+
+Manifest and report paths are relative to the repository root, even when the manifest lives in a subdirectory. Absolute paths inside that root also work. `sourceRoot` maps file locations from the CI checkout to this checkout; it defaults to the local repository root. `source` is an optional CI run link or description. Artifacts must be regular files inside the repository, without symlinks, and at most 10 MiB each. Commands and links are displayed as imported provenance, never executed or fetched, and are not authenticated attestations.
+
+Outcome and freshness are separate. A full tested commit matching the reviewed HEAD and `workingTreeClean: true` establish **current** commit evidence; a different commit is **stale**, while missing commit or dirty/unrecorded checkout state is **unknown**. Record cleanliness before and after the run, and invalidate attribution if HEAD changes during execution. A passing report for another commit cannot establish a pass for this one. Local uncommitted edits remain outside the review's committed scope.
+
+Empty or entirely skipped test runs do not pass; partially skipped runs are incomplete. Malformed or missing artifacts stay unavailable. SARIF active `fail` results count as failures at every severity; explicitly accepted suppressions and results marked absent are retained separately. Failed analysis invocations and omitted results stay unavailable. Open/review results, unresolved locations, and unresolved suppression states preserve uncertainty. The JSON report retains overall counts even when findings are abbreviated (10 manifests, 50 checks, 200 findings per check, 5 related decisions per finding); MCP and text summaries have smaller previews and flag truncation.
+
+Imports are advisory under the existing exit-code contract. Opt into a gate with:
+
+```bash
+npx -p mason-context mason-review --base origin/main \
+  --evidence .mason/reports/evidence.json --require-evidence --json
+```
+
+| Exit | With `--require-evidence` |
+| --- | --- |
+| 0 | All declared checks are current, complete, and passing; no missing co-change partners. |
+| 1 | A current check failed, or co-change partners are missing. |
+| 2 | Evidence is missing, skipped, stale, unknown, or incomplete, or the review cannot run. Current failures take precedence over incomplete evidence. |
+
+Through MCP, pass `evidence: [".mason/reports/evidence.json"]` to `mason_init`. No map or initialization is required. A passing import only describes the supplied checks, not complete coverage or overall correctness.
+
+Mason's own checkout produces real test artifacts with `npm run test:evidence`, using [scripts/test-evidence.mjs](scripts/test-evidence.mjs). It records the observed exit code and checkout state and invalidates previous evidence before starting a fresh run. After `npm run build`, inspect them with `node dist/mason-review.js --base HEAD --evidence .mason/reports/evidence.json`. A local run with uncommitted edits correctly has unknown commit attribution. The repository CI uses this producer and posts the combined review to its job summary. Add `.mason/reports/` to your ignore file when using that output directory; keep the decisions and map tracked.
 
 ## Confluence sync
 
 Keep a Confluence wiki in sync with the concept map, in plain product language that PMs and designers can read. Each sync rewrites the snapshot through your assistant into PM-friendly descriptions, pushes one page per feature, and posts a "what changed since last sync" entry to a changelog page. Mason owns these pages and overwrites each one on every sync, so edit the code, not the page — manual edits to a page body are replaced. Re-running a sync with no code change is a no-op: it makes no Confluence edits at all.
 
-Setup happens during `mason_init` (you'll be asked) or any time later by asking your assistant *"set up Confluence for this project."* The assistant walks you through the Atlassian site URL, your account email, and an API token from id.atlassian.com, then lets you pick which space to use. To sync, ask *"sync the wiki to Confluence."*
+Configure this separately by asking your assistant *"set up Confluence for this project."* The assistant walks you through the Atlassian site URL, your account email, and an API token from id.atlassian.com, then lets you pick which space to use. To sync, ask *"sync the wiki to Confluence."*
 
 > ⚠️ **Token in chat history.** The API token is pasted into your assistant chat, not a terminal. It will appear in your chat history. If that's not acceptable, skip Confluence sync.
 
@@ -333,10 +463,10 @@ Language-agnostic. Mason works from file naming patterns and git history rather 
 
 ## Security
 
-- **The snapshot contains:** feature names, relative file paths, flow descriptions. No source code, no secrets, no business logic.
-- **Respects `.gitignore`** via `git ls-files`. A deny-list blocks `.env`, `.pem`, `.key`, credentials, and other sensitive files from being sampled.
-- **Path traversal protection** keeps all file access inside the project root.
-- **MCP tools are local-only.** Generating a snapshot via MCP uses your assistant's existing LLM context — Mason itself makes no API calls.
+- **The snapshot stores:** assistant-authored feature names, relative file paths, descriptions, and verification metadata. Review that prose before committing it; do not record secrets.
+- **Shared file policy:** mapping, sampling, verification, impact analysis, and test discovery respect Git ignores and `.mason/config.json` exclusions. Sensitive filenames are denied, and source reads are limited to 1 MiB.
+- **Path protection:** source reads check canonical paths and reject symlinks escaping the project root. Metadata paths reject symlinks, including parent directories.
+- **Mapping is local:** source previews go to the connected assistant through MCP. Mason itself makes no model API calls for mapping. Optional Confluence sync uses network access and can call a configured model provider.
 
 ## 0.4.0 migration
 
@@ -345,13 +475,13 @@ If you used Mason before v0.4.0, the standalone `mason <command>` CLI has been r
 | Old CLI | New flow |
 |---|---|
 | `mason set-llm <provider>` | Not needed — your assistant *is* the LLM. |
-| `mason snapshot` | Ask your assistant: *"set up Mason here"* → it calls `mason_init` → `generate_snapshot` → `save_snapshot`. |
+| `mason snapshot` | Ask your assistant: *"build a Mason concept map"* → `mason_init` with `mode: "map"` → the Map-Reduce workflow. |
 | `mason generate` (CLAUDE.md) | Removed. Use your assistant directly. |
 | `mason analyze` | Ask your assistant: *"give me git stats for this repo"* — it calls `analyze_project`. |
 | `mason impact File.kt` | Ask your assistant: *"what would changing File.kt affect?"* — it calls `get_impact`. |
 | `mason snapshot --install-hook` | Removed. The map auto-refreshes when the assistant detects stale state. |
 
-The npm package is still published, but only the `mason-mcp` binary is meaningful now. Running `mason` directly prints a migration message and exits.
+The package provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-hook`, and `mason-review`. Running `mason` directly prints a migration message and exits.
 
 ## License
 

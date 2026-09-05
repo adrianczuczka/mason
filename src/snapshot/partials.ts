@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
-import path from "node:path";
+import { z } from "zod";
+import { readStoreJson, writeStoreJson, storePath } from "../utils/storage.js";
+import { featureSchema, flowSchema } from "./snapshot.js";
 import type { FeatureEntry, FlowEntry } from "./snapshot.js";
 
 export interface Partial {
@@ -10,104 +12,50 @@ export interface Partial {
   savedAt: string;
 }
 
-function partialsDir(rootDir: string): string {
-  return path.join(rootDir, ".mason", "partial-snapshots");
-}
+const DIRECTORY = ".mason/partial-snapshots";
+const partialSchema = z.object({
+  batchId: z.string().regex(/^[a-zA-Z0-9_-]+$/), offset: z.number().int().nonnegative(),
+  features: z.record(featureSchema), flows: z.record(flowSchema), savedAt: z.string(),
+});
+const scopeSchema = z.object({ files: z.array(z.string()), savedAt: z.string() });
 
-function partialPath(rootDir: string, batchId: string): string {
-  return path.join(partialsDir(rootDir), `${batchId}.json`);
-}
-
-function isSafeBatchId(batchId: string): boolean {
-  // batchIds are server-issued; defensively reject anything that could escape
-  return /^[a-zA-Z0-9_-]+$/.test(batchId);
-}
-
-export async function savePartial(
-  rootDir: string,
-  partial: Partial
-): Promise<void> {
-  if (!isSafeBatchId(partial.batchId)) {
-    throw new Error(`Invalid batchId: ${partial.batchId}`);
-  }
-  await fs.mkdir(partialsDir(rootDir), { recursive: true });
-  await fs.writeFile(
-    partialPath(rootDir, partial.batchId),
-    JSON.stringify(partial, null, 2),
-    "utf-8"
-  );
+export async function savePartial(rootDir: string, partial: Partial): Promise<void> {
+  if (!/^[a-zA-Z0-9_-]+$/.test(partial.batchId)) throw new Error(`Invalid batchId: ${partial.batchId}`);
+  await writeStoreJson(rootDir, `${DIRECTORY}/${partial.batchId}.json`, partialSchema.parse(partial));
 }
 
 export async function loadAllPartials(rootDir: string): Promise<Partial[]> {
   let entries: string[];
-  try {
-    entries = await fs.readdir(partialsDir(rootDir));
-  } catch {
-    return [];
+  try { entries = await fs.readdir(await storePath(rootDir, DIRECTORY)); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
   }
-
   const partials: Partial[] = [];
   for (const entry of entries) {
-    if (!entry.endsWith(".json")) continue;
-    try {
-      const raw = await fs.readFile(
-        path.join(partialsDir(rootDir), entry),
-        "utf-8"
-      );
-      const parsed = JSON.parse(raw) as Partial;
-      if (parsed && parsed.batchId && parsed.features && parsed.flows) {
-        partials.push(parsed);
-      }
-    } catch {
-      // Skip unreadable / malformed partials
-    }
+    if (!entry.endsWith(".json") || entry === "scope.json") continue;
+    const partial = partialSchema.parse(await readStoreJson(rootDir, `${DIRECTORY}/${entry}`));
+    if (entry !== `${partial.batchId}.json`) throw new Error(`Invalid partial filename: ${entry}`);
+    partials.push(partial);
   }
-
-  partials.sort((a, b) => a.offset - b.offset);
-  return partials;
+  return partials.sort((a, b) => a.offset - b.offset);
 }
 
-// A scope marker records that the current partials come from a scoped
-// refresh (drift repair) rather than a full Map-Reduce build. It lives in the
-// partials directory so clearAllPartials removes it with the partials;
-// loadAllPartials skips it because it has no batchId/features/flows.
-function scopePath(rootDir: string): string {
-  return path.join(partialsDir(rootDir), "scope.json");
-}
-
-export async function saveScope(
-  rootDir: string,
-  files: string[]
-): Promise<void> {
-  await fs.mkdir(partialsDir(rootDir), { recursive: true });
-  await fs.writeFile(
-    scopePath(rootDir),
-    JSON.stringify({ files, savedAt: new Date().toISOString() }, null, 2),
-    "utf-8"
-  );
+export async function saveScope(rootDir: string, files: string[]): Promise<void> {
+  await writeStoreJson(rootDir, `${DIRECTORY}/scope.json`, { files, savedAt: new Date().toISOString() });
 }
 
 export async function loadScope(rootDir: string): Promise<string[] | null> {
-  try {
-    const raw = await fs.readFile(scopePath(rootDir), "utf-8");
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed?.files)) return parsed.files;
-    return null;
-  } catch {
-    return null;
-  }
+  const raw = await readStoreJson(rootDir, `${DIRECTORY}/scope.json`);
+  return raw === null ? null : scopeSchema.parse(raw).files;
 }
 
 export async function clearScope(rootDir: string): Promise<void> {
-  await fs.rm(scopePath(rootDir), { force: true });
+  await fs.rm(await storePath(rootDir, `${DIRECTORY}/scope.json`), { force: true });
 }
 
 export async function clearAllPartials(rootDir: string): Promise<void> {
-  try {
-    await fs.rm(partialsDir(rootDir), { recursive: true, force: true });
-  } catch {
-    // No partials to clear — fine
-  }
+  await fs.rm(await storePath(rootDir, DIRECTORY), { recursive: true, force: true });
 }
 
 export function batchIdFor(offset: number): string {

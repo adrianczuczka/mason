@@ -100,7 +100,8 @@ describe("runHook", () => {
     const context = contextOf(
       await runHook(stdinFor("src/auth.ts"), { stateDir })
     );
-    expect(context).toContain("older commit");
+    expect(context).toContain("changed files");
+    expect(context).toContain("verify against current code");
   });
 
   it("matches directory-prefix anchors", async () => {

@@ -1,20 +1,5 @@
 import path from "node:path";
-import fg from "fast-glob";
-
-const IGNORE = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/.gradle/**",
-  "**/target/**",
-  "**/.git/**",
-  "**/vendor/**",
-  "**/__pycache__/**",
-  "**/venv/**",
-  "**/.venv/**",
-  "**/*.min.*",
-  "**/*.map",
-];
+import { createFileAccess } from "./utils/files.js";
 
 export interface TestPair {
   test: string;
@@ -30,6 +15,7 @@ export interface TestMapResult {
 
 export async function buildTestMap(dir: string): Promise<TestMapResult> {
   const rootDir = path.resolve(dir);
+  const access = await createFileAccess(rootDir);
 
   // Find all test files
   const testPatterns = [
@@ -40,13 +26,10 @@ export async function buildTestMap(dir: string): Promise<TestMapResult> {
     "**/*Tests.swift", "**/*Test.swift",
     "**/*_test.rs",
   ];
-  const testFiles = await fg(testPatterns, { cwd: rootDir, ignore: IGNORE });
+  const testFiles = await access.list(testPatterns);
 
   // Find all source files
-  const sourceFiles = await fg(
-    "**/*.{ts,tsx,js,jsx,kt,kts,java,py,go,rs,swift,rb,cs,cpp,dart}",
-    { cwd: rootDir, ignore: IGNORE }
-  );
+  const sourceFiles = await access.list();
 
   // Build source file index by base name (without extension)
   const sourceByBaseName = new Map<string, string[]>();

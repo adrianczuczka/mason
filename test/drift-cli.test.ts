@@ -44,7 +44,7 @@ const FRESH_REPORT: DriftReport = {
 describe("formatDriftSummary", () => {
   it("prints a one-liner when up to date", () => {
     expect(formatDriftSummary(FRESH_REPORT)).toBe(
-      "Concept map is up to date (HEAD abc1234)."
+      "Concept map is up to date against committed source (HEAD abc1234)."
     );
   });
 

@@ -1,11 +1,18 @@
 import path from "node:path";
-import { loadSnapshot, normalizeFeatureType } from "../snapshot/snapshot.js";
+import fs from "node:fs/promises";
+import { inspectSnapshot, normalizeFeatureType } from "../snapshot/snapshot.js";
+import { createFileAccess } from "../utils/files.js";
 import type { FeatureType, Snapshot } from "../snapshot/snapshot.js";
-import { computeDrift } from "../drift/drift.js";
+import { computeDrift, type DriftReport } from "../drift/drift.js";
 import { analyzeImpact } from "../impact/impact.js";
 import type { CochangeEntry, ReferenceEntry } from "../impact/impact.js";
 import { scoreEntry, tokenSet } from "./lexical.js";
-import { loadDecisions } from "../decisions/decisions.js";
+import { loadDecisionStore } from "../decisions/decisions.js";
+import { decisionProvenance, decisionTrust, DECISION_GUIDANCE } from "../decisions/provenance.js";
+import { anchorMatches, sanitizeRepoPaths } from "../utils/paths.js";
+import { assessTrust, trustHint, type TrustState } from "./trust.js";
+import type { StoreDiagnostic } from "../utils/storage.js";
+import type { DecisionDriftReport } from "../decisions/drift.js";
 import type { DecisionCategory, DecisionRecord } from "../decisions/decisions.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
 
@@ -22,6 +29,7 @@ export interface MatchedFeature {
   type: FeatureType;
   score: number;
   stale: boolean;
+  trust: TrustState;
 }
 
 export interface MatchedFlow {
@@ -29,9 +37,10 @@ export interface MatchedFlow {
   chain: string[];
   score: number;
   stale: boolean;
+  trust: TrustState;
 }
 
-export interface MatchedDecision {
+export interface MatchedDecision extends ReturnType<typeof decisionProvenance> {
   title: string;
   /** Full body — the payload the decisions store exists for. */
   body: string;
@@ -40,14 +49,17 @@ export interface MatchedDecision {
   score: number;
   /** Anchor files changed since this record was last verified. */
   stale: boolean;
+  trust: TrustState;
 }
 
 export interface ContextBundle {
   exists: true;
+  map: { status: "available" };
+  diagnostics?: StoreDiagnostic[];
   task: string;
   features: Record<string, MatchedFeature>;
   flows: Record<string, MatchedFlow>;
-  /** Recorded team knowledge matching this task — treat as constraints. */
+  /** Relevant knowledge; approval distinguishes constraints from proposals. */
   decisions: Record<string, MatchedDecision>;
   /** All tests paired with the matched files, deduped. */
   relatedTests: string[];
@@ -67,6 +79,12 @@ export interface ContextBundle {
 
 export interface NoMatchBundle {
   exists: true;
+  map: { status: "available" };
+  impact?: ContextBundle["impact"];
+  relatedTests?: string[];
+  diagnostics?: StoreDiagnostic[];
+  freshness?: DriftReport | null;
+  trust?: { features: Record<string, TrustState>; flows: Record<string, TrustState> };
   task: string;
   features: Record<string, never>;
   flows: Record<string, never>;
@@ -76,6 +94,39 @@ export interface NoMatchBundle {
   availableFeatures: Record<string, string>;
   availableFlows: Record<string, string>;
   hint: string;
+}
+
+export interface UnmappedContextBundle extends Omit<ContextBundle, "exists" | "map" | "freshness"> {
+  /** Legacy exists indicates map availability, not decision availability. */
+  exists: false;
+  map: { status: "missing" | "invalid" };
+  freshness: { stale: null; recommendation: "no-map" | "repair-map"; staleMatches: string[] };
+}
+
+async function collectImpact(root: string, candidates: string[]): Promise<{
+  impact: ContextBundle["impact"]; relatedTests: string[];
+}> {
+  const targets = new Set<string>();
+  let sourceFiles: string[] | undefined;
+  for (const candidate of sanitizeRepoPaths(candidates)) {
+    const stat = await fs.stat(path.join(root, candidate)).catch(() => null);
+    if (stat?.isDirectory()) {
+      sourceFiles ??= await (await createFileAccess(root)).list();
+      for (const file of sourceFiles) {
+        if (anchorMatches(candidate, file)) targets.add(file);
+        if (targets.size >= MAX_IMPACT_TARGETS) break;
+      }
+    } else {
+      targets.add(candidate);
+    }
+    if (targets.size >= MAX_IMPACT_TARGETS) break;
+  }
+  if (!targets.size) return { impact: null, relatedTests: [] };
+  const result = await analyzeImpact(root, [...targets]);
+  return {
+    impact: { targets: result.targetFiles, cochange: result.cochange, references: result.references.slice(0, 10) },
+    relatedTests: [...new Set(result.tests.map(t => t.file))],
+  };
 }
 
 /**
@@ -90,22 +141,38 @@ export async function assembleContext(
   rootDir: string,
   task: string,
   files?: string[]
-): Promise<ContextBundle | NoMatchBundle | null> {
+): Promise<ContextBundle | NoMatchBundle | UnmappedContextBundle> {
   const resolvedRoot = path.resolve(rootDir);
-  const snapshot = await loadSnapshot(resolvedRoot);
-  if (!snapshot) return null;
-
-  const drift = await computeDrift(resolvedRoot);
-  const allDecisions = await loadDecisions(resolvedRoot);
+  const mapState = await inspectSnapshot(resolvedRoot);
+  const snapshot = mapState.snapshot;
+  const store = await loadDecisionStore(resolvedRoot);
+  const allDecisions = store.records;
   const decisionDrift = await computeDecisionDrift(resolvedRoot, allDecisions);
   const taskTokens = tokenSet(task);
-  const anchorFiles = new Set(files ?? []);
+  const anchorFiles = new Set(sanitizeRepoPaths(files ?? []));
 
   const anchorBoost = (entryFiles: string[]): number => {
     let boost = 0;
-    for (const f of entryFiles) if (anchorFiles.has(f)) boost += 5;
+    for (const f of entryFiles) if ([...anchorFiles].some(file => anchorMatches(f, file))) boost += 5;
     return boost;
   };
+
+  if (!snapshot) {
+    const decisions = matchDecisions(allDecisions, taskTokens, anchorBoost, new Set(), decisionDrift);
+    const { impact, relatedTests } = await collectImpact(resolvedRoot, [...anchorFiles, ...Object.values(decisions).flatMap(d => d.files)]);
+    const invalid = mapState.status === "invalid";
+    return {
+      exists: false, map: { status: invalid ? "invalid" : "missing" }, task,
+      features: {}, flows: {}, decisions, impact, relatedTests,
+      diagnostics: [...mapState.diagnostics, ...store.diagnostics],
+      freshness: { stale: null, recommendation: invalid ? "repair-map" : "no-map", staleMatches: [] },
+      hint: (invalid ? "The concept map is invalid; consult diagnostics and repair it before relying on map entries. " : "No concept map is present. Maps are optional; decisions and file impact work now. ") +
+        (Object.keys(decisions).length ? DECISION_GUIDANCE + " " + trustHint(Object.values(decisions).map(d => d.trust)) : "No saved decision matched. Inspect the source and use save_decision for a learned constraint or incident rationale. ") +
+        (store.diagnostics.length ? " Some decision records are invalid; consult diagnostics before assuming all constraints were retrieved." : ""),
+    };
+  }
+
+  const drift = await computeDrift(resolvedRoot);
 
   const featureScores = Object.entries(snapshot.features)
     .map(([name, feat]) => ({
@@ -140,17 +207,37 @@ export async function assembleContext(
     taskTokens,
     anchorBoost,
     matchedEntryFiles,
-    decisionDrift.staleDecisions
+    decisionDrift
   );
 
   if (featureScores.length === 0 && flowScores.length === 0) {
-    return noMatchBundle(snapshot, task, decisions);
+    const bundle = noMatchBundle(snapshot, task, decisions);
+    Object.assign(bundle, await collectImpact(resolvedRoot, [...anchorFiles, ...Object.values(decisions).flatMap(d => d.files)]));
+    bundle.diagnostics = store.diagnostics;
+    bundle.freshness = drift;
+    bundle.trust = {
+      features: Object.fromEntries(Object.entries(snapshot.features).map(([name, entry]) =>
+        [name, assessTrust(entry, drift?.featureFreshness?.[name] ?? "unknown")]
+      )),
+      flows: Object.fromEntries(Object.entries(snapshot.flows).map(([name, entry]) =>
+        [name, assessTrust(entry, drift?.flowFreshness?.[name] ?? "unknown")]
+      )),
+    };
+    bundle.hint += " " + trustHint([
+      ...Object.values(bundle.trust.features),
+      ...Object.values(bundle.trust.flows),
+      ...Object.values(decisions).map(d => d.trust),
+    ]);
+    if (Object.keys(decisions).length) bundle.hint += " " + DECISION_GUIDANCE;
+    if (store.diagnostics.length) bundle.hint += " Some decision records are invalid; consult diagnostics.";
+    return bundle;
   }
 
   const features: Record<string, MatchedFeature> = {};
   const staleMatches: string[] = [];
   for (const { name, feat, score } of featureScores) {
-    const stale = drift?.staleFeatures[name] !== undefined;
+    const trust = assessTrust(feat, drift?.featureFreshness?.[name] ?? "unknown");
+    const stale = trust.freshness !== "current";
     if (stale) staleMatches.push(name);
     features[name] = {
       description: feat.description,
@@ -159,39 +246,30 @@ export async function assembleContext(
       type: normalizeFeatureType(feat.type),
       score,
       stale,
+      trust,
     };
   }
 
   const flows: Record<string, MatchedFlow> = {};
   for (const { name, flow, score } of flowScores) {
-    const stale = drift?.staleFlows[name] !== undefined;
+    const trust = assessTrust(flow, drift?.flowFreshness?.[name] ?? "unknown");
+    const stale = trust.freshness !== "current";
     if (stale) staleMatches.push(name);
     flows[name] = {
       description: flow.description,
       chain: flow.chain,
       score,
       stale,
+      trust,
     };
   }
 
-  // Blast radius for the most relevant files: anchor files first, then the
-  // top-scoring feature's files.
-  const impactTargets = [
+  const { impact, relatedTests: impactTests } = await collectImpact(resolvedRoot, [
     ...anchorFiles,
     ...featureScores.flatMap((e) => e.feat.files),
-  ].slice(0, MAX_IMPACT_TARGETS);
-
-  let impact: ContextBundle["impact"] = null;
-  let impactTests: string[] = [];
-  if (impactTargets.length > 0) {
-    const result = await analyzeImpact(resolvedRoot, impactTargets);
-    impact = {
-      targets: result.targetFiles,
-      cochange: result.cochange,
-      references: result.references.slice(0, 10),
-    };
-    impactTests = result.tests.map((t) => t.file);
-  }
+    ...flowScores.flatMap(e => e.flow.chain),
+    ...Object.values(decisions).flatMap(d => d.files),
+  ]);
 
   const relatedTests = [
     ...new Set([
@@ -201,11 +279,10 @@ export async function assembleContext(
   ];
 
   const stale = drift?.stale ?? false;
-  const staleDecisionIds = Object.keys(decisions).filter(
-    (id) => decisions[id].stale
-  );
   return {
     exists: true,
+    map: { status: "available" },
+    diagnostics: store.diagnostics,
     task,
     features,
     flows,
@@ -217,7 +294,7 @@ export async function assembleContext(
       recommendation: drift?.recommendation ?? "up-to-date",
       staleMatches,
     },
-    hint: bundleHint(stale, staleMatches, staleDecisionIds),
+    hint: (Object.keys(decisions).length ? DECISION_GUIDANCE + " " : "") + trustHint([...Object.values(features), ...Object.values(flows), ...Object.values(decisions)].map(e => e.trust)) + (store.diagnostics.length ? " Some decision records are invalid; consult diagnostics before assuming all constraints were retrieved." : ""),
   };
 }
 
@@ -232,7 +309,7 @@ function matchDecisions(
   taskTokens: Set<string>,
   anchorBoost: (files: string[]) => number,
   matchedEntryFiles: Set<string>,
-  staleDecisions: Record<string, string[]>
+  decisionDrift: DecisionDriftReport
 ): Record<string, MatchedDecision> {
   const scored = allDecisions
     .filter((d) => d.status === "active")
@@ -243,7 +320,7 @@ function matchDecisions(
           description: d.body,
           files: d.files,
         }) + anchorBoost(d.files);
-      if (d.files.some((f) => matchedEntryFiles.has(f))) {
+      if (d.files.some((f) => [...matchedEntryFiles].some(file => anchorMatches(f, file)))) {
         score += DECISION_FEATURE_OVERLAP_BOOST;
       }
       return { d, score };
@@ -260,37 +337,12 @@ function matchDecisions(
       category: d.category,
       files: d.files,
       score,
-      stale: staleDecisions[d.id] !== undefined,
+      stale: decisionDrift.freshness?.[d.id] !== "current",
+      ...decisionProvenance(d, decisionDrift.freshness?.[d.id] ?? "unknown"),
+      trust: decisionTrust(d, decisionDrift.freshness?.[d.id] ?? "unknown"),
     };
   }
   return result;
-}
-
-function bundleHint(
-  stale: boolean,
-  staleMatches: string[],
-  staleDecisionIds: string[] = []
-): string {
-  const parts: string[] = [];
-  if (staleMatches.length > 0) {
-    parts.push(
-      `Entries [${staleMatches.join(", ")}] changed since they were last verified — read their files rather than trusting the descriptions, and consider mason_check_drift for a refresh plan.`
-    );
-  } else if (stale) {
-    parts.push(
-      "The matched entries are current, but other parts of the map have drifted — mason_check_drift shows what needs refreshing."
-    );
-  } else {
-    parts.push(
-      "Map is current. Start from the listed files; cochange/references show what else an edit would touch."
-    );
-  }
-  if (staleDecisionIds.length > 0) {
-    parts.push(
-      `Decisions [${staleDecisionIds.join(", ")}] have anchor files that changed since they were recorded — verify each still holds; if it does, re-save it with its id to re-pin, otherwise update or supersede it via save_decision.`
-    );
-  }
-  return parts.join(" ");
 }
 
 function noMatchBundle(
@@ -308,6 +360,7 @@ function noMatchBundle(
   }
   return {
     exists: true,
+    map: { status: "available" },
     task,
     features: {},
     flows: {},

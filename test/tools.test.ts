@@ -190,11 +190,12 @@ describe("MCP tools", () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
-    it("refuses to run on un-initialized projects", async () => {
+    it("reports a missing map without requiring initialization", async () => {
       const raw = await getSnapshot(tmpDir);
       const data = JSON.parse(raw);
 
-      expect(data.initialized).toBe(false);
+      expect(data.exists).toBe(false);
+      expect(data.map.status).toBe("missing");
       expect(typeof data.hint).toBe("string");
       expect(data.hint).toMatch(/mason_init/);
       // Reads stay pure — no .mason directory should appear
@@ -203,7 +204,7 @@ describe("MCP tools", () => {
       ).rejects.toBeTruthy();
     });
 
-    it("uninitialized response carries usable context inline", async () => {
+    it("missing-map response carries usable context inline", async () => {
       await fs.mkdir(path.join(tmpDir, "src"));
       await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
       await fs.writeFile(path.join(tmpDir, "src", "a.test.ts"), "// tests a\n");
@@ -213,7 +214,8 @@ describe("MCP tools", () => {
       const raw = await getSnapshot(tmpDir);
       const data = JSON.parse(raw);
 
-      expect(data.initialized).toBe(false);
+      expect(data.exists).toBe(false);
+      expect(data.map.status).toBe("missing");
       // Structure, git signals, and test pairing arrive in the same call so
       // the assistant can act without a second round-trip.
       expect(data.structure.totalFiles).toBeGreaterThan(0);
@@ -308,11 +310,11 @@ describe("MCP tools", () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
-    it("refuses to run on un-initialized projects", async () => {
+    it("reports a missing map without requiring initialization", async () => {
       const raw = await checkDrift(tmpDir);
       const data = JSON.parse(raw);
 
-      expect(data.initialized).toBe(false);
+      expect(data.exists).toBe(false);
       expect(data.hint).toMatch(/mason_init/);
     });
 
@@ -322,7 +324,7 @@ describe("MCP tools", () => {
       const data = JSON.parse(raw);
 
       expect(data.exists).toBe(false);
-      expect(data.hint).toMatch(/generate_snapshot_batch/);
+      expect(data.hint).toMatch(/optional map/);
     });
 
     it("reports feature-level drift with an actionable hint", async () => {
@@ -362,7 +364,7 @@ describe("MCP tools", () => {
       expect(data.hint).toMatch(/save_snapshot/);
     });
 
-    it("suggests re-pinning when changes touch nothing in the map", async () => {
+    it("stays current when changes touch nothing in the map", async () => {
       await markInitialized(tmpDir);
 
       await fs.mkdir(path.join(tmpDir, "src"));
@@ -393,10 +395,10 @@ describe("MCP tools", () => {
       const raw = await checkDrift(tmpDir);
       const data = JSON.parse(raw);
 
-      expect(data.stale).toBe(true);
+      expect(data.stale).toBe(false);
       expect(data.staleFeatures).toEqual({});
       expect(data.unmappedFiles).toEqual([]);
-      expect(data.hint).toMatch(/re-pin/);
+      expect(data.recommendation).toBe("up-to-date");
     });
   });
 
@@ -822,8 +824,9 @@ describe("MCP tools", () => {
 
       expect(data.initialized).toBe(false);
       expect(typeof data.playbook).toBe("string");
-      expect(data.playbook).toMatch(/PHASE 1 — Map/);
-      expect(data.playbook).toMatch(/PHASE 2 — Reduce/);
+      expect(data.mode).toBe("quickstart");
+      expect(data.playbook).toMatch(/save_decision/);
+      expect(data.playbook).not.toMatch(/PHASE 1 — Map/);
       expect(data.playbook).toMatch(/mason_complete_init/);
     });
 
@@ -831,7 +834,7 @@ describe("MCP tools", () => {
       const raw = await masonInit(tmpDir);
       const data = JSON.parse(raw);
 
-      expect(data.playbook).toMatch(/PHASE 4 — Assistant instructions/);
+      expect(data.playbook).toMatch(/ASSISTANT INSTRUCTIONS/);
       expect(data.playbook).toContain("<!-- mason:start -->");
       expect(data.playbook).toContain("<!-- mason:end -->");
       expect(data.playbook).toMatch(/`get_context` with the task text/);

@@ -1,7 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { loadDecisions } from "../decisions/decisions.js";
+import { loadDecisionStore } from "../decisions/decisions.js";
+import { decisionProvenance } from "../decisions/provenance.js";
+import { anchorMatches } from "../utils/paths.js";
+import { createHash } from "node:crypto";
+import type { Freshness } from "../context/trust.js";
 import type { DecisionRecord } from "../decisions/decisions.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
 
@@ -53,10 +57,7 @@ async function findMasonRoot(startDir: string): Promise<string | null> {
 }
 
 function anchorsCover(record: DecisionRecord, relPath: string): boolean {
-  return record.files.some((anchor) => {
-    const a = anchor.replace(/\/+$/, "");
-    return a === relPath || relPath.startsWith(`${a}/`);
-  });
+  return record.files.some(anchor => anchorMatches(anchor, relPath));
 }
 
 function exactAnchor(record: DecisionRecord, relPath: string): boolean {
@@ -80,18 +81,20 @@ async function loadInjected(stateFile: string): Promise<Set<string>> {
 function formatContext(
   relPath: string,
   records: DecisionRecord[],
-  staleIds: Set<string>
+  freshness: Record<string, Freshness>
 ): string {
   const lines: string[] = [];
   lines.push(
-    `Mason: recorded team knowledge anchored to ${relPath} — treat as constraints. Do not modify decision records in .mason/decisions/.`
+    `Mason: recorded knowledge anchored to ${relPath}. Accepted records are constraints subject to freshness; proposals are suggestions and legacy unreviewed records need confirmation. Retired or superseded records are no longer active. Do not modify decision records in .mason/decisions/.`
   );
   for (const record of records) {
-    const stale = staleIds.has(record.id)
-      ? " [recorded against an older commit – verify against current code before relying on it]"
-      : "";
+    const provenance = decisionProvenance(record, freshness[record.id] ?? "unknown");
+    const label = record.status === "active" ? provenance.approval : record.status;
+    const stale = freshness[record.id] === "current" ? "" : freshness[record.id] === "changed"
+      ? " [recorded against changed files – verify against current code before relying on it]"
+      : " [freshness unknown – verify against current code before relying on it]";
     lines.push(
-      `- [${record.category}] ${record.title}: ${record.body} (anchors: ${record.files.join(", ")})${stale}`
+      `- [${label}] [${record.category}] ${record.title}: ${record.body} (anchors: ${record.files.join(", ")}; owner: ${provenance.owner ?? "unknown"}; sources: ${provenance.sources.slice(0, 2).map(s => s.reference).join(", ") || "unrecorded"})${stale}`
     );
   }
   return lines.join("\n");
@@ -116,6 +119,7 @@ export async function runHook(
     return null;
   }
 
+  if (!input || typeof input !== "object") return null;
   if (input.tool_name && !SUPPORTED_TOOLS.has(input.tool_name)) return null;
   const filePath = input.tool_input?.file_path;
   if (!filePath || typeof filePath !== "string") return null;
@@ -128,20 +132,24 @@ export async function runHook(
   const relPath = path.relative(root, absPath).split(path.sep).join("/");
   if (relPath.startsWith("..")) return null;
 
-  const records = await loadDecisions(root);
-  const matched = records.filter(
-    (r) => r.status === "active" && anchorsCover(r, relPath)
-  );
+  const { records } = await loadDecisionStore(root);
+  const matched = records.filter(r => anchorsCover(r, relPath));
   if (matched.length === 0) return null;
 
   const stateDir = env.stateDir ?? os.tmpdir();
-  const stateFile = path.join(stateDir, `mason-hook-${stateKey(input)}.json`);
+  const stateFile = path.join(stateDir, `mason-hook-${createHash("sha256").update(root).digest("hex").slice(0, 12)}-${stateKey(input)}.json`);
   const injected = await loadInjected(stateFile);
-  const fresh = matched.filter((r) => !injected.has(r.id));
+  const recordKey = (record: DecisionRecord) => `${record.id}:${createHash("sha256").update(JSON.stringify(record)).digest("hex")}`;
+  // Re-inject revised/accepted records and withdraw previously injected records
+  // that were retired during this session. Untouched archived records stay dark.
+  const fresh = matched.filter(r => !injected.has(recordKey(r)) &&
+    (r.status === "active" || [...injected].some(key => key === r.id || key.startsWith(`${r.id}:`))));
   if (fresh.length === 0) return null;
 
   // Exact-file anchors outrank directory-prefix ones; newest knowledge wins ties.
   fresh.sort((a, b) => {
+    const withdrawn = Number(b.status !== "active") - Number(a.status !== "active");
+    if (withdrawn) return withdrawn;
     const exactDiff =
       Number(exactAnchor(b, relPath)) - Number(exactAnchor(a, relPath));
     if (exactDiff !== 0) return exactDiff;
@@ -150,9 +158,9 @@ export async function runHook(
   const selected = fresh.slice(0, MAX_INJECTED_DECISIONS);
 
   const drift = await computeDecisionDrift(root, selected);
-  const staleIds = new Set(Object.keys(drift.staleDecisions));
+  const freshness = drift.freshness ?? {};
 
-  for (const record of selected) injected.add(record.id);
+  for (const record of selected) injected.add(recordKey(record));
   try {
     await fs.writeFile(stateFile, JSON.stringify([...injected]), "utf-8");
   } catch {
@@ -162,7 +170,7 @@ export async function runHook(
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PostToolUse",
-      additionalContext: formatContext(relPath, selected, staleIds),
+      additionalContext: formatContext(relPath, selected, freshness),
     },
   });
 }

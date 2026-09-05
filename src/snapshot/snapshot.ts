@@ -1,9 +1,11 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import fg from "fast-glob";
-import { readFullFile } from "../mcp/sampler.js";
+import { createFileAccess } from "../utils/files.js";
+export { SOURCE_GLOB, SOURCE_IGNORE } from "../utils/files.js";
+import { readStoreJson, writeStoreJson, type StoreDiagnostic } from "../utils/storage.js";
+import { z } from "zod";
+import { normalizeRepoPath } from "../utils/paths.js";
 import { buildTestMap } from "../test-map.js";
 
 const exec = promisify(execFile);
@@ -24,7 +26,7 @@ export interface FeatureEntry {
    * (DI wiring, config loading, logging, provider/transport plumbing).
    * Capabilities are published to product-facing docs (Confluence);
    * infrastructure stays in the AI concept map only. Defaults to "capability"
-   * when absent (older snapshots) or unrecognized — see normalizeFeatureType.
+   * when absent (older snapshots) — see normalizeFeatureType.
    */
   type?: "capability" | "infrastructure";
   /**
@@ -34,6 +36,7 @@ export interface FeatureEntry {
    * checks the map was CORRECT in the first place.
    */
   verifiedAt?: string;
+  verifiedHash?: string;
   /** Set when verification judged the entry wrong — re-map it. */
   verificationFailed?: boolean;
   verificationNote?: string;
@@ -58,6 +61,7 @@ export interface FlowEntry {
   refreshedHash?: string;
   /** See FeatureEntry.verifiedAt / verificationFailed. */
   verifiedAt?: string;
+  verifiedHash?: string;
   verificationFailed?: boolean;
   verificationNote?: string;
 }
@@ -71,36 +75,49 @@ export interface Snapshot {
   flows: Record<string, FlowEntry>;
 }
 
-function snapshotDir(rootDir: string): string {
-  return path.join(rootDir, ".mason");
-}
-
-function snapshotPath(rootDir: string): string {
-  return path.join(snapshotDir(rootDir), "snapshot.json");
-}
+const repoPath = z.string().refine(value => normalizeRepoPath(value) !== null, "Expected a relative repository path");
+const verificationFields = {
+  refreshedHash: z.string().optional(), verifiedAt: z.string().optional(),
+  verifiedHash: z.string().optional(), verificationFailed: z.boolean().optional(),
+  verificationNote: z.string().optional(),
+};
+export const featureSchema = z.object({
+  description: z.string(), files: z.array(repoPath), tests: z.array(repoPath).optional(),
+  type: z.enum(["capability", "infrastructure"]).optional(), ...verificationFields,
+}).passthrough();
+export const flowSchema = z.object({ description: z.string(), chain: z.array(repoPath), ...verificationFields }).passthrough();
+const snapshotSchema = z.object({
+  version: z.literal(2), createdAt: z.string(), updatedAt: z.string(), gitHash: z.string(),
+  features: z.record(featureSchema), flows: z.record(flowSchema),
+}).passthrough();
 
 export async function loadSnapshot(rootDir: string): Promise<Snapshot | null> {
+  const parsed = await readStoreJson(rootDir, ".mason/snapshot.json");
+  if (parsed === null || (parsed as { version?: number }).version === 1) return null;
+  const result = snapshotSchema.safeParse(parsed);
+  if (!result.success) throw new Error(`Invalid Mason snapshot: ${result.error.message}`);
+  return result.data;
+}
+
+/** Context and onboarding can use decisions even when the optional map is broken. */
+export async function inspectSnapshot(rootDir: string): Promise<{
+  status: "available" | "missing" | "invalid";
+  snapshot: Snapshot | null;
+  diagnostics: StoreDiagnostic[];
+}> {
   try {
-    const raw = await fs.readFile(snapshotPath(rootDir), "utf-8");
-    const parsed = JSON.parse(raw);
-    // Skip v1 snapshots — they're the old per-file format
-    if (parsed.version !== 2) return null;
-    return parsed;
-  } catch {
-    return null;
+    const raw = await readStoreJson(rootDir, ".mason/snapshot.json");
+    const snapshot = raw === null ? null : snapshotSchema.parse(raw);
+    return { status: snapshot ? "available" : "missing", snapshot, diagnostics: [] };
+  } catch (error) {
+    return { status: "invalid", snapshot: null, diagnostics: [{
+      path: ".mason/snapshot.json", message: error instanceof Error ? error.message : String(error),
+    }] };
   }
 }
 
-export async function saveSnapshot(
-  rootDir: string,
-  snapshot: Snapshot
-): Promise<void> {
-  await fs.mkdir(snapshotDir(rootDir), { recursive: true });
-  await fs.writeFile(
-    snapshotPath(rootDir),
-    JSON.stringify(snapshot, null, 2),
-    "utf-8"
-  );
+export async function saveSnapshot(rootDir: string, snapshot: Snapshot): Promise<void> {
+  await writeStoreJson(rootDir, ".mason/snapshot.json", snapshotSchema.parse(snapshot));
 }
 
 export async function getCurrentGitHash(rootDir: string): Promise<string> {
@@ -113,15 +130,6 @@ export async function getCurrentGitHash(rootDir: string): Promise<string> {
     return "unknown";
   }
 }
-
-export const SOURCE_GLOB =
-  "**/*.{ts,tsx,js,jsx,kt,kts,java,py,go,rs,swift,rb,cs,cpp,c,dart}";
-export const SOURCE_IGNORE = [
-  "**/node_modules/**", "**/dist/**", "**/build/**", "**/.gradle/**",
-  "**/target/**", "**/.git/**", "**/vendor/**", "**/__pycache__/**",
-  "**/venv/**", "**/.venv/**", "**/*.min.*", "**/*.map",
-  "**/generated/**", "**/R.java", "**/BuildConfig.java",
-];
 
 export const DEFAULT_BATCH_SIZE = 50;
 const SKELETON_CHARS = 500;
@@ -139,12 +147,7 @@ export interface SnapshotBatch {
 }
 
 export async function listSourceFiles(resolvedRoot: string): Promise<string[]> {
-  const all = await fg(SOURCE_GLOB, {
-    cwd: resolvedRoot,
-    ignore: SOURCE_IGNORE,
-  });
-  // Deterministic order so the same offset always returns the same batch.
-  return [...all].sort();
+  return (await createFileAccess(resolvedRoot)).list();
 }
 
 export async function prepareSnapshotBatch(
@@ -154,7 +157,8 @@ export async function prepareSnapshotBatch(
   scopeFiles?: string[]
 ): Promise<SnapshotBatch> {
   const resolvedRoot = path.resolve(rootDir);
-  let allFiles = await listSourceFiles(resolvedRoot);
+  const access = await createFileAccess(resolvedRoot);
+  let allFiles = await access.list();
   if (scopeFiles) {
     // Intersect with the real source list: keeps ignore rules and path safety,
     // and silently drops scope entries that no longer exist on disk. An empty
@@ -168,7 +172,7 @@ export async function prepareSnapshotBatch(
 
   const skeletons: Array<{ path: string; content: string }> = [];
   for (const filePath of batchPaths) {
-    const full = await readFullFile(resolvedRoot, filePath);
+    const full = await access.read(filePath);
     if (full) {
       skeletons.push({
         path: full.path,
@@ -183,7 +187,7 @@ export async function prepareSnapshotBatch(
   if (skeletons.length > 0) {
     const step = Math.max(1, Math.floor(skeletons.length / DEEP_SAMPLES_PER_BATCH));
     for (let i = 0; i < skeletons.length && samples.length < DEEP_SAMPLES_PER_BATCH; i += step) {
-      const full = await readFullFile(resolvedRoot, skeletons[i].path);
+      const full = await access.read(skeletons[i].path);
       if (full) {
         samples.push({
           path: full.path,

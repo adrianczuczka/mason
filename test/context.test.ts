@@ -98,9 +98,9 @@ describe("assembleContext", () => {
     },
   };
 
-  it("returns null when no snapshot exists", async () => {
+  it("returns an explicit missing-map bundle when no snapshot exists", async () => {
     await seedProject();
-    expect(await assembleContext(tmpDir, "fix the login bug")).toBeNull();
+    expect(await assembleContext(tmpDir, "fix the login bug")).toMatchObject({ exists: false, map: { status: "missing" }, decisions: {}, freshness: { stale: null } });
   });
 
   it("matches features and flows lexically and ranks name hits highest", async () => {
@@ -190,7 +190,7 @@ describe("assembleContext", () => {
     expect(bundle.features["user authentication"].stale).toBe(true);
     expect(bundle.freshness.stale).toBe(true);
     expect(bundle.freshness.staleMatches).toContain("user authentication");
-    expect(bundle.hint).toMatch(/changed since they were last verified/);
+    expect(bundle.features["user authentication"].trust.freshness).toBe("changed");
   });
 
   it("includes blast radius for the top matched files", async () => {

@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { attributionSchema } from "../decisions/provenance.js";
 import {
   analyzeProject,
   checkDrift,
@@ -12,6 +13,7 @@ import {
   getImpact,
   getSnapshot,
   saveDecision,
+  reviewDecision,
   saveVerification,
   verifySnapshot,
   masonCompleteInit,
@@ -32,27 +34,31 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions:
-        "Mason maintains a persistent feature-to-file concept map of this codebase so you can skip manual exploration. RULE: when given a task, bug, or change request, call `get_context` with the task text first — one call returns the relevant features, files, tests, blast radius, and freshness. Before answering ANY question about features, architecture, data flows, or where something lives — and before any grep/glob/file-read exploration for such a question — call `get_snapshot` first. One call returns the whole map and replaces 5-10 search round-trips; if it has drifted it says so and self-corrects. Likewise call `get_impact` BEFORE editing or refactoring a file (git co-change history + references + related tests — signals you cannot get from reading the file itself), and `mason_check_drift` to verify the map is fresh in long sessions. When you learn something the code alone can't tell you — a failed approach, a deprecation, a workaround's reason, a review-settled convention — record it with `save_decision` so the whole team's assistants inherit it; `get_context` returns matching decisions as constraints. If `get_snapshot` reports no snapshot exists, offer to set Mason up: `mason_init` returns a setup playbook (a Map-Reduce loop of `generate_snapshot_batch` + `save_partial_snapshot`, then `reduce_snapshot` + `save_snapshot`, optionally `mason_set_confluence`, then `mason_complete_init`). `full_analysis`, `analyze_project`, and `get_code_samples` are read-only diagnostics for unmapped projects and never need init. Mason has no CLI; everything happens through these tools.",
+        "Mason retrieves recorded decisions, file impact, and optional feature/flow maps. Use get_context with the task and known files, and get_impact before editing. Save learned rationale and constraints with save_decision; review and commit the local records through the project workflow. These tools work without initialization or a concept map. Consult trust and diagnostics: changed or unknown freshness needs source inspection, failed verification needs correction, and proposals are suggestions and legacy records are unreviewed. Accepted decisions are recorded team constraints, still subject to freshness checks. Use review_decision to prepare code evidence and record only authorized acceptance, reaffirmation, or retirement. Never invent a reviewer or treat these recorded identities as authenticated approval. mason_init returns documentation audit and committed-diff review findings with a quickstart guide. Use mode: \"map\" only when a full architecture map is requested. A missing map is not a setup failure; use decisions and source evidence. get_snapshot provides architecture navigation when a map is available. The mason-audit and mason-review CLIs also work without setup.",
     }
   );
 
   server.tool(
     "mason_init",
-    "Start here. Checks if Mason is set up for this project. If not, returns a `playbook` of questions the assistant must walk the user through (concept map + optional Confluence sync). Once the walkthrough is done, call `mason_complete_init`. Idempotent: re-running on an already-initialized project just returns the current state.",
+    "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Read-only, deterministic, and usable without a map. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. mode: map returns the full Map-Reduce build workflow. Repeat calls refresh findings even after setup.",
     {
       dir: z
         .string()
         .describe("Absolute path to the project root directory"),
+      mode: z.enum(["quickstart", "map"]).optional().default("quickstart")
+        .describe("Quickstart returns checks and a short setup guide; map requests a full architecture build."),
+      base: z.string().optional().describe("Git ref for committed-diff review. Defaults to the first available main branch ref."),
+      evidence: z.array(z.string()).max(10).optional().describe("Repository-local CI evidence manifests to include in the review. Imports Vitest JSON and SARIF without executing check commands."),
     },
-    async ({ dir }) => {
-      const result = await masonInit(dir);
+    async ({ dir, mode, base, evidence }) => {
+      const result = await masonInit(dir, { mode, base, evidence });
       return { content: [{ type: "text", text: result }] };
     }
   );
 
   server.tool(
     "mason_complete_init",
-    "Mark the project as initialized. Call this after walking the user through the playbook returned by `mason_init`. Writes `.mason/project.json` so future tool calls don't re-run the wizard. Pass `confluenceConfigured: true` if Phase 3 of the playbook ended with Confluence credentials saved.",
+    "Record completion of assistant instruction setup in .mason/project.json. Other tools work without this marker. Repeated calls preserve the original setup time and existing settings; pass confluenceConfigured only to change that setting.",
     {
       dir: z
         .string()
@@ -60,8 +66,7 @@ export function createMcpServer(): McpServer {
       confluenceConfigured: z
         .boolean()
         .optional()
-        .default(false)
-        .describe("True if Confluence was successfully configured during init"),
+        .describe("Set the Confluence setup status; omit to preserve the existing value"),
     },
     async ({ dir, confluenceConfigured }) => {
       const result = await masonCompleteInit(dir, { confluenceConfigured });
@@ -156,7 +161,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_snapshot",
-    "CALL THIS FIRST — before grep, glob, or reading files — for any question about what this codebase does, its features, architecture, data flows, or where something is implemented ('where is X handled?', 'how does Y work?', 'what implements Z?'). Returns the persistent feature-to-file concept map in one cheap, instant, LLM-free call, replacing 5-10 exploration round-trips. Example: 'home screen' → [HomeScreen.kt, HomeViewModel.kt, HomeModule.kt]. Then read only the mapped files. If the map has drifted it says so (with a diff) — trust the freshness signal. If exists:false, the project isn't set up; offer mason_init.",
+    "Return the optional feature-to-file architecture map with drift and trust evidence. If no map exists, returns exists:false plus project structure, Git signals, and test pairs. Decision capture, get_context, and get_impact still work. No initialization required.",
     {
       dir: z
         .string()
@@ -172,7 +177,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_context",
-    "CALL THIS FIRST when given a task to implement, a bug to fix, a ticket, or a change request ('add X', 'fix Y', 'refactor Z'). One call returns everything needed to start: the matching features/flows with their files, related tests, blast radius for the key files (git co-change + references), and per-entry freshness — replacing a get_snapshot + get_impact + test-hunting sequence. Cheap, instant, LLM-free. Pass the task in natural language; optionally pass `files` (e.g. from a diff) to anchor the match. For open-ended architecture questions with no task, use get_snapshot instead.",
+    "Assemble task context: matching decisions with rationale, approval, owner, sources, last review, and freshness, plus related tests, file impact, and any available map entries. Proposals are suggestions; legacy records are unreviewed; accepted decisions are constraints subject to freshness. No initialization or map required. Pass task and optional files. map.status and diagnostics preserve missing or invalid knowledge. Impact covers up to three unique files, expanding directory anchors.",
     {
       dir: z
         .string()
@@ -340,7 +345,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "save_decision",
-    "CALL THIS when you learn something about this codebase that the code alone can't tell you: a failed approach ('we tried X, it broke Y'), a deprecation ('don't extend Z'), a workaround and its reason, or a convention settled in review. Best moments: the end of a debugging session, right after a design choice. Records are git-committed to .mason/decisions/ and PR-reviewed like code; get_context surfaces them on matching tasks. Do NOT record anything derivable by reading the code, session trivia, or secrets. Also handles updates (pass id), re-verification (same id + content re-pins to HEAD), and supersession (pass supersedes).",
+    "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. No setup or map required. Writes a local record and preserves content history. Changes reset acceptance to proposed; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede an accepted record; review its replacement and retire the original separately.",
     {
       dir: z
         .string()
@@ -357,21 +362,24 @@ export function createMcpServer(): McpServer {
       files: z
         .array(z.string())
         .optional()
-        .describe("Repo-relative files this applies to. Anchors drift-checking: if these change, the decision is flagged for re-verification."),
+        .describe("Repo-relative files or directory prefixes this applies to. Matching is shared by retrieval, hooks, review, and drift checking; changes flag the decision for re-verification."),
       id: z
         .string()
         .optional()
-        .describe("Existing decision id to update. Passing id with unchanged content re-verifies it (re-pins refreshedHash to HEAD)."),
+        .describe("Existing id to revise. Changed content becomes a proposal; unchanged content leaves the review and freshness untouched."),
       supersedes: z
         .string()
         .optional()
-        .describe("Id of a decision this one replaces — the old record is kept but marked superseded"),
+        .describe("Id of an unreviewed record or proposal to replace. Accepted decisions require separate review and retirement."),
+      owner: attributionSchema.shape.owner.describe("Responsible person or team, when known. Null clears it. Required for acceptance."),
+      sources: attributionSchema.shape.sources.describe("Known PR, issue, incident, discussion, or document references. Omit to preserve; [] clears. At least one is required for acceptance."),
+      actor: attributionSchema.shape.actor.describe("Known person or agent recording this revision. Omit if unknown; do not infer from Git identity."),
       force: z
         .boolean()
         .optional()
         .describe("Save even when a near-duplicate was detected"),
     },
-    async ({ dir, title, body, category, files, id, supersedes, force }) => {
+    async ({ dir, title, body, category, files, id, supersedes, force, owner, sources, actor }) => {
       const result = await saveDecision(dir, {
         title,
         body,
@@ -380,7 +388,28 @@ export function createMcpServer(): McpServer {
         id,
         supersedes,
         force,
+        owner,
+        sources,
+        actor,
       });
+      return { content: [{ type: "text", text: result }] };
+    }
+  );
+
+  server.tool(
+    "review_decision",
+    "Prepare a decision review: returns the full record and history, provenance, committed changes, local edits, bounded source/diff previews, and a reviewToken. Then record accept, reaffirm, or retire with that token, the authorized reviewer, and a reason. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
+    {
+      dir: z.string().describe("Absolute path to the project root directory"),
+      id: z.string().regex(/^[a-zA-Z0-9_-]+$/).describe("Decision id from get_context or save_decision"),
+      action: z.enum(["prepare", "accept", "reaffirm", "retire"]).optional().default("prepare")
+        .describe("Prepare is read-only. Other actions record an explicitly authorized review."),
+      reviewer: z.string().trim().min(1).max(200).optional().describe("Identity of the actual reviewer; required for a verdict. Never invent one."),
+      note: z.string().trim().min(1).max(1500).optional().describe("Review rationale; required for a verdict. Cite evidence for the decision."),
+      reviewToken: z.string().regex(/^[a-f0-9]{64}$/).optional().describe("Token from the prepared review; rejects stale record or code revisions"),
+    },
+    async ({ dir, ...input }) => {
+      const result = await reviewDecision(dir, input);
       return { content: [{ type: "text", text: result }] };
     }
   );
@@ -422,7 +451,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "save_verification",
-    "Record verify_snapshot verdicts. Entries judged ok are stamped verifiedAt; failures are flagged verificationFailed with your note and surface in mason_check_drift until re-mapped. Verdict notes are required for failures.",
+    "Record verify_snapshot verdicts. Entries judged ok are stamped verifiedAt; failures are flagged verificationFailed with your note and surface in get_context, get_snapshot, and mason_check_drift until corrected. Verdict notes are required for failures.",
     {
       dir: z
         .string()
@@ -447,7 +476,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_impact",
-    "CALL THIS BEFORE editing, refactoring, or assessing the blast radius of any file. Returns three signals you cannot get by reading the file itself: git co-change history (files that historically change in the same commits), references (files that mention the target by name), and related tests. One call replaces a manual sweep of grep + git log. Also the right tool for 'what would break if I changed X?' questions.",
+    "Trace the impact of changing files: historical co-change partners, references, and related tests. Deterministic, read-only, and usable without initialization, saved decisions, or a concept map.",
     {
       dir: z
         .string()
@@ -466,7 +495,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "export_to_confluence",
-    "Sync the project's concept map to Confluence as product-readable wiki pages: an index page, one page per feature (PM-language descriptions, no file paths), and a changelog page. Hand-edits outside `<!-- mason:start/end:* -->` markers are preserved across syncs. Requires `mason_set_confluence` to have been called first.",
+    "Sync the project's concept map to Confluence as product-readable wiki pages: an index page, one page per feature (PM-language descriptions, no file paths), and a changelog page. Mason replaces managed page bodies; manual edits to those bodies are overwritten. Requires `mason_set_confluence` to have been called first.",
     {
       dir: z
         .string()
