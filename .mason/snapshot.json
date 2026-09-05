@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-05T09:25:47.690Z",
-  "gitHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d",
+  "updatedAt": "2026-09-05T10:37:09.252Z",
+  "gitHash": "82cec1f0256939f8b4686a1ff2f63e0053af74f7",
   "features": {
     "MCP server entry point": {
       "description": "Starts the Mason MCP stdio server that exposes all tools to AI assistants",
@@ -11,7 +11,7 @@
         "src/mcp/server.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "82cec1f0256939f8b4686a1ff2f63e0053af74f7"
     },
     "drift detection CLI": {
       "description": "Checks relevant committed map changes and source coverage, reporting local edits and verification failures separately; map-only and unrelated commits stay current.",
@@ -124,7 +124,7 @@
       "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
     },
     "MCP tool implementations": {
-      "description": "Implements all MCP tools, including map-independent decision capture, task context and impact, quickstart checks, and optional map lifecycle and verification.",
+      "description": "Implements MCP tools for map-independent decisions, context and impact, quickstart checks, audit repair preparation and verification, and optional map lifecycle and correctness review.",
       "files": [
         "src/mcp/tools.ts"
       ],
@@ -133,7 +133,7 @@
         "test/verify.test.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "82cec1f0256939f8b4686a1ff2f63e0053af74f7"
     },
     "concept-map snapshot storage": {
       "description": "Validates and atomically stores concept maps and Map-Reduce partials; supports scoped refreshes while retaining failed verdicts for unchanged entries.",
@@ -320,7 +320,7 @@
       "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
     },
     "AI context audit": {
-      "description": "Finds stale claims in repository instruction files with deterministic Git evidence. Decision-anchor advisories separately identify accepted revisions and pending proposals with their own provenance and changed anchors.",
+      "description": "Audits context claims against repository evidence and retains suppressed dependency advisories. Explicit repair baselines preserve original findings through edits and documentation commits, distinguishing resolved, unresolved, review-required, unverified, and new findings. Decision advisories retain operative and proposed provenance.",
       "files": [
         "src/audit/audit.ts",
         "src/audit/checks/dead-command.ts",
@@ -336,15 +336,17 @@
         "src/audit/git.ts",
         "src/audit/tree.ts",
         "src/audit/types.ts",
-        "bin/mason-audit.ts"
+        "bin/mason-audit.ts",
+        "src/audit/repair.ts"
       ],
       "tests": [
         "test/audit-claims.test.ts",
         "test/audit-cli.test.ts",
-        "test/audit.test.ts"
+        "test/audit.test.ts",
+        "test/audit-repair.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "82cec1f0256939f8b4686a1ff2f63e0053af74f7"
     },
     "decision injection hook": {
       "description": "Injects operative accepted decisions with separately labeled pending proposals and their freshness. Deduplicates per repository/session/revision and updates previously seen decisions after acceptance or retirement even when their anchors move.",
@@ -388,7 +390,7 @@
       "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
     },
     "project onboarding": {
-      "description": "Returns read-only documentation audit and committed-diff findings, operative decision counts and pending proposal counts, and a short setup guide. Architecture mapping is optional and initialization markers do not gate tools.",
+      "description": "Returns read-only audit and committed-review findings with decision status and optional map setup. Keeps suppressed advisory evidence visible and routes authorized documentation repairs through baseline preparation and verification.",
       "files": [
         "src/mcp/init.ts",
         "src/mcp/onboarding.ts"
@@ -398,7 +400,7 @@
         "test/tools.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "82cec1f0256939f8b4686a1ff2f63e0053af74f7"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -458,7 +460,7 @@
         "src/mcp/server.ts",
         "src/mcp/tools.ts"
       ],
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "82cec1f0256939f8b4686a1ff2f63e0053af74f7"
     },
     "Confluence sync flow": {
       "description": "Loads the snapshot, diffs against sync state, and pushes rendered pages to Confluence",
@@ -492,7 +494,7 @@
         "src/decisions/decisions.ts",
         "src/utils/storage.ts"
       ],
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "82cec1f0256939f8b4686a1ff2f63e0053af74f7"
     },
     "CI evidence review flow": {
       "description": "Loads recorded test and analysis artifacts, preserves their outcome and freshness, links findings only to operative accepted decision anchors, and renders CLI/MCP review results with optional CI gating.",
@@ -505,7 +507,18 @@
         "src/review/cli.ts",
         "src/mcp/onboarding.ts"
       ],
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "82cec1f0256939f8b4686a1ff2f63e0053af74f7"
+    },
+    "audit repair flow": {
+      "description": "CLI or MCP prepares a local immutable audit baseline, the assistant edits authorized context claims, and verification reruns the original checks while preserving unresolved advisories and unavailable evidence through the documentation commit.",
+      "chain": [
+        "src/mcp/tools.ts",
+        "src/audit/cli.ts",
+        "src/audit/repair.ts",
+        "src/audit/audit.ts",
+        "src/utils/storage.ts"
+      ],
+      "refreshedHash": "82cec1f0256939f8b4686a1ff2f63e0053af74f7"
     }
   }
 }
