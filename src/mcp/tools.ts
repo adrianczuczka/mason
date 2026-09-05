@@ -11,7 +11,7 @@ import { createFileAccess } from "../utils/files.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { sanitizeRepoPaths } from "../utils/paths.js";
 import { assessTrust, trustHint, type TrustState } from "../context/trust.js";
-import { decisionProvenance, decisionTrust, DECISION_GUIDANCE } from "../decisions/provenance.js";
+import { compactDecisionKnowledge, effectiveDecision, decisionTrust, DECISION_GUIDANCE } from "../decisions/provenance.js";
 import type { UpsertDecisionInput } from "../decisions/decisions.js";
 import { reviewDecision as runDecisionReview, type ReviewDecisionInput } from "../decisions/review.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
@@ -367,7 +367,7 @@ export async function getSnapshot(dir: string): Promise<string> {
   const trust: { features: Record<string, TrustState>; flows: Record<string, TrustState>; decisions: Record<string, TrustState> } = {
     features: Object.fromEntries(Object.entries(snapshot.features).map(([name, entry]) => [name, assessTrust(entry, drift?.featureFreshness?.[name] ?? "unknown")])),
     flows: Object.fromEntries(Object.entries(snapshot.flows).map(([name, entry]) => [name, assessTrust(entry, drift?.flowFreshness?.[name] ?? "unknown")])),
-    decisions: Object.fromEntries(decisionRecords.filter(d => d.status === "active").map(d => [d.id, decisionTrust(d, decisionDrift.freshness?.[d.id] ?? "unknown")])),
+    decisions: Object.fromEntries(decisionRecords.filter(d => d.status === "active").map(d => [d.id, decisionTrust(effectiveDecision(d), decisionDrift.freshness?.[d.id] ?? "unknown")])),
   };
   output.trust = trust;
   output.workingTree = drift?.workingTree;
@@ -375,16 +375,11 @@ export async function getSnapshot(dir: string): Promise<string> {
   if (decisionRecords.length > 0) {
     const compactDecisions: Record<
       string,
-      { title: string; category: string; files: string[] } & ReturnType<typeof decisionProvenance>
+      ReturnType<typeof compactDecisionKnowledge>
     > = {};
     for (const d of decisionRecords) {
       if (d.status !== "active") continue;
-      compactDecisions[d.id] = {
-        ...decisionProvenance(d, decisionDrift.freshness?.[d.id] ?? "unknown"),
-        title: d.title,
-        category: d.category,
-        files: d.files,
-      };
+      compactDecisions[d.id] = compactDecisionKnowledge(d, decisionDrift.freshness?.[d.id] ?? "unknown", decisionDrift.pendingProposals?.[d.id]?.freshness ?? "unknown");
     }
     output.decisions = compactDecisions;
     output.decisionsHint =

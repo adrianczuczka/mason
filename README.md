@@ -29,7 +29,9 @@ After resolving a real incident or settling a constraint, ask your assistant to 
 
 For architecture navigation, ask: *"Build a Mason concept map."* The assistant calls `mason_init` with `mode: "map"` for the full Map-Reduce workflow.
 
-> **Upgrading to 0.10.0:** Update Mason in every client that shares decision records, then re-run `mason_init` and refresh the marker-delimited assistant instructions. New decisions are version 2 proposals; legacy records stay explicitly unreviewed until reviewed. Use `review_decision` for acceptance or reaffirmation; saving unchanged content no longer refreshes evidence. Map builds now require `mode: "map"`. See the [migration notes](CHANGELOG.md#upgrading-from-090).
+> **0.10.1 decision fix:** Accepted constraints remain visible while their replacement revisions are proposed. Update every client sharing the decision store to `mason-context@0.10.1` and restart it; no data migration is needed. See the [release notes](CHANGELOG.md#0101--2026-09-05).
+
+> **Upgrading from 0.9.x:** Update Mason in every client that shares decision records, then re-run `mason_init` and refresh the marker-delimited assistant instructions. New decisions are version 2 proposals; legacy records stay explicitly unreviewed until reviewed. Use `review_decision` for acceptance or reaffirmation; saving unchanged content no longer refreshes evidence. Map builds now require `mode: "map"`. See the [migration notes](CHANGELOG.md#upgrading-from-090).
 
 > **0.4.0 note:** The previous `mason <command>` CLI was removed in v0.4.0. Setup and map editing use MCP; dedicated drift, audit, hook, and review binaries support automation. See [0.4.0 migration](#040-migration) below if you used the old CLI.
 
@@ -115,7 +117,9 @@ After the user or cited team review authorizes a verdict, call `review_decision`
 
 When anchored code changes later, use the same preparation flow and `action: "reaffirm"` to record that the accepted decision still holds, or `action: "retire"` to withdraw it. Retirement preserves history and can be recorded when Git history is unavailable. A reviewer may establish a new acceptance baseline when old history is unreachable; that gap stays recorded in the review event. Anchorless knowledge retains unknown code freshness even after acceptance.
 
-Tools preserve earlier content and review events in each `.mason/decisions/<id>.json` file. Reviews record the reviewer, reason, timestamp, revision, and code baseline. Editing content, anchors, owner, or sources creates a new proposed revision and retains the earlier accepted version in history. Saving identical content is a no-op: it does not silently reaffirm or refresh the decision. A proposal cannot supersede an accepted constraint; review the replacement, then explicitly retire the original.
+Tools preserve earlier content and review events in each `.mason/decisions/<id>.json` file. Reviews record the reviewer, reason, timestamp, revision, and code baseline. Editing content, anchors, owner, or sources creates a new proposed revision. The last accepted revision remains the operative constraint while that draft is reviewed. Context, hooks, map indexes, and diff reviews show the accepted content and a separate `pendingProposal`, each with its own anchors, attribution, and freshness. CI findings continue to associate with the accepted revision's anchors. This is derived from existing version 2 history without rewriting stored records.
+
+Preparing a review shows the draft and its `operativeDecision`, with evidence covering both sets of anchors. Accepting the draft replaces the operative revision; retiring the record withdraws the accepted constraint and its draft together. Saving identical content is a no-op: it does not silently reaffirm or refresh the decision. A proposal cannot supersede a record that has an operative accepted revision. When creating a replacement under a different id, review it and explicitly retire the original separately.
 
 **Existing records:** Version 1 records remain readable and explicitly unreviewed, without automatic file rewrites or invented attribution. Their first revision or review upgrades them to version 2 with an import event marking the missing earlier history. Old clients that only understand version 1 must be upgraded before consuming new records. Use the tools to revise records; inconsistent content/history is reported as invalid.
 
@@ -135,8 +139,8 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 | `export_to_confluence` | Sync the concept map to Confluence as PM-readable wiki pages. |
 | `get_snapshot` | Architecture navigation when a map is available. Loads the concept map — feature → file lookup — in one LLM-free call. |
 | `get_context` | Decisions with approval, provenance, file impact, tests, and trust for a task; adds features/flows when a map exists. No setup required. |
-| `save_decision` | Capture or revise proposals with rationale, anchors, owner, sources, and revision history. No setup required. |
-| `review_decision` | Prepare record/code evidence, then record authorized acceptance, reaffirmation, or retirement against that revision. |
+| `save_decision` | Capture or revise proposals with rationale, anchors, owner, sources, and history. Prior accepted revisions remain operative while drafts are reviewed. |
+| `review_decision` | Prepare draft and operative decision evidence, then record authorized acceptance, reaffirmation, or retirement against that revision. |
 | `mason_check_drift` | Feature-level staleness report — what changed since the snapshot, and whether to refresh incrementally or rebuild. |
 | `verify_snapshot` | Spot-check map correctness — sampled entries + file skeletons for the assistant to judge, least-recently-verified first. |
 | `save_verification` | Record verification verdicts — failures flag entries for re-mapping until fixed. |

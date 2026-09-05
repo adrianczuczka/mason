@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { loadDecisionStore, saveDecisionRecord, withDecisionWrite } from "./decisions.js";
-import { decisionApproval, decisionContent, decisionProvenance, importLegacy, type DecisionRecord, type ReviewedDecisionRecord } from "./provenance.js";
+import { decisionApproval, decisionAnchors, decisionContent, decisionProvenance, effectiveDecision, importLegacy, type DecisionRecord, type ReviewedDecisionRecord } from "./provenance.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { getChangesWithStatus, getWorkingTree, touchedPaths } from "../drift/drift.js";
 import { anchorMatches, matchingPaths } from "../utils/paths.js";
@@ -23,10 +23,11 @@ async function reviewState(root: string, record: DecisionRecord) {
   const [headHash, workingTree, changes] = await Promise.all([
     getCurrentGitHash(root), getWorkingTree(root), getChangesWithStatus(root, record.refreshedHash),
   ]);
-  const committed = (changes ?? []).filter(c => [c.path, ...(c.previousPath ? [c.previousPath] : [])].some(file => record.files.some(anchor => anchorMatches(anchor, file))));
+  const anchors = decisionAnchors(record);
+  const committed = (changes ?? []).filter(c => [c.path, ...(c.previousPath ? [c.previousPath] : [])].some(file => anchors.some(anchor => anchorMatches(anchor, file))));
   const evidence = {
     baseHash: record.refreshedHash, headHash, historyAvailable: changes !== null,
-    changedFiles: touchedPaths(committed), localChanges: matchingPaths(record.files, workingTree.changedFiles),
+    changedFiles: touchedPaths(committed), localChanges: matchingPaths(anchors, workingTree.changedFiles),
   };
   const reviewToken = createHash("sha256").update(JSON.stringify({ record, evidence, workingTreeAvailable: workingTree.available })).digest("hex");
   return { reviewToken, evidence, committed, workingTreeAvailable: workingTree.available };
@@ -34,8 +35,9 @@ async function reviewState(root: string, record: DecisionRecord) {
 
 async function previews(root: string, record: DecisionRecord, state: Awaited<ReturnType<typeof reviewState>>) {
   const access = await createFileAccess(root);
-  const candidates = [...new Set([...state.evidence.changedFiles, ...state.evidence.localChanges, ...record.files,
-    ...(await access.list()).filter(file => record.files.some(anchor => anchorMatches(anchor, file))),
+  const anchors = decisionAnchors(record);
+  const candidates = [...new Set([...state.evidence.changedFiles, ...state.evidence.localChanges, ...anchors,
+    ...(await access.list()).filter(file => anchors.some(anchor => anchorMatches(anchor, file))),
   ])];
   const files: Array<{ path: string; preview: string; totalLines: number }> = [];
   const omittedFiles: string[] = [];
@@ -72,10 +74,11 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
     const { record, diagnostics } = await read();
     if (!record) return { status: "error", error: `No readable decision with id "${request.id}"`, diagnostics };
     const state = await reviewState(root, record);
+    const operativeDecision = effectiveDecision(record);
     return {
-      status: "prepared", record, provenance: decisionProvenance(record), ...state, diagnostics,
+      status: "prepared", record, ...(operativeDecision !== record ? { operativeDecision } : {}), provenance: decisionProvenance(record), ...state, diagnostics,
       previews: await previews(root, record, state),
-      hint: "Inspect the content, sources, history, and code changes. Only record acceptance or reaffirmation when the user or cited team review has authorized it. Supply that reviewer's identity, a reason, and this reviewToken. Do not invent identities or infer agreement from unchanged code. Acceptance and reaffirmation require committed anchor changes; retirement is available independently. Missing old history remains visible in the event even if a reviewer establishes a new baseline at HEAD. Saved reviews are local assertions for normal PR review, not authenticated approvals.",
+      hint: "Inspect the proposed content, operativeDecision, sources, history, and code changes. A pending proposal leaves the prior accepted revision operative; accepting it replaces that revision, and retirement withdraws the entire decision including its proposal. Evidence covers both revisions' anchors. Only record acceptance or reaffirmation when the user or cited team review has authorized it. Supply that reviewer's identity, a reason, and this reviewToken. Do not invent identities or infer agreement from unchanged code. Acceptance and reaffirmation require committed anchor changes; retirement is available independently. Missing old history remains visible in the event even if a reviewer establishes a new baseline at HEAD. Saved reviews are local assertions for normal PR review, not authenticated approvals.",
     };
   }
   if (!request.reviewer || !request.note || !request.reviewToken) return { status: "error", error: "Prepare the review first, then provide reviewToken, reviewer, and note." };

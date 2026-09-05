@@ -3,7 +3,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { getChangesWithStatus, touchedPaths } from "../drift/drift.js";
-import { decisionProvenance } from "../decisions/provenance.js";
+import { decisionProvenance, decisionKnowledge, effectiveDecision } from "../decisions/provenance.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
 import { matchingPaths } from "../utils/paths.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
@@ -28,6 +28,7 @@ export interface TouchedDecision extends Partial<ReturnType<typeof decisionProve
   anchors: string[];
   freshness?: Freshness;
   touchedFiles: string[];
+  pendingProposal?: NonNullable<ReturnType<typeof decisionKnowledge>["pendingProposal"]> & { touchedFiles: string[] };
 }
 
 export interface ReviewReport {
@@ -167,16 +168,17 @@ export async function computeReview(
 
   const decisions = store.records;
   for (const record of decisions) {
-    if (record.status !== "active" || record.files.length === 0) continue;
-    const touched = anchorsTouched(record, changedFiles);
-    if (touched.length > 0) {
+    if (record.status !== "active") continue;
+    const effective = effectiveDecision(record);
+    const touched = anchorsTouched(effective, changedFiles);
+    const proposalTouched = effective !== record ? anchorsTouched(record, changedFiles) : [];
+    if (touched.length > 0 || proposalTouched.length > 0) {
+      const { pendingProposal, ...knowledge } = decisionKnowledge(record, decisionDrift.freshness?.[record.id] ?? "unknown", decisionDrift.pendingProposals?.[record.id]?.freshness ?? "unknown");
       report.touchedDecisions.push({
-        ...decisionProvenance(record, decisionDrift.freshness?.[record.id] ?? "unknown"),
+        ...knowledge,
+        ...(pendingProposal ? { pendingProposal: { ...pendingProposal, touchedFiles: proposalTouched } } : {}),
         id: record.id,
-        title: record.title,
-        body: record.body,
-        category: record.category,
-        anchors: record.files,
+        anchors: effective.files,
         freshness: decisionDrift.freshness?.[record.id] ?? "unknown",
         touchedFiles: touched,
       });

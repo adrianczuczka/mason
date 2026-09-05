@@ -5,7 +5,7 @@ import { readStoreJson, writeStoreJson, storePath, type StoreDiagnostic } from "
 import { sanitizeRepoPaths } from "../utils/paths.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { jaccard, tokenSet } from "../context/lexical.js";
-import { attributionSchema, decisionSchema, decisionContent, decisionApproval, importLegacy, type DecisionSource, type DecisionRecord, type ReviewedDecisionRecord } from "./provenance.js";
+import { attributionSchema, decisionSchema, decisionContent, decisionApproval, effectiveDecision, importLegacy, type DecisionSource, type DecisionRecord, type ReviewedDecisionRecord } from "./provenance.js";
 export type { DecisionRecord } from "./provenance.js";
 
 export type DecisionCategory =
@@ -163,7 +163,7 @@ export async function upsertDecision(rootDir: string, input: UpsertDecisionInput
       try { await fs.access(path.join(rootDir, file)); }
       catch { warnings.push(`anchor file does not exist on disk: ${file}`); }
     }
-    const hint = "Saved locally for review and commit. Proposals are not accepted constraints. Use review_decision to inspect evidence and record an authorized acceptance or reaffirmation.";
+    const hint = "Saved locally for review and commit. Proposals are not accepted constraints; an existing accepted revision remains operative while its replacement is proposed. Use review_decision to inspect evidence and record an authorized acceptance or reaffirmation.";
     if (input.id) {
       const original = byId.get(input.id);
       if (!original) return { status: "error", error: `no decision with id "${input.id}"` };
@@ -187,7 +187,7 @@ export async function upsertDecision(rootDir: string, input: UpsertDecisionInput
     }
     const old = input.supersedes ? byId.get(input.supersedes) : undefined;
     if (input.supersedes && !old) return { status: "error", error: `no decision with id "${input.supersedes}" to supersede` };
-    if (old && (old.status !== "active" || decisionApproval(old) === "accepted")) {
+    if (old && (old.status !== "active" || decisionApproval(effectiveDecision(old)) === "accepted")) {
       return { status: "error", error: "A proposal cannot supersede an accepted or archived record. Create and review the replacement separately, then explicitly retire the old decision with review_decision." };
     }
     if (!input.force) {

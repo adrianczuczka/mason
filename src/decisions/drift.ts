@@ -6,6 +6,7 @@ import type { StoreDiagnostic } from "../utils/storage.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { loadDecisionStore } from "./decisions.js";
 import type { DecisionRecord } from "./decisions.js";
+import { effectiveDecision } from "./provenance.js";
 
 /**
  * Deliberately separate from DriftReport: mason-drift's exit codes and
@@ -19,6 +20,8 @@ export interface DecisionDriftReport {
   totalDecisions: number;
   /** Decision id → anchor files changed since the record's refreshedHash. */
   staleDecisions: Record<string, string[]>;
+  /** Draft anchors have their own freshness; they cannot replace accepted anchors. */
+  pendingProposals?: Record<string, { freshness: Freshness; changedFiles: string[] }>;
 }
 
 /**
@@ -36,9 +39,8 @@ export async function computeDecisionDrift(
   const report: DecisionDriftReport = { historyAvailable: true, totalDecisions: store.records.length, staleDecisions: {}, freshness: {}, diagnostics: store.diagnostics };
   const [head, workingTree] = await Promise.all([getCurrentGitHash(resolvedRoot), getWorkingTree(resolvedRoot)]);
   const changesByHash = new Map<string, string[] | null>();
-  for (const record of store.records) {
-    if (record.status !== "active") continue;
-    if (record.files.length === 0) { report.freshness![record.id] = "unknown"; continue; }
+  const inspect = async (record: DecisionRecord): Promise<{ freshness: Freshness; changedFiles: string[] }> => {
+    if (record.files.length === 0) return { freshness: "unknown", changedFiles: [] };
     let touched = changesByHash.get(record.refreshedHash);
     if (touched === undefined) {
       const changes = record.refreshedHash === head && head !== "unknown" ? [] : await getChangesWithStatus(resolvedRoot, record.refreshedHash);
@@ -47,9 +49,16 @@ export async function computeDecisionDrift(
     }
     if (touched === null) report.historyAvailable = false;
     const hits = touched ? matchingPaths(record.files, touched) : [];
-    if (hits.length) report.staleDecisions[record.id] = hits;
     const localHits = matchingPaths(record.files, workingTree.changedFiles);
-    report.freshness![record.id] = touched === null || !workingTree.available ? "unknown" : hits.length || localHits.length ? "changed" : "current";
+    return { freshness: touched === null || !workingTree.available ? "unknown" : hits.length || localHits.length ? "changed" : "current", changedFiles: hits };
+  };
+  for (const record of store.records) {
+    if (record.status !== "active") continue;
+    const effective = effectiveDecision(record);
+    const state = await inspect(effective);
+    report.freshness![record.id] = state.freshness;
+    if (state.changedFiles.length) report.staleDecisions[record.id] = state.changedFiles;
+    if (effective !== record) (report.pendingProposals ??= {})[record.id] = await inspect(record);
   }
   return report;
 }

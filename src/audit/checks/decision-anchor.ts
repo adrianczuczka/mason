@@ -1,6 +1,6 @@
 import { computeDecisionDrift } from "../../decisions/drift.js";
 import { loadDecisionStore } from "../../decisions/decisions.js";
-import { decisionProvenance } from "../../decisions/provenance.js";
+import { decisionProvenance, effectiveDecision } from "../../decisions/provenance.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
 
@@ -26,11 +26,14 @@ export async function checkDecisionAnchors(
     });
   }
 
-  const byId = new Map(records.map((r) => [r.id, r]));
-  for (const [id, changedFiles] of Object.entries(drift.staleDecisions)) {
-    const record = byId.get(id);
-    if (!record) continue;
-    const provenance = decisionProvenance(record, drift.freshness?.[id] ?? "unknown");
+  const changed = records.flatMap(record => [
+    { record: effectiveDecision(record), changedFiles: drift.staleDecisions[record.id] ?? [], freshness: drift.freshness?.[record.id] ?? "unknown" },
+    { record, changedFiles: drift.pendingProposals?.[record.id]?.changedFiles ?? [], freshness: drift.pendingProposals?.[record.id]?.freshness ?? "unknown" },
+  ] as const);
+  for (const { record, changedFiles, freshness } of changed) {
+    if (!changedFiles.length) continue;
+    const id = record.id;
+    const provenance = decisionProvenance(record, freshness);
     result.advisories.push({
       type: "decision-anchor-drift",
       message: `decision "${record.title}" (${provenance.approval}) has anchor files that changed since its evidence baseline – needs human review`,

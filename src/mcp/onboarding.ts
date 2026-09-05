@@ -2,7 +2,7 @@ import { computeAudit } from "../audit/audit.js";
 import { computeReview, defaultBase } from "../review/review.js";
 import { getWorkingTree } from "../drift/drift.js";
 import { inspectSnapshot } from "../snapshot/snapshot.js";
-import { decisionApproval } from "../decisions/provenance.js";
+import { decisionApproval, effectiveDecision } from "../decisions/provenance.js";
 import { summarizeEvidence } from "../review/evidence.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
 
@@ -56,7 +56,8 @@ export async function inspectOnboarding(root: string, base?: string, evidence?: 
     audit, review, map: { status: map.status },
     decisions: {
       active: decisions.records.filter(record => record.status === "active").length,
-      ...Object.fromEntries(["accepted", "proposed", "unreviewed"].map(approval => [approval, decisions.records.filter(record => record.status === "active" && decisionApproval(record) === approval).length])),
+      ...Object.fromEntries(["accepted", "proposed", "unreviewed"].map(approval => [approval, decisions.records.filter(record => record.status === "active" && decisionApproval(effectiveDecision(record)) === approval).length])),
+      pendingProposals: decisions.records.filter(record => effectiveDecision(record) !== record).length,
     },
     diagnostics: [...map.diagnostics, ...decisions.diagnostics],
   };

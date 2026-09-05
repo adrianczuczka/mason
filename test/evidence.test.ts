@@ -89,6 +89,22 @@ describe("CI evidence in reviews", () => {
     expect(imported.findings[0]).toMatchObject({ severity: "error", locations: [{ file: "src/delivery.ts", line: 1 }], relatedChangedFiles: [{ file: "src/delivery.ts", relationship: "direct" }] });
   });
 
+  it("associates findings with accepted anchors and ownership while a replacement is proposed", async () => {
+    const input = { title: "Delivery idempotency", body: "Require a key before retry.", category: "gotcha" as const, files: ["src/delivery.ts"], owner: "Delivery team", sources: [{ kind: "incident" as const, reference: "incident/42" }] };
+    const saved = await upsertDecision(repo, input);
+    const prepared = await reviewDecision(repo, { id: saved.id });
+    await reviewDecision(repo, { id: saved.id, action: "accept", reviewer: "Test reviewer", note: "Reviewed incident and source", reviewToken: prepared.reviewToken });
+    await write("src/queue.ts", "export const schedule = true;\n");
+    await upsertDecision(repo, { ...input, id: saved.id, title: "Queue scheduling", body: "Schedule using the queue.", files: ["src/queue.ts"], owner: "Queue team" });
+    await write(reportPath, sarif([finding(), finding({ locations: [{ physicalLocation: { artifactLocation: { uri: "src/queue.ts" } } }] })]));
+    await manifest([check({ id: "analysis", kind: "static-analysis", tool: "Example analyzer", report: { format: "sarif", path: reportPath } })]);
+    const findings = (await review()).evidence.checks[0].findings;
+    expect(findings.find(f => f.locations[0].file === "src/delivery.ts").acceptedDecisions).toEqual([
+      expect.objectContaining({ id: saved.id, title: input.title, owner: input.owner, viaFiles: input.files, freshness: "current" }),
+    ]);
+    expect(findings.find(f => f.locations[0].file === "src/queue.ts").acceptedDecisions).toEqual([]);
+  });
+
   it("keeps stale passing reports from becoming current evidence", async () => {
     await write(reportPath, testReport()); await manifest([check({ commit: base })]);
     expect((await review()).evidence).toMatchObject({ status: "incomplete", checks: [{ outcome: "passed", freshness: "stale" }] });

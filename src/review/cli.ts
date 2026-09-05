@@ -140,10 +140,14 @@ export function formatReviewSummary(report: ReviewReport): string {
     lines.push("Recorded decisions touched by this diff (check approval and freshness before relying on them):");
     for (const d of report.touchedDecisions) {
       lines.push(
-        `  [decision] ${d.title} (${d.category}; ${d.approval ?? "unreviewed"}; owner ${d.owner ?? "unknown"}; freshness ${d.freshness ?? "unknown"}; via ${d.touchedFiles.join(", ")})`
+        `  [decision] ${d.title} (${d.category}; ${d.approval ?? "unreviewed"}; owner ${d.owner ?? "unknown"}; freshness ${d.freshness ?? "unknown"}; via ${d.touchedFiles.join(", ") || "pending proposal"})`
       );
       if (d.sources?.length) lines.push(`    sources: ${d.sources.map(s => s.reference).join(", ")}`);
       if (d.lastReview) lines.push(`    last review: ${d.lastReview.reviewer} at ${d.lastReview.gitHash.slice(0, 7)}`);
+      if (d.pendingProposal) {
+        const p = d.pendingProposal;
+        lines.push(`    [proposed revision ${p.revision}] ${p.title} (owner ${p.owner ?? "unknown"}; freshness ${p.trust.freshness}; via ${p.touchedFiles.join(", ") || "no draft anchors touched"}); accepted revision ${d.revision} remains operative`);
+      }
     }
   }
 

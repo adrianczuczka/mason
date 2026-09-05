@@ -345,7 +345,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "save_decision",
-    "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. No setup or map required. Writes a local record and preserves content history. Changes reset acceptance to proposed; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede an accepted record; review its replacement and retire the original separately.",
+    "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. No setup or map required. Writes a local record and preserves content history. Changes create a pending proposal while the last accepted revision remains operative; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede a record with an operative accepted revision; review its replacement and retire the original separately.",
     {
       dir: z
         .string()
@@ -370,7 +370,7 @@ export function createMcpServer(): McpServer {
       supersedes: z
         .string()
         .optional()
-        .describe("Id of an unreviewed record or proposal to replace. Accepted decisions require separate review and retirement."),
+        .describe("Id of an unreviewed record or proposal with no accepted revision to replace. Operative accepted decisions require separate review and retirement."),
       owner: attributionSchema.shape.owner.describe("Responsible person or team, when known. Null clears it. Required for acceptance."),
       sources: attributionSchema.shape.sources.describe("Known PR, issue, incident, discussion, or document references. Omit to preserve; [] clears. At least one is required for acceptance."),
       actor: attributionSchema.shape.actor.describe("Known person or agent recording this revision. Omit if unknown; do not infer from Git identity."),
@@ -398,7 +398,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "review_decision",
-    "Prepare a decision review: returns the full record and history, provenance, committed changes, local edits, bounded source/diff previews, and a reviewToken. Then record accept, reaffirm, or retire with that token, the authorized reviewer, and a reason. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
+    "Prepare a decision review: returns the full record and history, any operative accepted revision, provenance, changes and previews for both sets of anchors, and a reviewToken. Then record accept, reaffirm, or retire with that token, the authorized reviewer, and a reason. Acceptance replaces the operative revision; retirement withdraws the entire record including its proposal. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
     {
       dir: z.string().describe("Absolute path to the project root directory"),
       id: z.string().regex(/^[a-zA-Z0-9_-]+$/).describe("Decision id from get_context or save_decision"),

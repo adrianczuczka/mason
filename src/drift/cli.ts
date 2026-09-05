@@ -165,6 +165,8 @@ export function formatRefreshPrompt(
       `NOTE: decisions [${staleDecisionIds.join(", ")}] have anchor files that changed. Do NOT modify decision records in this automated run — they encode human knowledge. Mention them in your final summary so the team re-verifies them.`
     );
   }
+  const changedProposals = Object.entries(decisionDrift.pendingProposals ?? {}).filter(([, state]) => state.freshness !== "current").map(([id]) => id);
+  if (changedProposals.length) lines.push(`NOTE: pending proposals [${changedProposals.join(", ")}] need source review. Their accepted revisions remain operative. Do NOT modify or accept these proposals during automated map refresh.`);
 
   lines.push("");
   lines.push(
@@ -247,6 +249,9 @@ export async function runDriftCli(
       lines.push(
         `Decisions needing verification (${staleIds.length}/${decisionDrift.totalDecisions}): ${staleIds.join(", ")}`
       );
+    }
+    for (const [id, proposal] of Object.entries(decisionDrift.pendingProposals ?? {})) {
+      lines.push(`Pending proposal ${id}: freshness ${proposal.freshness}; the accepted revision remains operative.`);
     }
     io.out(lines.join("\n"));
   }

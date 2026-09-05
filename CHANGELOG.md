@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.1 — 2026-09-05
+
+Editing an accepted decision previously hid its accepted content from ordinary retrieval until the draft was reviewed. Mason now keeps the accepted constraint visible alongside the proposed replacement.
+
+- Preserve the last accepted decision while a replacement revision is proposed. Retrieval, hooks, map indexes, reviews, and audits distinguish the accepted revision from its pending proposal, including separate anchors, ownership, and freshness. CI evidence remains associated with accepted anchors. Existing version 2 history supplies both revisions without a storage migration.
+- Keep review evidence for both revisions, block superseding a draft that still has an operative accepted constraint, and update existing hook sessions when acceptance or retirement moves the anchors.
+
+Upgrade every client using the decision store to `mason-context@0.10.1` and restart it. No data migration is required; older clients still have the old retrieval behavior. Accepting a draft replaces the operative revision, and retiring a decision withdraws both the accepted revision and its draft.
+
 ## 0.10.0 — 2026-09-05
 
 Mason now provides useful project checks and decision capture without building an architecture map. This release strengthens the trust evidence around stored knowledge and brings existing test and analysis results into the same review.

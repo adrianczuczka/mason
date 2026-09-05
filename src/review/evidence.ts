@@ -5,7 +5,7 @@ import { normalizeRepoPath, matchingPaths } from "../utils/paths.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { getWorkingTree } from "../drift/drift.js";
 import { buildTestMap, type TestPair } from "../test-map.js";
-import { decisionApproval, decisionProvenance, type DecisionRecord } from "../decisions/provenance.js";
+import { decisionApproval, decisionProvenance, effectiveDecision, type DecisionRecord } from "../decisions/provenance.js";
 import type { Freshness } from "../context/trust.js";
 import { parseVitest } from "./evidence/vitest.js";
 import { parseSarif } from "./evidence/sarif.js";
@@ -60,7 +60,7 @@ function linkFinding(finding: RawFinding, changed: Set<string>, pairs: TestPair[
     if (changed.has(pair.source) && !relatedChangedFiles.some(f => f.file === pair.source)) relatedChangedFiles.push({ file: pair.source, relationship: "paired-test", confidence: pair.confidence });
   }
   const allFiles = [...new Set([...located, ...paired.map(pair => pair.source)])];
-  const acceptedDecisions = decisions.filter(d => d.status === "active" && decisionApproval(d) === "accepted")
+  const acceptedDecisions = decisions.map(effectiveDecision).filter(d => d.status === "active" && decisionApproval(d) === "accepted")
     .map(d => ({ d, viaFiles: matchingPaths(d.files, allFiles) })).filter(match => match.viaFiles.length)
     .map(({ d, viaFiles }) => {
       const state = freshness[d.id] ?? "unknown", provenance = decisionProvenance(d, state);

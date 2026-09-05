@@ -95,6 +95,25 @@ export function decisionApproval(record: DecisionRecord): DecisionApproval {
   return record.version === 1 ? "unreviewed" : record.approval;
 }
 
+/** The last accepted revision remains operative while a replacement is drafted.
+ * This is a read-only projection; writes and review tokens use the complete record.
+ * Archived records never regain authority from their history.
+ */
+export function effectiveDecision(record: DecisionRecord): DecisionRecord {
+  if (record.version !== 2 || record.status !== "active" || record.approval !== "proposed") return record;
+  let index = record.history.length - 1;
+  while (index >= 0 && !["accepted", "reaffirmed"].includes(record.history[index].kind)) index--;
+  if (index < 0) return record;
+  const event = record.history[index];
+  return { ...record, ...event.content, owner: event.content.owner, approval: "accepted", revision: event.revision,
+    refreshedHash: event.refreshedHash, updatedAt: event.at, history: record.history.slice(0, index + 1) };
+}
+
+/** Anchors relevant to either the operative knowledge or its pending proposal. */
+export function decisionAnchors(record: DecisionRecord): string[] {
+  return [...new Set([...effectiveDecision(record).files, ...record.files])];
+}
+
 export function importLegacy(record: DecisionRecord, now: string): ReviewedDecisionRecord {
   if (record.version === 2) return record;
   // Ignore unrecognized legacy fields: they are not evidence of authorship or approval.
@@ -123,4 +142,22 @@ export function decisionTrust(record: DecisionRecord, freshness: Freshness) {
   return assessTrust(review ? { verifiedAt: review.at, verifiedHash: review.gitHash } : {}, freshness);
 }
 
-export const DECISION_GUIDANCE = "Accepted decisions are recorded team constraints, subject to freshness checks. Proposals are suggestions; legacy unreviewed records need confirmation. Use review_decision to inspect provenance and record an authorized review; identities and sources are recorded assertions, not authenticated proof.";
+function revisionKnowledge(record: DecisionRecord, freshness: Freshness) {
+  return { ...decisionContent(record), ...decisionProvenance(record, freshness), trust: decisionTrust(record, freshness) };
+}
+
+/** Readers show accepted content first and label the unaccepted draft separately. */
+export function decisionKnowledge(record: DecisionRecord, freshness: Freshness = "unknown", proposalFreshness: Freshness = "unknown") {
+  const effective = effectiveDecision(record);
+  return { ...revisionKnowledge(effective, freshness),
+    ...(effective !== record ? { pendingProposal: revisionKnowledge(record, proposalFreshness) } : {}) };
+}
+
+export function compactDecisionKnowledge(...args: Parameters<typeof decisionKnowledge>) {
+  const { body, pendingProposal, ...summary } = decisionKnowledge(...args);
+  if (!pendingProposal) return summary;
+  const { body: proposalBody, ...proposal } = pendingProposal;
+  return { ...summary, pendingProposal: proposal };
+}
+
+export const DECISION_GUIDANCE = "Accepted decisions are recorded team constraints, subject to freshness checks. A pendingProposal is an unaccepted replacement; the accepted revision remains operative until explicit acceptance or retirement. Proposals are suggestions; legacy unreviewed records need confirmation. Use review_decision to inspect provenance and record an authorized review; identities and sources are recorded assertions, not authenticated proof.";

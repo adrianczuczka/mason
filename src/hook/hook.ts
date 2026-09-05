@@ -2,12 +2,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { loadDecisionStore } from "../decisions/decisions.js";
-import { decisionProvenance } from "../decisions/provenance.js";
+import { decisionAnchors, decisionKnowledge, DECISION_GUIDANCE } from "../decisions/provenance.js";
 import { anchorMatches } from "../utils/paths.js";
 import { createHash } from "node:crypto";
 import type { Freshness } from "../context/trust.js";
 import type { DecisionRecord } from "../decisions/decisions.js";
-import { computeDecisionDrift } from "../decisions/drift.js";
+import { computeDecisionDrift, type DecisionDriftReport } from "../decisions/drift.js";
 
 /** More than a few constraints per fire is noise, not context. */
 const MAX_INJECTED_DECISIONS = 3;
@@ -57,11 +57,11 @@ async function findMasonRoot(startDir: string): Promise<string | null> {
 }
 
 function anchorsCover(record: DecisionRecord, relPath: string): boolean {
-  return record.files.some(anchor => anchorMatches(anchor, relPath));
+  return decisionAnchors(record).some(anchor => anchorMatches(anchor, relPath));
 }
 
 function exactAnchor(record: DecisionRecord, relPath: string): boolean {
-  return record.files.some((a) => a.replace(/\/+$/, "") === relPath);
+  return decisionAnchors(record).some((a) => a.replace(/\/+$/, "") === relPath);
 }
 
 function stateKey(input: HookStdin): string {
@@ -81,21 +81,24 @@ async function loadInjected(stateFile: string): Promise<Set<string>> {
 function formatContext(
   relPath: string,
   records: DecisionRecord[],
-  freshness: Record<string, Freshness>
+  drift: DecisionDriftReport
 ): string {
   const lines: string[] = [];
   lines.push(
-    `Mason: recorded knowledge anchored to ${relPath}. Accepted records are constraints subject to freshness; proposals are suggestions and legacy unreviewed records need confirmation. Retired or superseded records are no longer active. Do not modify decision records in .mason/decisions/.`
+    `Mason: decision knowledge relevant to ${relPath} or updated since this session saw it. This replaces earlier guidance for the same decision id. ${DECISION_GUIDANCE} Retired or superseded records are no longer active. Do not modify decision records in .mason/decisions/.`
   );
-  for (const record of records) {
-    const provenance = decisionProvenance(record, freshness[record.id] ?? "unknown");
-    const label = record.status === "active" ? provenance.approval : record.status;
-    const stale = freshness[record.id] === "current" ? "" : freshness[record.id] === "changed"
+  const append = (id: string, knowledge: ReturnType<typeof decisionKnowledge>, label: string, freshness: Freshness) => {
+    const stale = freshness === "current" ? "" : freshness === "changed"
       ? " [recorded against changed files – verify against current code before relying on it]"
       : " [freshness unknown – verify against current code before relying on it]";
     lines.push(
-      `- [${label}] [${record.category}] ${record.title}: ${record.body} (anchors: ${record.files.join(", ")}; owner: ${provenance.owner ?? "unknown"}; sources: ${provenance.sources.slice(0, 2).map(s => s.reference).join(", ") || "unrecorded"})${stale}`
+      `- [${label}] [${knowledge.category}] ${knowledge.title}: ${knowledge.body} (id: ${id}; revision: ${knowledge.revision}; anchors: ${knowledge.files.join(", ")}; owner: ${knowledge.owner ?? "unknown"}; sources: ${knowledge.sources.slice(0, 2).map(s => s.reference).join(", ") || "unrecorded"})${stale}`
     );
+  };
+  for (const record of records) {
+    const knowledge = decisionKnowledge(record, drift.freshness?.[record.id] ?? "unknown", drift.pendingProposals?.[record.id]?.freshness ?? "unknown");
+    append(record.id, knowledge, record.status === "active" ? knowledge.approval : record.status, knowledge.trust.freshness);
+    if (knowledge.pendingProposal) append(record.id, knowledge.pendingProposal, "proposed", knowledge.pendingProposal.trust.freshness);
   }
   return lines.join("\n");
 }
@@ -133,17 +136,18 @@ export async function runHook(
   if (relPath.startsWith("..")) return null;
 
   const { records } = await loadDecisionStore(root);
-  const matched = records.filter(r => anchorsCover(r, relPath));
-  if (matched.length === 0) return null;
 
   const stateDir = env.stateDir ?? os.tmpdir();
   const stateFile = path.join(stateDir, `mason-hook-${createHash("sha256").update(root).digest("hex").slice(0, 12)}-${stateKey(input)}.json`);
   const injected = await loadInjected(stateFile);
   const recordKey = (record: DecisionRecord) => `${record.id}:${createHash("sha256").update(JSON.stringify(record)).digest("hex")}`;
+  const previouslyInjected = (record: DecisionRecord) => [...injected].some(key => key === record.id || key.startsWith(`${record.id}:`));
   // Re-inject revised/accepted records and withdraw previously injected records
   // that were retired during this session. Untouched archived records stay dark.
-  const fresh = matched.filter(r => !injected.has(recordKey(r)) &&
-    (r.status === "active" || [...injected].some(key => key === r.id || key.startsWith(`${r.id}:`))));
+  // Also update previously seen records after their anchors move. Otherwise an
+  // acceptance or retirement could leave obsolete guidance in the session.
+  const fresh = records.filter(r => !injected.has(recordKey(r)) &&
+    (previouslyInjected(r) || (r.status === "active" && anchorsCover(r, relPath))));
   if (fresh.length === 0) return null;
 
   // Exact-file anchors outrank directory-prefix ones; newest knowledge wins ties.
@@ -158,7 +162,6 @@ export async function runHook(
   const selected = fresh.slice(0, MAX_INJECTED_DECISIONS);
 
   const drift = await computeDecisionDrift(root, selected);
-  const freshness = drift.freshness ?? {};
 
   for (const record of selected) injected.add(recordKey(record));
   try {
@@ -170,7 +173,7 @@ export async function runHook(
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PostToolUse",
-      additionalContext: formatContext(relPath, selected, freshness),
+      additionalContext: formatContext(relPath, selected, drift),
     },
   });
 }

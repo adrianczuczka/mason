@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mason",
   "display_name": "Mason",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Recorded engineering decisions, change impact, and documentation audits for coding assistants. Useful from the first task, with optional architecture maps.",
   "long_description": "Mason retrieves lessons and constraints from .mason/decisions/, checks their freshness, and combines them with references, related tests, and Git change history. Audit documentation and review committed changes without setup. Add an optional feature/flow map for architecture navigation.",
   "author": {
@@ -232,7 +232,7 @@
     },
     {
       "name": "save_decision",
-      "description": "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. No setup or map required. Writes a local record and preserves content history. Changes reset acceptance to proposed; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede an accepted record; review its replacement and retire the original separately.",
+      "description": "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. No setup or map required. Writes a local record and preserves content history. Changes create a pending proposal while the last accepted revision remains operative; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede a record with an operative accepted revision; review its replacement and retire the original separately.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -242,7 +242,7 @@
           "category": { "type": "string", "enum": ["decision", "gotcha", "deprecation", "convention"] },
           "files": { "type": "array", "items": { "type": "string" }, "description": "Repo-relative files or directory prefixes; changes flag the decision for re-verification across retrieval, hooks, and review" },
           "id": { "type": "string", "description": "Existing id to revise; unchanged content does not re-verify" },
-          "supersedes": { "type": "string", "description": "Id of a decision this one replaces" },
+          "supersedes": { "type": "string", "description": "Id of an unreviewed record or proposal with no accepted revision to replace. Operative accepted decisions require separate review and retirement." },
           "owner": { "type": ["string", "null"], "minLength": 1, "maxLength": 200, "description": "Responsible person or team; null clears it. Required for acceptance." },
           "sources": { "type": "array", "maxItems": 20, "description": "Known source references; omit to preserve, [] clears", "items": {
             "type": "object", "properties": {
@@ -259,7 +259,7 @@
     },
     {
       "name": "review_decision",
-      "description": "Prepare a decision review: returns the full record and history, provenance, committed changes, local edits, bounded source/diff previews, and a reviewToken. Then record accept, reaffirm, or retire with that token, the authorized reviewer, and a reason. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
+      "description": "Prepare a decision review: returns the full record and history, any operative accepted revision, provenance, changes and previews for both sets of anchors, and a reviewToken. Then record accept, reaffirm, or retire with that token, the authorized reviewer, and a reason. Acceptance replaces the operative revision; retirement withdraws the entire record including its proposal. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
       "inputSchema": {
         "type": "object",
         "properties": {
