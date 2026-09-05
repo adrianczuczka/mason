@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-05T08:11:30.244Z",
-  "gitHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3",
+  "updatedAt": "2026-09-05T08:15:33.251Z",
+  "gitHash": "6cf7b6cce9707242c5326d6a2b7c901830e5af75",
   "features": {
     "MCP server entry point": {
       "description": "Starts the Mason MCP stdio server that exposes all tools to AI assistants",
@@ -133,7 +133,7 @@
         "test/verify.test.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "6cf7b6cce9707242c5326d6a2b7c901830e5af75"
     },
     "concept-map snapshot storage": {
       "description": "Validates and atomically stores concept maps and Map-Reduce partials; supports scoped refreshes while retaining failed verdicts for unchanged entries.",
@@ -398,7 +398,7 @@
         "test/tools.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "6cf7b6cce9707242c5326d6a2b7c901830e5af75"
     },
     "decision review": {
       "description": "Prepares decision history, committed changes, local edits, and bounded source/diff evidence before recording acceptance, reaffirmation, or retirement. Verdicts identify reviewer and rationale, reject stale prepared revisions, and preserve the review baseline through metadata commits. Assertions are recorded, not authenticated.",
