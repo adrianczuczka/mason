@@ -18,6 +18,7 @@ import {
   verifySnapshot,
   masonCompleteInit,
   masonInit,
+  masonRepair,
   masonSetConfluence,
   reduceSnapshot,
   saveSnapshotData,
@@ -52,6 +53,22 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir, mode, base, evidence }) => {
       const result = await masonInit(dir, { mode, base, evidence });
+      return { content: [{ type: "text", text: result }] };
+    }
+  );
+
+  server.tool(
+    "mason_repair",
+    "Track documentation repairs against original audit evidence. prepare saves a local baseline and returns a scoped work order; verify reads that baseline and reports resolved, unresolved, review-required, unverified, and new findings. Suppressed advisories remain unresolved. Does not edit documentation or approve decisions. No map required.",
+    {
+      dir: z.string().describe("Absolute path to the project root directory"),
+      action: z.enum(["prepare", "verify"]),
+      baselinePath: z.string().optional().describe("Original baseline path returned by prepare; required for verify."),
+      checks: z.array(z.enum(["deleted-reference", "new-module", "stale-count", "dead-command", "deps-changed", "decision-anchor-drift"]))
+        .min(1).optional().describe("Optional audit check subset for prepare. Verification always uses the original checks."),
+    },
+    async ({ dir, action, baselinePath, checks }) => {
+      const result = await masonRepair(dir, { action, baselinePath, checks });
       return { content: [{ type: "text", text: result }] };
     }
   );

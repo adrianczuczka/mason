@@ -13,7 +13,7 @@ Mason is an MCP server for recorded engineering decisions, task context, change 
 Mason exposes an MCP server and standalone deterministic CLIs. Entry points:
 - **MCP Server** (`bin/mason-mcp.ts` → `src/mcp/server.ts`) — tool server for AI assistants; all functionality lives here
 - **mason-drift** (`bin/mason-drift.ts` → `src/drift/cli.ts`) — headless CI staleness check for the concept map (exit 0 fresh / 1 stale / 2 error); read-only and LLM-free
-- **mason-audit** (`bin/mason-audit.ts` → `src/audit/cli.ts`) — headless CI audit of the repo's AI context files (CLAUDE.md, .claude/CLAUDE.md, AGENTS.md) against repo reality (exit 0 clean / 1 issues / 2 error); read-only, LLM-free, and works on repos with no Mason setup
+- **mason-audit** (`bin/mason-audit.ts` → `src/audit/cli.ts`) — deterministic context-file audit, read-only by default (exit 0 no issues / 1 issues / 2 error). Explicit `--prepare-repair` saves original evidence; `--verify-repair` reads it and returns 2 for incomplete verification or outstanding advisory review. Works without Mason setup.
 - **mason-hook** (`bin/mason-hook.ts` → `src/hook/cli.ts`) — Claude Code PostToolUse hook: injects decision records anchored to the file a session just read or edited; deterministic, per-session deduped, silent on no match (this repo dogfoods it via `.claude/settings.json`)
 - **mason-review** (`bin/mason-review.ts` → `src/review/cli.ts`) — diff review vs a base ref: flags absent historical co-change partners and touched decisions. Optional CI evidence imports preserve outcomes and provenance. Exit 0 no missing partners / 1 missing partners / 2 error; `--require-evidence` additionally gates on current, complete passing checks.
 - **mason** (`bin/mason.ts`) — deprecation shim that prints a migration message
@@ -31,6 +31,7 @@ src/
 │   ├── tree.ts         # ASCII directory-tree reconstruction
 │   ├── docs.ts         # Context-file discovery + git metadata
 │   ├── cli.ts          # mason-audit CLI (summary, --json, --fix-prompt)
+│   ├── repair.ts       # Original audit baselines and per-finding verification
 │   └── checks/         # One check per file + registry (issues vs advisories)
 ├── confluence/         # Confluence wiki sync (client, renderer, diff, sync)
 ├── context/            # Task retrieval + shared freshness/verification trust states
@@ -131,6 +132,8 @@ Mason provides recorded decisions and file impact over MCP. A concept map is opt
 - Asked to review or re-verify a decision → `review_decision` first to inspect content, sources, history, and code changes. Record acceptance, reaffirmation, or retirement only when authorized by the user or a cited team review, with the actual reviewer and reason. Never infer approval from unchanged code. Review and commit the local record through the normal project workflow.
 - For an architectural overview, use `get_snapshot` if a map is available. If `map.status` is missing or invalid, use available decisions and source evidence; do not start building a map unless requested.
 - `mason_init` returns documentation audit and committed-diff review results, plus a short setup guide. Pass `evidence` with local CI manifest paths to include test and analysis results; the CLI equivalent is `mason-review --evidence <manifest>`. State skipped, unavailable, stale, or unknown checks explicitly. Related accepted decisions identify review context, not proven violations.
+
+- When documentation repair is authorized, use `mason_repair(action: "prepare")` before edits, keep its baselinePath, and use `mason_repair(action: "verify", baselinePath)` after edits and any final doc commit. Report every original finding's outcome and any new findings. Suppressed advisories remain unresolved; editing a doc does not approve it.
 
 Inspect source for what the retrieved context does not answer.
 <!-- mason:end -->

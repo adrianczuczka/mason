@@ -107,25 +107,47 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Prepare the original repair evidence
+        if: steps.audit.outputs.issues == 'true' && steps.gate.outputs.skip == 'false' && inputs.agent-command != ''
+        run: |
+          set +e
+          npx -y -p mason-context mason-audit --dir . --prepare-repair --json $AUDIT_CHECKS > "$RUNNER_TEMP/repair.json"
+          code=$?
+          set -e
+          if [ "$code" -gt 1 ]; then exit "$code"; fi
+          baseline=$(jq -er '.baselinePath' "$RUNNER_TEMP/repair.json")
+          echo "MASON_REPAIR_BASELINE=$baseline" >> "$GITHUB_ENV"
+          jq '.report' "$RUNNER_TEMP/repair.json" > "$RUNNER_TEMP/audit.json"
+          # Both verification steps enforce the original issue repairs. Advisory
+          # review stays explicitly incomplete and is reported in the PR.
+          cat > "$RUNNER_TEMP/verify-mason-repair.sh" <<'VERIFY'
+          set -e
+          npx -y -p mason-context mason-audit --dir . --verify-repair "$MASON_REPAIR_BASELINE" --json > "$RUNNER_TEMP/verification.json" || true
+          jq -e '.action == "verify" and (.diagnostics | length) == 0
+            and (.findings | all(.original.confidence == null or .status == "resolved"))
+            and (.newFindings | all(.confidence == null))' "$RUNNER_TEMP/verification.json"
+          VERIFY
+
       - name: Fix the flagged claims with the configured agent
         if: steps.audit.outputs.issues == 'true' && steps.gate.outputs.skip == 'false' && inputs.agent-command != ''
         run: |
-          export MASON_AUDIT_PROMPT="$(npx -y -p mason-context mason-audit --dir . --fix-prompt $AUDIT_CHECKS || true)"
+          export MASON_AUDIT_PROMPT="$(jq -r '.workOrder' "$RUNNER_TEMP/repair.json")"
+          export MASON_AUDIT_PROMPT="$MASON_AUDIT_PROMPT
+          CI already prepared the baseline and will run verification after your edits and the documentation commit. Edit only the flagged documentation; leave all repair artifacts intact. Report advisories separately."
           ${{ inputs.agent-command }}
 
-      - name: Verify the fix closed the loop
+      - name: Verify original issues and preserve unresolved advisories
         if: steps.audit.outputs.issues == 'true' && steps.gate.outputs.skip == 'false' && inputs.agent-command != ''
         run: |
-          # The loop only counts as closed if the audit is clean now.
-          npx -y -p mason-context mason-audit --dir . $AUDIT_CHECKS
-          # Guard: the agent may touch ONLY the context files.
-          non_doc=$(git status --porcelain | awk '{print $2}' \
-            | grep -v -x -e 'CLAUDE.md' -e '.claude/CLAUDE.md' -e 'AGENTS.md' || true)
-          if [ -n "$non_doc" ]; then
-            echo "Agent modified non-doc files:"
-            echo "$non_doc"
-            exit 1
-          fi
+          bash "$RUNNER_TEMP/verify-mason-repair.sh"
+          # The workflow's own baseline is the only permitted non-doc artifact.
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          const allowed = new Set(['CLAUDE.md', '.claude/CLAUDE.md', 'AGENTS.md', process.env.MASON_REPAIR_BASELINE]);
+          const changes = execFileSync('git', ['-c', 'status.renames=false', 'status', '--porcelain=v1', '-z', '--untracked-files=all'], {encoding: 'utf8'});
+          const extra = changes.split('\0').filter(Boolean).map(line => line.slice(3)).filter(file => !allowed.has(file));
+          if (extra.length) { console.error('Agent modified non-doc files:', extra); process.exit(1); }
+          NODE
 
       - name: Open the fix PR
         if: steps.audit.outputs.issues == 'true' && steps.gate.outputs.skip == 'false' && inputs.agent-command != ''
@@ -142,25 +164,29 @@ jobs:
             [ -f "$doc" ] && git add "$doc"
           done
           git commit -m "${{ inputs.pr-title }}"
+          bash "$RUNNER_TEMP/verify-mason-repair.sh"
           # Safe: this path only runs when no open PR exists for the branch,
           # so a stale branch from a merged/closed PR is fine to overwrite.
           git push -f origin "${{ inputs.branch-name }}"
           {
-            echo "\`mason-audit\` found provably stale claims in this repo's AI context files. This PR fixes only those claims; diffs are minimal, nothing else was touched."
+            echo "The original Mason audit issues are no longer detected after this documentation commit. Review the edits for meaning; advisory review is reported separately below."
             echo ""
-            echo "## Fixed"
+            echo "## Resolved by the original checks"
             jq -r '.issues[] | "- **\(.anchor.doc)\(if .anchor.line then ":\(.anchor.line)" else "" end)** – \(.message) _(\(.type), \(.confidence))_"' "$RUNNER_TEMP/audit.json"
             echo ""
-            advisories=$(jq -r '.advisories | length' "$RUNNER_TEMP/audit.json")
-            if [ "$advisories" -gt 0 ]; then
-              echo "## Advisories (not changed by this PR – for human review)"
-              jq -r '.advisories[] | "- \(.message)"' "$RUNNER_TEMP/audit.json"
-              echo ""
-            fi
+            echo "## Remaining review and verification limits"
+            jq -r '.status, (.findings[] | select(.status != "resolved") | "- [\(.status)] \(.original.message): \(.reason)"), (.newFindings[] | "- [new] \(.message)"), (.currentAudit.skippedChecks[] | "- [skipped] \(.check): \(.reason)")' "$RUNNER_TEMP/verification.json"
+            echo ""
             echo "<details><summary>Full audit report</summary>"
             echo ""
             echo '```json'
             cat "$RUNNER_TEMP/audit.json"
+            echo '```'
+            echo "</details>"
+            echo "<details><summary>Verification against original evidence</summary>"
+            echo ""
+            echo '```json'
+            cat "$RUNNER_TEMP/verification.json"
             echo '```'
             echo "</details>"
           } > "$RUNNER_TEMP/body.md"

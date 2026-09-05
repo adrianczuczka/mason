@@ -2,6 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { prepareRepair, verifyRepair } from "../audit/repair.js";
+import { formatFixPrompt } from "../audit/cli.js";
+import type { CheckName } from "../audit/types.js";
 
 const exec = promisify(execFile);
 import { runAll } from "../analyzers/index.js";
@@ -1025,6 +1028,20 @@ export async function getContext(
 }
 
 // ===== Init MCP tools =====
+
+export async function masonRepair(dir: string, options: { action: "prepare" | "verify"; baselinePath?: string; checks?: CheckName[] }): Promise<string> {
+  try {
+    if (options.action === "verify") {
+      if (!options.baselinePath || options.checks) throw new Error("Verification requires baselinePath and uses the original checks; do not pass checks.");
+      return JSON.stringify(await verifyRepair(dir, options.baselinePath), null, 2);
+    }
+    if (options.action !== "prepare" || options.baselinePath) throw new Error("Preparation accepts checks, not an existing baselinePath.");
+    const result = await prepareRepair(dir, options.checks);
+    return JSON.stringify({ ...result, workOrder: formatFixPrompt(result.report, result.baselinePath) }, null, 2);
+  } catch (error) {
+    return JSON.stringify({ status: "unavailable", error: error instanceof Error ? error.message : String(error) });
+  }
+}
 
 export async function masonInit(dir: string, options: { mode?: InitMode; base?: string; evidence?: string[] } = {}): Promise<string> {
   const rootDir = path.resolve(dir);

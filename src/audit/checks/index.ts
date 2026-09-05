@@ -21,7 +21,8 @@ export interface CheckContext {
 export interface CheckResult {
   issues: AuditIssue[];
   advisories: AuditAdvisory[];
-  skipped: Array<{ check: string; reason: string }>;
+  suppressedAdvisories?: AuditAdvisory[];
+  skipped: Array<{ check: string; reason: string; doc?: string }>;
 }
 
 export type CheckFn = (ctx: CheckContext) => Promise<CheckResult>;

@@ -124,6 +124,9 @@ export interface AuditReport {
   version: 1;
   root: string;
   gitAvailable: boolean;
+  /** Commit and exact check scope used by this run. */
+  headHash?: string;
+  checksRun?: CheckName[];
   docs: AuditDocInfo[];
   /** Whether .mason/decisions/ existed and was checked. */
   decisionsChecked: boolean;
@@ -131,7 +134,9 @@ export interface AuditReport {
   issues: AuditIssue[];
   /** Never drive the exit code. */
   advisories: AuditAdvisory[];
-  skippedChecks: Array<{ check: string; reason: string }>;
+  /** Original committed evidence retained while local doc edits suppress reporting. */
+  suppressedAdvisories?: AuditAdvisory[];
+  skippedChecks: Array<{ check: string; reason: string; doc?: string }>;
   clean: boolean;
 }
 

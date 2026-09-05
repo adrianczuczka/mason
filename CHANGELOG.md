@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0 — 2026-09-05
+
+Mason now keeps the original audit evidence visible while an assistant repairs documentation. A dependency warning suppressed by local edits stays unresolved, and a later documentation commit does not silently clear its review requirement.
+
+- Add `mason_repair` and `mason-audit --prepare-repair` / `--verify-repair` to retain original audit evidence through edits and the final documentation commit. Verification distinguishes resolved, unresolved, review-required, unverified, and new findings; it preserves unavailable history and missing-document diagnostics.
+- Retain suppressed dependency advisories when setup or repairs dirty context files. An advisory disappearing after a documentation commit no longer loses its evidence in a prepared repair. Ordinary audit exit codes stay unchanged; explicit repair verification reports incomplete scope separately.
+- Route authorized repairs through preparation and verification in assistant instructions and work orders. Setup alone does not authorize rewriting existing claims; advisories require a separate assessment.
+
+Upgrade to `mason-context@0.11.0`, restart the assistant, and refresh its marker-delimited Mason instructions through `mason_init` to enable the repair workflow. No decision-store migration is required. Explicit repair verification exits 2 for incomplete checks or outstanding advisory review; ordinary audit exit codes are unchanged.
+
 ## 0.10.1 — 2026-09-05
 
 Editing an accepted decision previously hid its accepted content from ordinary retrieval until the draft was reviewed. Mason now keeps the accepted constraint visible alongside the proposed replacement.

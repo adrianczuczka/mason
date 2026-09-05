@@ -37,6 +37,8 @@ Mason provides recorded decisions and file impact over MCP. A concept map is opt
 - For an architectural overview, use \`get_snapshot\` if a map is available. If \`map.status\` is missing or invalid, use available decisions and source evidence; do not start building a map unless requested.
 - \`mason_init\` returns documentation audit and committed-diff review results, plus a short setup guide. Pass \`evidence\` with local CI manifest paths to include test and analysis results; the CLI equivalent is \`mason-review --evidence <manifest>\`. State skipped, unavailable, stale, or unknown checks explicitly. Related accepted decisions identify review context, not proven violations.
 
+- When documentation repair is authorized, use \`mason_repair(action: "prepare")\` before edits, keep its baselinePath, and use \`mason_repair(action: "verify", baselinePath)\` after edits and any final doc commit. Report every original finding's outcome and any new findings. Suppressed advisories remain unresolved; editing a doc does not approve it.
+
 Inspect source for what the retrieved context does not answer.
 <!-- mason:end -->`;
 
@@ -58,7 +60,7 @@ After installing assistant instructions, call \`mason_complete_init(dir)\` to re
 const QUICKSTART_PLAYBOOK = `Start with the audit and review results included in this response. No concept map is required.
 
 1. Explain the actionable findings with their source evidence. Separate audit issues, advisories, and skipped checks. The review covers committed changes from the merge base to HEAD; workingTree paths are not included in that review. An unavailable or empty check is not proof that the project is correct. Use the CLI for full output if a summary is truncated.
-2. Address findings within the user's requested scope. Inspect relevant source and tests. Do not invent a decision just to populate the store.
+2. Address findings within the user's requested scope. Setup alone authorizes installing the assistant instructions, not rewriting existing claims. If repair is authorized, call \`mason_repair(dir, action: "prepare")\` before editing; it saves the full original findings even when this summary is truncated. Inspect relevant source, make grounded edits, then call \`mason_repair(dir, action: "verify", baselinePath)\` with that same baseline, including after any final doc commit. Report resolved, unresolved, review-required, unverified, and new findings. Keep suppressed advisories visible even when setup has already dirtied a doc. Do not invent a decision just to populate the store.
 3. When the task reveals a real lesson or constraint, call \`save_decision\` with title, body, category, anchors, and known owner/source/actor information. Missing attribution can be added later. The tool writes a local proposal; editing it preserves revision history and requires a new acceptance, while any earlier accepted revision remains operative. An unchanged save never refreshes its evidence. When decision review is requested, \`review_decision\` prepares the record and code evidence before any authorized verdict. Review and commit records through the normal workflow. Retrieve it on the next relevant task with \`get_context(dir, task, files)\`.
 
 ${ASSISTANT_SETUP}

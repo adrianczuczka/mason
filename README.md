@@ -130,6 +130,7 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 | Tool | Purpose |
 |---|---|
 | `mason_init` | Read-only audit/review findings and quickstart guide; optional `base` for review, `evidence` for local CI manifests, `mode: "map"` for an architecture build. |
+| `mason_repair` | Prepare an audit repair baseline; verify the same original findings after edits. Reports unresolved advisories and unavailable checks. |
 | `mason_complete_init` | Records assistant instruction setup; preserves prior settings on repeated calls. |
 | `generate_snapshot_batch` | Map step — returns one batch of files for the assistant to summarize. |
 | `save_partial_snapshot` | Persists the partial map for one batch. |
@@ -272,7 +273,29 @@ Issues drive the exit code; **advisories never do** — they're facts an agent c
 
 ### The context files maintain themselves
 
-Same split as the concept map: detection is deterministic and free, the fix is any agent you already run. `--fix-prompt` emits a work order scoped to exactly the flagged claims — fix only these, minimal diffs, never invent content, never touch source code. The reusable workflow runs the audit, hands the work order to your agent, verifies the audit is clean afterwards (and that the agent touched nothing but the context files), then opens a PR citing the evidence — it never commits to the audited branch, and it skips cleanly when an audit PR is already open:
+### Track a repair through verification
+
+Ask your assistant: *"Use Mason to prepare a repair, fix the documented issues within scope, and verify against the original findings."* The assistant calls `mason_repair` with `action: "prepare"`, makes grounded edits, and then calls it with `action: "verify"` and the returned `baselinePath`. Setup alone only installs assistant instructions; repairing existing claims needs to be part of your request.
+
+The CLI provides the same workflow:
+
+```bash
+mason-audit --dir . --prepare-repair --fix-prompt
+# After applying the work order, use the exact baseline path it returned:
+mason-audit --dir . --verify-repair .mason/reports/repairs/<id>.json
+```
+
+Preparation saves the full original audit under `.mason/reports/repairs/`; it does not edit documentation. Ordinary audits and verification remain read-only. Add `.mason/reports/` to your ignore rules if you want these local artifacts excluded from commits. Keep the same baseline through any final documentation commit, then verify again. Do not regenerate it to clear unresolved findings. `--json` is supported for preparation and verification; use `--checks` only during preparation to select a scope.
+
+Each original finding is **resolved** (its check no longer reports it), **unresolved**, **review-required**, or **unverified**. New findings are separate. A shifted line number does not erase the original claim, and a missing document, unavailable history, or skipped check cannot count as a fix. Inspect the edit for meaning: these deterministic checks do not establish complete documentation correctness. README files and arbitrary build commands are outside this audit's current scope.
+
+Dependency evidence suppressed by local edits is retained in `suppressedAdvisories`, including when setup has already dirtied the document. Committing that document does not prove the dependency change was reviewed: the original advisory stays in the repair report. Record your assessment separately; this workflow does not approve advisories or decisions. Baselines are validated local evidence with a checksum to detect accidental edits, not authenticated attestations.
+
+Ordinary audit exit codes remain **0** for no issues (advisories may exist), **1** for issues, and **2** for errors. Explicit `--verify-repair` uses **0** for verified scope, **1** for remaining/new issues, and **2** for incomplete verification, including advisories needing review or skipped checks. Incomplete verification takes precedence when both issues and unavailable evidence remain.
+
+### Repair pull requests in CI
+
+`--fix-prompt` emits a work order scoped to the flagged claims and the user's authorization. The reusable workflow below prepares a baseline, checks that the agent touched only context files, and verifies the original issues both before and after the documentation commit. It opens a PR only when those issues are resolved by their checks and no new issues appear. Advisories and skipped checks remain visible in the PR; their review is not a condition for proposing documentation repairs. The workflow never commits to the audited branch and skips when an audit PR is already open:
 
 ```yaml
 name: Context audit

@@ -160,7 +160,12 @@ export async function checkStaleCounts(
   for (const doc of ctx.docs) {
     for (const claim of doc.claims.counts) {
       const source = await resolveCountSource(ctx.root, claim);
-      if (source === null || source.actual === claim.count) continue;
+      if (source === null) {
+        result.skipped.push({ check: "stale-count", doc: doc.path,
+          reason: `${doc.path}: cannot resolve a workspace manifest for "${claim.excerpt}"` });
+        continue;
+      }
+      if (source.actual === claim.count) continue;
       result.issues.push({
         type: "stale-count",
         message: `says "${claim.excerpt}" but ${source.countedFrom} resolves to ${source.actual}`,

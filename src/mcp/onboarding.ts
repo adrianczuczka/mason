@@ -18,8 +18,11 @@ async function auditSummary(root: string) {
       ...report, status: "complete",
       issues: report.issues.slice(0, MAX_FINDINGS),
       advisories: report.advisories.slice(0, MAX_FINDINGS),
-      counts: { issues: report.issues.length, advisories: report.advisories.length },
-      truncated: report.issues.length > MAX_FINDINGS || report.advisories.length > MAX_FINDINGS,
+      suppressedAdvisories: (report.suppressedAdvisories ?? []).slice(0, MAX_FINDINGS),
+      counts: { issues: report.issues.length, advisories: report.advisories.length,
+        suppressedAdvisories: report.suppressedAdvisories?.length ?? 0 },
+      truncated: report.issues.length > MAX_FINDINGS || report.advisories.length > MAX_FINDINGS ||
+        (report.suppressedAdvisories?.length ?? 0) > MAX_FINDINGS,
     };
   } catch (error) { return { status: "unavailable", reason: reason(error) }; }
 }

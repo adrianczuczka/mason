@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mason",
   "display_name": "Mason",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Recorded engineering decisions, change impact, and documentation audits for coding assistants. Useful from the first task, with optional architecture maps.",
   "long_description": "Mason retrieves lessons and constraints from .mason/decisions/, checks their freshness, and combines them with references, related tests, and Git change history. Audit documentation and review committed changes without setup. Add an optional feature/flow map for architecture navigation.",
   "author": {
@@ -46,6 +46,20 @@
           "evidence": { "type": "array", "items": { "type": "string" }, "maxItems": 10, "description": "Repository-local CI evidence manifests to include in the review. Imports Vitest JSON and SARIF without executing check commands." }
         },
         "required": ["dir"]
+      }
+    },
+    {
+      "name": "mason_repair",
+      "description": "Track documentation repairs against original audit evidence. prepare saves a local baseline and returns a scoped work order; verify reads that baseline and reports resolved, unresolved, review-required, unverified, and new findings. Suppressed advisories remain unresolved. Does not edit documentation or approve decisions. No map required.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
+          "action": { "type": "string", "enum": ["prepare", "verify"] },
+          "baselinePath": { "type": "string", "description": "Original baseline path returned by prepare; required for verify." },
+          "checks": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["deleted-reference", "new-module", "stale-count", "dead-command", "deps-changed", "decision-anchor-drift"] }, "description": "Optional audit check subset for prepare. Verification always uses the original checks." }
+        },
+        "required": ["dir", "action"]
       }
     },
     {

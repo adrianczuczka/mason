@@ -33,6 +33,8 @@ export async function computeAudit(
     version: 1,
     root: resolvedRoot,
     gitAvailable: headHash !== "unknown",
+    headHash,
+    checksRun: [],
     docs: docs.map((d) => ({
       path: d.path,
       lastCommit: d.lastCommit,
@@ -42,6 +44,7 @@ export async function computeAudit(
     decisionsChecked: false,
     issues: [],
     advisories: [],
+    suppressedAdvisories: [],
     skippedChecks: [],
     clean: true,
   };
@@ -80,9 +83,11 @@ export async function computeAudit(
   const selected = options.checks ?? ALL_CHECKS;
   for (const name of ALL_CHECKS) {
     if (!selected.includes(name)) continue;
-    const { issues, advisories, skipped } = await CHECKS[name](ctx);
+    const { issues, advisories, suppressedAdvisories, skipped } = await CHECKS[name](ctx);
+    report.checksRun!.push(name);
     report.issues.push(...issues);
     report.advisories.push(...advisories);
+    report.suppressedAdvisories!.push(...(suppressedAdvisories ?? []));
     report.skippedChecks.push(...skipped);
   }
 

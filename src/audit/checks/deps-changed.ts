@@ -32,11 +32,13 @@ export async function checkDepsChanged(
   ctx: CheckContext
 ): Promise<CheckResult> {
   const result = emptyResult();
+  result.suppressedAdvisories = [];
 
   for (const doc of ctx.docs) {
     if (!doc.lastCommit) {
       result.skipped.push({
         check: "deps-changed",
+        doc: doc.path,
         reason: `${doc.path} has no commit history`,
       });
       continue;
@@ -44,9 +46,9 @@ export async function checkDepsChanged(
     if (doc.dirty) {
       result.skipped.push({
         check: "deps-changed",
+        doc: doc.path,
         reason: `${doc.path} has uncommitted edits – suppressed while in flight`,
       });
-      continue;
     }
 
     const range = await commitsTouchingSince(
@@ -57,6 +59,7 @@ export async function checkDepsChanged(
     if (range === null) {
       result.skipped.push({
         check: "deps-changed",
+        doc: doc.path,
         reason: `${doc.path}: commit range unreachable (shallow clone?)`,
       });
       continue;
@@ -64,7 +67,7 @@ export async function checkDepsChanged(
     if (range.total === 0) continue;
 
     const latest = range.commits[0];
-    result.advisories.push({
+    (doc.dirty ? result.suppressedAdvisories : result.advisories).push({
       type: "deps-changed",
       message: `dependency manifests touched by ${range.total} commit${range.total === 1 ? "" : "s"} since ${doc.path} was last committed (latest: ${latest.hash.slice(0, 7)} "${latest.subject}")`,
       anchor: { doc: doc.path, line: null, excerpt: null },
