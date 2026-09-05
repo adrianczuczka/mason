@@ -26,6 +26,13 @@ async function git(args: string[], cwd: string): Promise<void> {
   await exec("git", args, { cwd });
 }
 
+async function withEmptyProject<T>(run: (rootDir: string) => Promise<T>): Promise<T> {
+  // Git does not preserve empty directories in a fresh checkout.
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "mason-empty-project-"));
+  try { return await run(rootDir); }
+  finally { await fs.rm(rootDir, { recursive: true, force: true }); }
+}
+
 async function markInitialized(rootDir: string): Promise<void> {
   const dir = path.join(rootDir, ".mason");
   await fs.mkdir(dir, { recursive: true });
@@ -77,7 +84,7 @@ describe("MCP tools", () => {
     });
 
     it("handles empty project", async () => {
-      const raw = await analyzeProject(fixturePath("empty"));
+      const raw = await withEmptyProject(analyzeProject);
       const data = JSON.parse(raw);
 
       expect(data.project.configFilesPresent).toEqual([]);
@@ -112,7 +119,7 @@ describe("MCP tools", () => {
     });
 
     it("handles empty project", async () => {
-      const raw = await getProjectStructure(fixturePath("empty"));
+      const raw = await withEmptyProject(getProjectStructure);
       const data = JSON.parse(raw);
 
       expect(data.totalFiles).toBe(0);
@@ -166,7 +173,7 @@ describe("MCP tools", () => {
     });
 
     it("handles empty project", async () => {
-      const raw = await fullAnalysis(fixturePath("empty"));
+      const raw = await withEmptyProject(fullAnalysis);
       const data = JSON.parse(raw);
 
       expect(data.analysis).toBeDefined();
@@ -419,7 +426,7 @@ describe("MCP tools", () => {
     });
 
     it("handles empty projects without erroring", async () => {
-      const raw = await generateSnapshotBatch(fixturePath("empty"));
+      const raw = await withEmptyProject(generateSnapshotBatch);
       const data = JSON.parse(raw);
 
       expect(data.totalFiles).toBe(0);
