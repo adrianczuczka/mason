@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-05T08:15:33.251Z",
-  "gitHash": "6cf7b6cce9707242c5326d6a2b7c901830e5af75",
+  "updatedAt": "2026-09-05T08:38:25.320Z",
+  "gitHash": "3f9cf33521262be51ec922bd75597615612f5e45",
   "features": {
     "MCP server entry point": {
       "description": "Starts the Mason MCP stdio server that exposes all tools to AI assistants",
@@ -358,7 +358,7 @@
         "test/provenance.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "3f9cf33521262be51ec922bd75597615612f5e45"
     },
     "diff review": {
       "description": "Reviews a committed diff for absent historical co-change partners and touched decisions. Optional CI artifacts add test and analysis outcomes, freshness, and knowledge associations; an explicit flag gates on current complete evidence while preserving default exit codes.",
