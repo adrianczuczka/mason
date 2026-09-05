@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-05T08:38:25.320Z",
-  "gitHash": "3f9cf33521262be51ec922bd75597615612f5e45",
+  "updatedAt": "2026-09-05T09:25:47.690Z",
+  "gitHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d",
   "features": {
     "MCP server entry point": {
       "description": "Starts the Mason MCP stdio server that exposes all tools to AI assistants",
@@ -11,7 +11,7 @@
         "src/mcp/server.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "drift detection CLI": {
       "description": "Checks relevant committed map changes and source coverage, reporting local edits and verification failures separately; map-only and unrelated commits stay current.",
@@ -25,7 +25,7 @@
         "test/drift-cli.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "legacy CLI migration shim": {
       "description": "Prints a migration message for users who still invoke the removed standalone mason CLI",
@@ -65,7 +65,7 @@
       "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
     },
     "task context assembly": {
-      "description": "Retrieves decisions without a concept map, distinguishing proposals, accepted constraints, and unreviewed legacy knowledge with owner, source, last review, freshness, and verification evidence. Adds bounded file/directory impact and tests, while preserving missing/invalid map diagnostics.",
+      "description": "Retrieves operative accepted decisions alongside pending proposals, matching either revision while keeping content, attribution, and anchor freshness distinct. Works without a concept map and adds bounded impact and tests with explicit trust diagnostics.",
       "files": [
         "src/context/assemble.ts",
         "src/context/lexical.ts",
@@ -76,10 +76,10 @@
         "test/adoption.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "team decisions log": {
-      "description": "Captures version 2 proposals with owner/source attribution, preserves content revisions and review history, and keeps version 1 knowledge explicitly unreviewed. Validates approval against history and serializes writes; unchanged saves never refresh review evidence.",
+      "description": "Captures version 2 proposals and derives operative accepted revisions from validated history until explicit replacement or retirement. Preserves legacy uncertainty, serializes writes, and prevents proposal supersession from hiding an accepted constraint.",
       "files": [
         "src/decisions/decisions.ts",
         "src/decisions/drift.ts",
@@ -90,7 +90,7 @@
         "test/provenance.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "change impact analysis": {
       "description": "get_impact: co-change history, references, and related tests for a file before editing it",
@@ -133,7 +133,7 @@
         "test/verify.test.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "6cf7b6cce9707242c5326d6a2b7c901830e5af75"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "concept-map snapshot storage": {
       "description": "Validates and atomically stores concept maps and Map-Reduce partials; supports scoped refreshes while retaining failed verdicts for unchanged entries.",
@@ -320,7 +320,7 @@
       "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
     },
     "AI context audit": {
-      "description": "Finds stale claims in repository instruction files with deterministic Git evidence, separating issues from advisories. Decision-anchor advisories retain approval, provenance, and review requirements.",
+      "description": "Finds stale claims in repository instruction files with deterministic Git evidence. Decision-anchor advisories separately identify accepted revisions and pending proposals with their own provenance and changed anchors.",
       "files": [
         "src/audit/audit.ts",
         "src/audit/checks/dead-command.ts",
@@ -344,10 +344,10 @@
         "test/audit.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "decision injection hook": {
-      "description": "Injects anchored decision knowledge with approval, owner/source, and freshness labels after supported Claude tool calls. Deduplicates per repository/session/record revision, reinjects changed approvals, and withdraws records retired after the session saw them.",
+      "description": "Injects operative accepted decisions with separately labeled pending proposals and their freshness. Deduplicates per repository/session/revision and updates previously seen decisions after acceptance or retirement even when their anchors move.",
       "files": [
         "src/hook/cli.ts",
         "src/hook/hook.ts",
@@ -358,10 +358,10 @@
         "test/provenance.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "3f9cf33521262be51ec922bd75597615612f5e45"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "diff review": {
-      "description": "Reviews a committed diff for absent historical co-change partners and touched decisions. Optional CI artifacts add test and analysis outcomes, freshness, and knowledge associations; an explicit flag gates on current complete evidence while preserving default exit codes.",
+      "description": "Reviews committed diffs for absent historical co-change partners and touched decisions, keeping accepted and pending revision anchors distinct. Optional CI evidence retains provenance and advisory default exit codes with an explicit completeness gate.",
       "files": [
         "src/review/cli.ts",
         "src/review/cochange.ts",
@@ -372,7 +372,7 @@
         "test/review.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "safe repository file and metadata access": {
       "description": "Shares canonical path checks, Git-aware file selection, sensitive-file exclusions, bounded reads, anchor matching, and atomic metadata replacement across Mason tools.",
@@ -388,7 +388,7 @@
       "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
     },
     "project onboarding": {
-      "description": "Returns read-only documentation audit and committed-diff review findings, store status, and a short decision-capture setup guide. Full architecture map builds are an explicit option; initialization markers record instruction setup and do not gate tools.",
+      "description": "Returns read-only documentation audit and committed-diff findings, operative decision counts and pending proposal counts, and a short setup guide. Architecture mapping is optional and initialization markers do not gate tools.",
       "files": [
         "src/mcp/init.ts",
         "src/mcp/onboarding.ts"
@@ -398,10 +398,10 @@
         "test/tools.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "6cf7b6cce9707242c5326d6a2b7c901830e5af75"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "decision review": {
-      "description": "Prepares decision history, committed changes, local edits, and bounded source/diff evidence before recording acceptance, reaffirmation, or retirement. Verdicts identify reviewer and rationale, reject stale prepared revisions, and preserve the review baseline through metadata commits. Assertions are recorded, not authenticated.",
+      "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
       "files": [
         "src/decisions/review.ts"
       ],
@@ -409,10 +409,10 @@
         "test/provenance.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "CI evidence review": {
-      "description": "Imports local Vitest JSON and SARIF artifacts with declared run provenance, preserves failed/skipped/unavailable and stale/unknown states, and links findings to changed files and accepted decisions. The repository test producer records actual exit status and checkout state for its CI review.",
+      "description": "Imports local Vitest JSON and SARIF artifacts with explicit outcome and provenance states. Findings stay associated with operative accepted anchors and owners while replacements are proposed; the test producer records actual exit status and checkout state.",
       "files": [
         "src/review/evidence.ts",
         "src/review/evidence/types.ts",
@@ -426,7 +426,7 @@
         "test/evidence-producer.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     }
   },
   "flows": {
@@ -438,10 +438,10 @@
         "src/context/trust.ts",
         "src/drift/cli.ts"
       ],
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "decision staleness flow": {
-      "description": "Loads validated records, compares each anchor against committed and working-tree changes, and carries freshness uncertainty into retrieval, review, and hooks.",
+      "description": "Loads validated history, derives operative and pending revisions, and separately compares their anchors with committed and working-tree changes for context, review, audits, and hooks.",
       "chain": [
         "src/decisions/decisions.ts",
         "src/decisions/drift.ts",
@@ -449,7 +449,7 @@
         "src/context/assemble.ts",
         "src/hook/hook.ts"
       ],
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "MCP server startup flow": {
       "description": "Binary boots the MCP stdio server which registers all tool implementations",
@@ -458,7 +458,7 @@
         "src/mcp/server.ts",
         "src/mcp/tools.ts"
       ],
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "Confluence sync flow": {
       "description": "Loads the snapshot, diffs against sync state, and pushes rendered pages to Confluence",
@@ -471,7 +471,7 @@
       "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "get_context assembly flow": {
-      "description": "Loads valid decisions independently of map availability, scores task and file anchors, preserves missing/invalid map diagnostics and decision trust, and enriches matches with impact and tests.",
+      "description": "Loads decisions independently of the map, matches operative and pending revision text and anchors, and returns accepted constraints with separately labeled proposals, freshness, impact, and tests.",
       "chain": [
         "src/context/assemble.ts",
         "src/context/lexical.ts",
@@ -480,10 +480,10 @@
         "src/impact/impact.ts",
         "src/decisions/decisions.ts"
       ],
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "decision review flow": {
-      "description": "Loads a decision and prepares code evidence, checks a verdict against the prepared record and Git revision, and appends an attributed review to validated history under a serialized write.",
+      "description": "Prepares the raw draft and operative accepted revision with evidence for both anchor sets, validates the review token, and appends an authorized acceptance or retirement under a serialized write.",
       "chain": [
         "src/mcp/server.ts",
         "src/mcp/tools.ts",
@@ -492,10 +492,10 @@
         "src/decisions/decisions.ts",
         "src/utils/storage.ts"
       ],
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "CI evidence review flow": {
-      "description": "The test producer records a run manifest; review loads bounded local artifacts, normalizes outcomes and paths, associates accepted decisions, and renders combined CLI or MCP results with explicit freshness and optional CI gating.",
+      "description": "Loads recorded test and analysis artifacts, preserves their outcome and freshness, links findings only to operative accepted decision anchors, and renders CLI/MCP review results with optional CI gating.",
       "chain": [
         "scripts/test-evidence.mjs",
         "src/review/review.ts",
@@ -505,7 +505,7 @@
         "src/review/cli.ts",
         "src/mcp/onboarding.ts"
       ],
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     }
   }
 }
