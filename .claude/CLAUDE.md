@@ -8,12 +8,15 @@ Mason is an MCP server for recorded engineering decisions, task context, change 
 **Build:** tsup (bundler), vitest (testing)
 **Package:** `mason-context` on npm
 
+For product direction, prioritization, and growth or scalability tradeoffs, consult [ROADMAP.md](../ROADMAP.md) and its linked Mason memory. It preserves the definitive context engineer goal, the original five priorities, shipped progress, and proposed next work; keep those distinctions intact.
+
 ## Architecture
 
 Mason exposes an MCP server and standalone deterministic CLIs. Entry points:
 - **MCP Server** (`bin/mason-mcp.ts` → `src/mcp/server.ts`) — tool server for AI assistants; all functionality lives here
 - **mason-drift** (`bin/mason-drift.ts` → `src/drift/cli.ts`) — headless CI staleness check for the concept map (exit 0 fresh / 1 stale / 2 error); read-only and LLM-free
 - **mason-audit** (`bin/mason-audit.ts` → `src/audit/cli.ts`) — deterministic context-file audit, read-only by default (exit 0 no issues / 1 issues / 2 error). Explicit `--prepare-repair` saves original evidence; `--verify-repair` reads it and returns 2 for incomplete verification or outstanding advisory review. Works without Mason setup.
+- **mason-auto** (`bin/mason-auto.ts` → `src/automation/cli.ts`) — shared documentation automation with Claude Code and Codex lifecycle adapters. Retains baselines per worktree/branch, resumes repairs, caches checks by dependencies, and reports configured hooks separately from observed events. `status` is read-only; `check` writes local evidence and exits 0 verified / 1 issues / 2 incomplete.
 - **mason-hook** (`bin/mason-hook.ts` → `src/hook/cli.ts`) — Claude Code PostToolUse hook: injects decision records anchored to the file a session just read or edited; deterministic, per-session deduped, silent on no match (this repo dogfoods it via `.claude/settings.json`)
 - **mason-review** (`bin/mason-review.ts` → `src/review/cli.ts`) — diff review vs a base ref: flags absent historical co-change partners and touched decisions. Optional CI evidence imports preserve outcomes and provenance. Exit 0 no missing partners / 1 missing partners / 2 error; `--require-evidence` additionally gates on current, complete passing checks.
 - **mason** (`bin/mason.ts`) — deprecation shim that prints a migration message
@@ -33,6 +36,7 @@ src/
 │   ├── cli.ts          # mason-audit CLI (summary, --json, --fix-prompt)
 │   ├── repair.ts       # Original audit baselines and per-finding verification
 │   └── checks/         # One check per file + registry (issues vs advisories)
+├── automation/         # Shared repair runtime, cache, durable state, host adapters, installation/CLI
 ├── confluence/         # Confluence wiki sync (client, renderer, diff, sync)
 ├── context/            # Task retrieval + shared freshness/verification trust states
 ├── decisions/          # Decision capture, provenance, review, and drift
@@ -102,6 +106,7 @@ npm run test:watch     # Run tests in watch mode
 - Tests use temp directories for git operations (create repos, make commits, verify analysis)
 - Benchmarks live in `bench/` — `bench/harness/` drives real headless claude sessions in baseline-vs-mason arms (superseded older deepeval harness sits in `bench/tests/`)
 - `bench/harness/run-patches.mjs` evaluates actual patches using the built-in Claude driver or a custom JSON agent adapter. `bench/harness/patches/` owns controlled tasks, fixtures, held-out grading, and reports. `npm run bench:validate` is offline; live runs use model calls. Never describe reference-patch validation as agent-performance evidence.
+- `bench/harness/run-automation.mjs` evaluates ordinary rename and control requests across Claude Code and Codex; `bench/harness/automation/` owns fixtures, real host sessions, and grading. `npm run bench:automation -- --validate` replays lifecycle events offline; `--live` uses actual hosts, preserving transcripts and configuration/activation evidence. The original patch harness still disables hooks for its controlled comparison.
 - Repository scripts live in `scripts/`; `scripts/pack-mcpb.mjs` builds the MCP bundle. `scripts/test-evidence.mjs` runs Vitest and records its actual exit status, original commit, and checkout cleanliness before/after execution for CI review. Reports under `.mason/reports/` are ignored.
 - CI evidence uses a version 1 manifest with named expected checks and Vitest JSON or SARIF artifacts. Imports never execute commands or fetch URLs. Missing/invalid reports stay unavailable; stale or dirty/unknown runs never satisfy the optional gate. Imported provenance is an assertion, not authenticated execution. File matches and test pairs associate accepted decisions without asserting a violation. Review JSON stays version 1 with optional additive `evidence`; default exit codes stay unchanged.
 
@@ -134,6 +139,8 @@ Mason provides recorded decisions and file impact over MCP. A concept map is opt
 - `mason_init` returns documentation audit and committed-diff review results, plus a short setup guide. Pass `evidence` with local CI manifest paths to include test and analysis results; the CLI equivalent is `mason-review --evidence <manifest>`. State skipped, unavailable, stale, or unknown checks explicitly. Related accepted decisions identify review context, not proven violations.
 
 - When documentation repair is authorized, use `mason_repair(action: "prepare")` before edits, keep its baselinePath, and use `mason_repair(action: "verify", baselinePath)` after edits and any final doc commit. Report every original finding's outcome and any new findings. Suppressed advisories remain unresolved; editing a doc does not approve it.
+
+- When Mason automation is installed, use `mason_automation(action: "status")` to inspect configured hooks and observed events, and `mason_automation(action: "check")` to resume its retained repair evidence. CLI fallback: `mason-auto status` / `mason-auto check`. Preserve existing baselines across sessions. Automatic checks do not authorize unrelated repairs or approve advisories.
 
 Inspect source for what the retrieved context does not answer.
 <!-- mason:end -->

@@ -7,11 +7,13 @@ import { discoverDocs } from "./docs.js";
 import { ALL_CHECKS } from "./types.js";
 import type { AuditReport, CheckName } from "./types.js";
 import { CHECKS } from "./checks/index.js";
-import type { CheckContext } from "./checks/index.js";
+import type { CheckContext, CheckResult } from "./checks/index.js";
 
 export interface AuditOptions {
   /** Subset of checks to run; defaults to all. */
   checks?: CheckName[];
+  /** Internal execution boundary used by the automation dependency cache. */
+  runCheck?: (name: CheckName, context: CheckContext) => Promise<CheckResult>;
 }
 
 /**
@@ -83,7 +85,8 @@ export async function computeAudit(
   const selected = options.checks ?? ALL_CHECKS;
   for (const name of ALL_CHECKS) {
     if (!selected.includes(name)) continue;
-    const { issues, advisories, suppressedAdvisories, skipped } = await CHECKS[name](ctx);
+    const { issues, advisories, suppressedAdvisories, skipped } = await (options.runCheck
+      ? options.runCheck(name, ctx) : CHECKS[name](ctx));
     report.checksRun!.push(name);
     report.issues.push(...issues);
     report.advisories.push(...advisories);

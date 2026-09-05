@@ -39,6 +39,8 @@ Mason provides recorded decisions and file impact over MCP. A concept map is opt
 
 - When documentation repair is authorized, use \`mason_repair(action: "prepare")\` before edits, keep its baselinePath, and use \`mason_repair(action: "verify", baselinePath)\` after edits and any final doc commit. Report every original finding's outcome and any new findings. Suppressed advisories remain unresolved; editing a doc does not approve it.
 
+- When Mason automation is installed, use \`mason_automation(action: "status")\` to inspect configured hooks and observed events, and \`mason_automation(action: "check")\` to resume its retained repair evidence. CLI fallback: \`mason-auto status\` / \`mason-auto check\`. Preserve existing baselines across sessions. Automatic checks do not authorize unrelated repairs or approve advisories.
+
 Inspect source for what the retrieved context does not answer.
 <!-- mason:end -->`;
 

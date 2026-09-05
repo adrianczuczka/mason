@@ -1,0 +1,59 @@
+{
+  "version": 2,
+  "id": "mason-s-definitive-context-engineer-direction-and-growth-roa",
+  "title": "Mason's definitive context engineer direction and growth roadmap",
+  "body": "The maintainer wants Mason to become the definitive context engineer as projects grow, preserving engineering intent and preventing repeated AI coding mistakes and missed updates. Consult ROADMAP.md for strategy and prioritization. The original five priorities were trust hardening, real patch evaluations, adoption without a mandatory concept map, decision provenance, and integration with established quality evidence; Confluence stays lower priority pending customer demand. Released mechanisms are progress, not proof of the goal: the initial live patch comparison tied 10/10. The growth-focused roadmap covers rationale, scoped ownership, evolving constraints, coupled changes, continuity across sessions, and manageable review/context costs. Its growth requirements are an explicitly labeled synthesis because the earlier assistant assessment is unavailable verbatim. The later automatic-use discussion is one proposed next milestone, not a replacement for the broader direction. Keep agreed direction, shipped capabilities, measured outcomes, and unapproved proposals distinct. The maintainer authorized capturing this memory; no owner or formal roadmap acceptance has been recorded.",
+  "category": "decision",
+  "files": [
+    "ROADMAP.md"
+  ],
+  "createdAt": "2026-09-05T11:24:50.523Z",
+  "updatedAt": "2026-09-05T11:24:50.523Z",
+  "refreshedHash": "6d0da83d0fbf7c07caa94369b795fd2e76d2297c",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "discussion",
+      "reference": "Maintainer conversation, captured 2026-09-05: what Mason needs to become the definitive context engineer as projects grow",
+      "note": "Source includes the growth-focused question, the explicit five priorities, and the request to capture project memory. No conversation permalink or verbatim earlier assessment was supplied."
+    },
+    {
+      "kind": "document",
+      "reference": "ROADMAP.md",
+      "note": "Durable roadmap with source limitations, current progress, growth requirements labeled as synthesis, and proposed next work."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-09-05T11:24:50.523Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Mason's definitive context engineer direction and growth roadmap",
+        "body": "The maintainer wants Mason to become the definitive context engineer as projects grow, preserving engineering intent and preventing repeated AI coding mistakes and missed updates. Consult ROADMAP.md for strategy and prioritization. The original five priorities were trust hardening, real patch evaluations, adoption without a mandatory concept map, decision provenance, and integration with established quality evidence; Confluence stays lower priority pending customer demand. Released mechanisms are progress, not proof of the goal: the initial live patch comparison tied 10/10. The growth-focused roadmap covers rationale, scoped ownership, evolving constraints, coupled changes, continuity across sessions, and manageable review/context costs. Its growth requirements are an explicitly labeled synthesis because the earlier assistant assessment is unavailable verbatim. The later automatic-use discussion is one proposed next milestone, not a replacement for the broader direction. Keep agreed direction, shipped capabilities, measured outcomes, and unapproved proposals distinct. The maintainer authorized capturing this memory; no owner or formal roadmap acceptance has been recorded.",
+        "category": "decision",
+        "files": [
+          "ROADMAP.md"
+        ],
+        "sources": [
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, captured 2026-09-05: what Mason needs to become the definitive context engineer as projects grow",
+            "note": "Source includes the growth-focused question, the explicit five priorities, and the request to capture project memory. No conversation permalink or verbatim earlier assessment was supplied."
+          },
+          {
+            "kind": "document",
+            "reference": "ROADMAP.md",
+            "note": "Durable roadmap with source limitations, current progress, growth requirements labeled as synthesis, and proposed next work."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "6d0da83d0fbf7c07caa94369b795fd2e76d2297c"
+    }
+  ]
+}

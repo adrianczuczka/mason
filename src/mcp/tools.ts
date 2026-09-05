@@ -1029,6 +1029,20 @@ export async function getContext(
 
 // ===== Init MCP tools =====
 
+export async function masonAutomation(dir: string, action: "status" | "check"): Promise<string> {
+  try {
+    const { automate, automationStatus, summarize } = await import("../automation/runtime.js");
+    const { installedAutomation } = await import("../automation/install.js");
+    if (action === "status") return JSON.stringify({ ...await automationStatus(dir), configured: await installedAutomation(dir) });
+    if (action !== "check") throw new Error("Expected status or check.");
+    const { report } = await automate(dir, { event: "task_end" });
+    const { findings, ...summary } = report;
+    return JSON.stringify({ ...summary, findings: findings.slice(0, 5), truncated: findings.length > 5, summary: summarize(report) });
+  } catch (error) {
+    return JSON.stringify({ status: "unavailable", error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 export async function masonRepair(dir: string, options: { action: "prepare" | "verify"; baselinePath?: string; checks?: CheckName[] }): Promise<string> {
   try {
     if (options.action === "verify") {

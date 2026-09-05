@@ -8,6 +8,8 @@
 
 ### Give coding assistants the lessons your team already learned, the changes they might miss, and evidence of what is still current.
 
+Project direction and remaining evidence gaps are recorded in [the roadmap](ROADMAP.md).
+
 Start with useful checks in an existing Git repository — no setup, map build, or model calls:
 
 ```bash
@@ -131,6 +133,7 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 |---|---|
 | `mason_init` | Read-only audit/review findings and quickstart guide; optional `base` for review, `evidence` for local CI manifests, `mode: "map"` for an architecture build. |
 | `mason_repair` | Prepare an audit repair baseline; verify the same original findings after edits. Reports unresolved advisories and unavailable checks. |
+| `mason_automation` | Inspect configured hooks and observed events, or capture/resume and verify retained repair evidence across sessions. |
 | `mason_complete_init` | Records assistant instruction setup; preserves prior settings on repeated calls. |
 | `generate_snapshot_batch` | Map step — returns one batch of files for the assistant to summarize. |
 | `save_partial_snapshot` | Persists the partial map for one batch. |
@@ -313,6 +316,39 @@ jobs:
 ```
 
 Omit `agent-command` for detect-only mode: no agent, no credentials — the job fails when the context files have drifted, which is a reasonable default for repos that want the signal before the automation. Two GitHub notes: the repo setting **"Allow GitHub Actions to create and approve pull requests"** (Settings → Actions → General) must be enabled for the PR step, and PRs created with the default `GITHUB_TOKEN` don't trigger the repo's own CI — run your agent with PAT-backed auth if you need that.
+
+## Automatic documentation checks (mason-auto)
+
+Mason can preserve documentation audit evidence and resume unfinished repairs through Claude Code or Codex lifecycle hooks. A shared engine owns the evidence, verification, and cache; each host adapter handles its event format. No concept map or model call is required for the checks.
+
+After installing a version that includes this feature:
+
+```bash
+npm install -D mason-context
+npx mason-auto install --host claude   # Claude Code
+npx mason-auto install --host codex    # Codex; review/trust the hooks using /hooks
+npx mason-auto status
+```
+
+Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in `.mason/automation.json`. Repeating installation updates only those handlers. Add `.mason/reports/` to your ignore rules. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
+
+`status` distinguishes configuration from observed events. Host versions, project trust, policy, and specialized tool paths can prevent hooks from running. Configuration alone is not evidence of automatic use. Codex requires review/trust of new or changed non-managed hooks. See the [Claude Code hook reference](https://code.claude.com/docs/en/hooks) and [Codex hook reference](https://learn.chatgpt.com/docs/hooks).
+
+On session start, Mason recovers the current branch/worktree's evidence. Before and after tools, it checks for changed audit inputs and retains newly observed findings before another documentation edit can hide them. Shell and unknown tool calls are included because edits can happen outside a file-edit tool. At turn completion it verifies the retained findings. A relevant unresolved issue can request **one continuation per session**; advisories and unavailable checks never create a repair loop. Fixes remain the assistant's responsibility within the user's task scope.
+
+Checks reuse cached results only when their dependencies match. Documentation and history, file inventory, manifests, and decision evidence have separate invalidation keys. Changes to a dirty manifest invalidate its checks even when Git's status text is unchanged. Skipped checks are retried. Cache corruption causes recomputation; invalid original baselines or active state remain errors. Concurrent events serialize writes, and interrupted local writers' locks are recovered only when their process is gone. New reports are written atomically. Unchanged tool events reuse the existing full report.
+
+```bash
+npx mason-auto check --json   # Capture/resume the active evidence and verify it
+# After any final documentation commit:
+npx mason-auto check
+```
+
+The equivalent MCP operation is `mason_automation(action: "check")`. Its response is concise and links the full local report. `status` is read-only; `check` writes evidence. Exit codes are 0 for verified checks, 1 for unresolved issues, and 2 for incomplete/unavailable checks. Original `mason_repair` baselines remain separately verifiable by their paths. Hook errors are visible and advisory; the existing `mason-hook` decision injector keeps its previous behavior.
+
+Evidence is local to the worktree and branch. Switching assistants in that worktree resumes the same repair; another worktree or branch has separate state. Detached-HEAD commits retain evidence; moving that checkout to a different history requires inspection. Hooks follow the Git worktree of the event's working directory. Reports are not automatically transferred to CI. CI can call `mason-auto check` on retained local artifacts, or `mason-audit --verify-repair <baseline>` after restoring the original artifacts at their recorded root. A fresh checkout cannot reconstruct missing pre-edit evidence. Audited instruction files remain limited to `AGENTS.md`, `CLAUDE.md`, and `.claude/CLAUDE.md`. Automation bounds inventory at 100,000 paths and retained baselines at 128; exceeding a bound reports unavailable evidence without evicting unresolved findings. Symbolic links in the inspected inventory require an explicit audit instead of cached automation. This is not proof of arbitrary repository scale or universal tool interception.
+
+The [automation evaluation](bench/harness/automation/README.md) compares ordinary module-renaming requests and unrelated edits across hosts, with baseline, instructions, and hooks arms. Deterministic replay verifies the mechanism; live sessions measure actual activation.
 
 ## Decision injection (mason-hook)
 
@@ -508,7 +544,7 @@ If you used Mason before v0.4.0, the standalone `mason <command>` CLI has been r
 | `mason impact File.kt` | Ask your assistant: *"what would changing File.kt affect?"* — it calls `get_impact`. |
 | `mason snapshot --install-hook` | Removed. The map auto-refreshes when the assistant detects stale state. |
 
-The package provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-hook`, and `mason-review`. Running `mason` directly prints a migration message and exits.
+The package provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-auto`, `mason-hook`, and `mason-review`. Running `mason` directly prints a migration message and exits.
 
 ## License
 

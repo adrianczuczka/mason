@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add a shared documentation automation runtime with Claude Code and Codex lifecycle adapters, `mason-auto` installation/status/check commands, and the `mason_automation` MCP tool. Retain original and newly discovered findings across sessions, isolate branch/worktree state, verify after the final commit, and distinguish configured hooks from observed runtime events.
+- Cache audit checks by their evidence dependencies, retry skipped checks, serialize concurrent captures, and keep full reports accessible behind concise notifications. Request at most one task-relevant continuation per session; never infer advisory approval or expand repair authorization.
+- Add ordinary-request automation evaluations for module renames and unrelated edits, with baseline, instructions, and hooks arms. Offline lifecycle replay is separate from live agent performance evidence.
+
 ## 0.11.0 — 2026-09-05
 
 Mason now keeps the original audit evidence visible while an assistant repairs documentation. A dependency warning suppressed by local edits stays unresolved, and a later documentation commit does not silently clear its review requirement.

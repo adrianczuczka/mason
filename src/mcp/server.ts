@@ -19,6 +19,7 @@ import {
   masonCompleteInit,
   masonInit,
   masonRepair,
+  masonAutomation,
   masonSetConfluence,
   reduceSnapshot,
   saveSnapshotData,
@@ -55,6 +56,16 @@ export function createMcpServer(): McpServer {
       const result = await masonInit(dir, { mode, base, evidence });
       return { content: [{ type: "text", text: result }] };
     }
+  );
+
+  server.tool(
+    "mason_automation",
+    "Inspect installed automation and observed host events, or resume/check retained documentation repair evidence across sessions. status is read-only; check saves local baselines and verification reports without editing source or approving advisories. Returns concise results with a full report path. Works without a map.",
+    {
+      dir: z.string().describe("Absolute path to the project directory"),
+      action: z.enum(["status", "check"]).describe("Inspect configuration and receipts, or capture/resume and verify original audit evidence."),
+    },
+    async ({ dir, action }) => ({ content: [{ type: "text", text: await masonAutomation(dir, action) }] })
   );
 
   server.tool(

@@ -7,6 +7,7 @@ export default defineConfig({
     "bin/mason-mcp.ts",
     "bin/mason-drift.ts",
     "bin/mason-audit.ts",
+    "bin/mason-auto.ts",
     "bin/mason-hook.ts",
     "bin/mason-review.ts",
   ],

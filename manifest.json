@@ -49,6 +49,18 @@
       }
     },
     {
+      "name": "mason_automation",
+      "description": "Inspect installed automation and observed host events, or resume/check retained documentation repair evidence across sessions. status is read-only; check saves local baselines and verification reports without editing source or approving advisories. Returns concise results with a full report path. Works without a map.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": { "type": "string", "description": "Absolute path to the project directory" },
+          "action": { "type": "string", "enum": ["status", "check"], "description": "Inspect configuration and receipts, or capture/resume and verify original audit evidence." }
+        },
+        "required": ["dir", "action"]
+      }
+    },
+    {
       "name": "mason_repair",
       "description": "Track documentation repairs against original audit evidence. prepare saves a local baseline and returns a scoped work order; verify reads that baseline and reports resolved, unresolved, review-required, unverified, and new findings. Suppressed advisories remain unresolved. Does not edit documentation or approve decisions. No map required.",
       "inputSchema": {

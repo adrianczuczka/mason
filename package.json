@@ -10,6 +10,7 @@
     "mason-context": "dist/mason-mcp.js",
     "mason-drift": "dist/mason-drift.js",
     "mason-audit": "dist/mason-audit.js",
+    "mason-auto": "dist/mason-auto.js",
     "mason-hook": "dist/mason-hook.js",
     "mason-review": "dist/mason-review.js"
   },
@@ -21,6 +22,7 @@
     "typecheck": "tsc --noEmit",
     "bench:patches": "node bench/harness/run-patches.mjs",
     "bench:validate": "node bench/harness/run-patches.mjs --validate",
+    "bench:automation": "node bench/harness/run-automation.mjs",
     "test:watch": "vitest",
     "pack:mcpb": "node scripts/pack-mcpb.mjs"
   },

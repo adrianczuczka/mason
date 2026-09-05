@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
-import { computeAudit } from "./audit.js";
+import { computeAudit, type AuditOptions } from "./audit.js";
 import { DOC_CANDIDATES } from "./docs.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { getChangesWithStatus } from "../drift/drift.js";
@@ -37,6 +37,11 @@ const issueSchema = findingSchema.extend({
   confidence: z.enum(["certain", "likely"]),
 });
 const advisorySchema = findingSchema.extend({ type: z.enum(["deps-changed", "decision-anchor-drift"]) });
+export const checkResultSchema = z.object({
+  issues: z.array(issueSchema), advisories: z.array(advisorySchema),
+  suppressedAdvisories: z.array(advisorySchema).optional(),
+  skipped: z.array(z.object({ check: z.string(), reason: z.string(), doc: z.string().optional() })),
+});
 const reportSchema = z.object({
   version: z.literal(1), root: z.string(), gitAvailable: z.literal(true),
   headHash: commitSchema.shape.hash, checksRun: z.array(checkSchema).nonempty(),
@@ -78,7 +83,7 @@ export interface RepairVerification {
 }
 
 /** Lines and wording can change without changing the underlying claim. */
-function findingId(finding: Finding): string {
+export function findingId(finding: Finding): string {
   const e = finding.evidence;
   let key: unknown;
   switch (e.kind) {
@@ -111,10 +116,10 @@ async function docState(root: string): Promise<string> {
 }
 
 /** Refuse a verification assembled across a commit or instruction-file edit. */
-async function stableAudit(root: string, checks: CheckName[]) {
+async function stableAudit(root: string, checks: CheckName[], options: AuditOptions = {}) {
   const head = await getCurrentGitHash(root);
   const before = await docState(root);
-  const report = await computeAudit(root, { checks });
+  const report = await computeAudit(root, { ...options, checks });
   if (head !== await getCurrentGitHash(root) || before !== await docState(root) ||
       (report && report.headHash !== head)) {
     throw new Error("HEAD or context files changed during the audit; retry against a stable checkout.");
@@ -122,10 +127,10 @@ async function stableAudit(root: string, checks: CheckName[]) {
   return report;
 }
 
-export async function prepareRepair(rootDir: string, checks: CheckName[] = ALL_CHECKS) {
+export async function prepareRepair(rootDir: string, checks: CheckName[] = ALL_CHECKS, options: AuditOptions = {}) {
   const root = await fs.realpath(rootDir);
   const selected = z.array(checkSchema).nonempty().parse(checks);
-  const report = await stableAudit(root, selected);
+  const report = await stableAudit(root, selected, options);
   if (!report) throw new Error("No context files found to prepare a repair.");
   if (!report.gitAvailable) throw new Error("Readable Git history is required to prepare a repair.");
   // Canonicalize before hashing; validation on read must yield the same bytes.
@@ -137,7 +142,7 @@ export async function prepareRepair(rootDir: string, checks: CheckName[] = ALL_C
   return { version: 1 as const, action: "prepare" as const, baselinePath, report };
 }
 
-export async function verifyRepair(rootDir: string, baselinePath: string): Promise<RepairVerification> {
+export async function verifyRepair(rootDir: string, baselinePath: string, options: AuditOptions = {}): Promise<RepairVerification> {
   const root = await fs.realpath(rootDir);
   const declaredRoot = path.resolve(rootDir);
   const relative = path.isAbsolute(baselinePath)
@@ -151,7 +156,7 @@ export async function verifyRepair(rootDir: string, baselinePath: string): Promi
   const diagnostics: string[] = [];
   let current: AuditReport | null = null;
   try {
-    current = await stableAudit(root, original.checksRun!);
+    current = await stableAudit(root, original.checksRun!, options);
     if (!current) diagnostics.push("No context files remain available to audit.");
     else if (!current.gitAvailable) diagnostics.push("Git history is unavailable.");
     for (const doc of original.docs) {
