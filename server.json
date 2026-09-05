@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.adrianczuczka/mason",
-  "description": "Context engineering MCP server – feature-to-file concept maps, change impact, decision records, and Confluence sync for AI coding assistants",
+  "description": "Engineering decisions, change impact, documentation audits, and CI evidence for coding assistants.",
   "repository": {
     "url": "https://github.com/adrianczuczka/mason",
     "source": "github"
   },
-  "version": "0.9.0",
+  "version": "0.10.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mason-context",
-      "version": "0.9.0",
+      "version": "0.10.0",
       "runtimeHint": "npx",
       "runtimeArguments": [
         {

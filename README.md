@@ -29,7 +29,7 @@ After resolving a real incident or settling a constraint, ask your assistant to 
 
 For architecture navigation, ask: *"Build a Mason concept map."* The assistant calls `mason_init` with `mode: "map"` for the full Map-Reduce workflow.
 
-> **Existing installations:** Re-run `mason_init` and update the marker-delimited assistant instructions to use the shorter onboarding path. Existing maps and decisions continue to work. `mason_complete_init` preserves the original setup date and settings when omitted.
+> **Upgrading to 0.10.0:** Update Mason in every client that shares decision records, then re-run `mason_init` and refresh the marker-delimited assistant instructions. New decisions are version 2 proposals; legacy records stay explicitly unreviewed until reviewed. Use `review_decision` for acceptance or reaffirmation; saving unchanged content no longer refreshes evidence. Map builds now require `mode: "map"`. See the [migration notes](CHANGELOG.md#upgrading-from-090).
 
 > **0.4.0 note:** The previous `mason <command>` CLI was removed in v0.4.0. Setup and map editing use MCP; dedicated drift, audit, hook, and review binaries support automation. See [0.4.0 migration](#040-migration) below if you used the old CLI.
 
@@ -76,7 +76,7 @@ The assistant jumps straight to the relevant files instead of exploring.
 
 Measured with real headless agent sessions in A/B arms (baseline always has a populated CLAUDE.md — beating a context-free agent is not a result). Full harness, pinned commits, and losses included: [bench/harness/](bench/harness/).
 
-These measurements concern read-only answers. The new [patch benchmark](bench/harness/patches/README.md) grades actual code changes, companion updates, and constraint preservation. Its offline checks validate the harness; live patch improvements and false-positive rates remain unmeasured.
+These measurements concern read-only answers. The new [patch benchmark](bench/harness/patches/README.md) grades actual code changes, companion updates, and constraint preservation. Its offline checks validate the harness; improved patch outcomes and an acceptable false-positive rate have not yet been established.
 
 - **Where Mason wins — knowledge that isn't in the code.** On tasks whose correct answer hinges on a recorded engineering decision (seeded fairly: the baseline had the same facts in a discoverable doc), Mason averaged **9.0/10 vs 7.0/10**. The baseline missed the constraint entirely half the time, and needed ~3× the turns when it found it; Mason surfaced it in one `get_context` call, every time.
 - **Stale-map safety.** Against a deliberately stale map, the drift flag + changed-file previews led the agent to verify and answer current-code truth — the "confidently wrong from a stale cache" failure did not occur.

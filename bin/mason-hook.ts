@@ -9,7 +9,10 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
-readStdin()
-  .then((stdinText) => runHookCli(process.argv.slice(2), stdinText))
+const argv = process.argv.slice(2);
+const informational = argv.some(arg => ["--help", "-h", "--print-config"].includes(arg));
+
+(informational ? Promise.resolve("") : readStdin())
+  .then((stdinText) => runHookCli(argv, stdinText))
   .then((code) => process.exit(code))
   .catch(() => process.exit(0));

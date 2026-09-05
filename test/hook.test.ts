@@ -2,6 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { runHook } from "../src/hook/hook.js";
 import { runHookCli } from "../src/hook/cli.js";
 import { commitAll, initGitRepo } from "./helpers.js";
@@ -179,6 +182,16 @@ describe("runHook", () => {
 });
 
 describe("runHookCli", () => {
+  it.each(["--help", "-h", "--print-config"])("prints %s without waiting for stdin to close", async flag => {
+    // execFile leaves the child's stdin pipe open: informational commands must
+    // finish without a hook payload or EOF, including from an automated caller.
+    const binary = fileURLToPath(new URL("../dist/mason-hook.js", import.meta.url));
+    const { stdout, stderr } = await promisify(execFile)(process.execPath, [binary, flag], { timeout: 3000 });
+    expect(stderr).toBe("");
+    if (flag === "--print-config") expect(JSON.parse(stdout).hooks.PostToolUse).toHaveLength(1);
+    else expect(stdout).toContain("Usage: mason-hook");
+  });
+
   it("prints the settings config block", async () => {
     const out: string[] = [];
     const code = await runHookCli(["--print-config"], "", {
