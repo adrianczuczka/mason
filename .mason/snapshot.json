@@ -1,17 +1,17 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-06T09:13:48.463Z",
-  "gitHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e",
+  "updatedAt": "2026-09-06T21:46:18.559Z",
+  "gitHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe",
   "features": {
     "MCP server entry point": {
-      "description": "Starts the Mason MCP stdio server and registers 21 tools, including documentation automation status and retained-evidence checks.",
+      "description": "Registers 21 MCP tools, including explicit unified project setup and automation status/checks. Configured get_context calls record local activation observations without storing prompts.",
       "files": [
         "bin/mason-mcp.ts",
         "src/mcp/server.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "drift detection CLI": {
       "description": "Checks relevant committed map changes and source coverage, reporting local edits and verification failures separately; map-only and unrelated commits stay current.",
@@ -124,7 +124,7 @@
       "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
     },
     "MCP tool implementations": {
-      "description": "Implements map-independent decisions, context and impact, quickstart checks, audit repair preparation and verification, concise automation status/check results, and optional map lifecycle and correctness review.",
+      "description": "Implements map-independent decisions, context and impact, read-only quickstart/map playbooks, explicit unified setup, audit repair verification, automation activation/status, and optional map correctness review.",
       "files": [
         "src/mcp/tools.ts"
       ],
@@ -133,7 +133,7 @@
         "test/verify.test.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "concept-map snapshot storage": {
       "description": "Validates and atomically stores concept maps and Map-Reduce partials; supports scoped refreshes while retaining failed verdicts for unchanged entries.",
@@ -320,7 +320,7 @@
       "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
     },
     "AI context audit": {
-      "description": "Audits context claims against repository evidence and retains suppressed dependency advisories. Explicit repair baselines preserve original findings through edits and documentation commits, distinguishing resolved, unresolved, review-required, unverified, and new findings. Decision advisories retain operative and proposed provenance. Its optional check execution boundary supports dependency-based automation caching.",
+      "description": "Audits documentation claims and preserves original findings through repair and commits. Conservative Android release-version-only manifest changes are excluded from dependency advisories; unknown or mixed edits remain advisory. Check inputs support scoped automation caching.",
       "files": [
         "src/audit/audit.ts",
         "src/audit/checks/dead-command.ts",
@@ -337,16 +337,18 @@
         "src/audit/tree.ts",
         "src/audit/types.ts",
         "bin/mason-audit.ts",
-        "src/audit/repair.ts"
+        "src/audit/repair.ts",
+        "src/audit/release-metadata.ts"
       ],
       "tests": [
         "test/audit-claims.test.ts",
         "test/audit-cli.test.ts",
         "test/audit.test.ts",
-        "test/audit-repair.test.ts"
+        "test/audit-repair.test.ts",
+        "test/release-metadata.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "decision injection hook": {
       "description": "Injects operative accepted decisions with separately labeled pending proposals and their freshness. Deduplicates per repository/session/revision and updates previously seen decisions after acceptance or retirement even when their anchors move.",
@@ -377,7 +379,7 @@
       "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "safe repository file and metadata access": {
-      "description": "Shares canonical path checks, Git-aware file selection, sensitive-file exclusions, bounded reads, anchor matching, and atomic metadata replacement across Mason tools.",
+      "description": "Provides canonical path checks, Git-aware selection, sensitive-file exclusions, bounded reads, anchor matching, and atomic metadata replacement. Read errors retain their causes for honest storage-failure classification.",
       "files": [
         "src/utils/files.ts",
         "src/utils/paths.ts",
@@ -387,20 +389,29 @@
         "test/reliability.test.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "project onboarding": {
-      "description": "Returns read-only audit and committed-review findings with decision status and optional map setup. Keeps suppressed advisory evidence visible and routes authorized documentation repairs through baseline preparation and verification. Supplies instructions for inspecting observed automation and resuming retained repair evidence.",
+      "description": "Defaults to read-only audit/review findings. Explicit CLI/MCP setup preserves the initial audit before edits, installs a private pinned runtime, and merges MCP, hooks, native instruction entry points and ignore rules with resumable writes. Status distinguishes configuration from observed MCP and full hook lifecycles per setup revision and worktree/branch.",
       "files": [
         "src/mcp/init.ts",
-        "src/mcp/onboarding.ts"
+        "src/mcp/onboarding.ts",
+        "src/setup/config.ts",
+        "src/setup/files.ts",
+        "src/setup/launcher.ts",
+        "src/setup/model.ts",
+        "src/setup/observations.ts",
+        "src/setup/runtime.ts",
+        "src/setup/setup.ts",
+        "src/setup/status.ts"
       ],
       "tests": [
         "test/adoption.test.ts",
-        "test/tools.test.ts"
+        "test/tools.test.ts",
+        "test/setup.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -431,7 +442,7 @@
       "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "documentation automation": {
-      "description": "Preserves original and newly observed documentation findings across sessions in isolated worktree/branch state. Claude Code and Codex lifecycle adapters drive a serialized dependency cache, final-commit verification, bounded notifications and at most one relevant continuation per session. CLI/MCP distinguish configured hooks from observed events; installation preserves unrelated handlers.",
+      "description": "Retains and verifies documentation evidence across sessions and final commits in worktree/branch state. Check-specific cache keys skip unrelated churn; adapters bound notifications and continuations. Execution receipts classify failed or unfinished attempts and preserve uncertainty instead of reusing an older passing result.",
       "files": [
         "bin/mason-auto.ts",
         "src/automation/adapters.ts",
@@ -439,13 +450,15 @@
         "src/automation/evidence.ts",
         "src/automation/install.ts",
         "src/automation/runtime.ts",
-        "src/automation/store.ts"
+        "src/automation/store.ts",
+        "src/automation/execution.ts"
       ],
       "tests": [
-        "test/automation.test.ts"
+        "test/automation.test.ts",
+        "test/automation-reliability.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "automatic-use evaluations": {
       "description": "Evaluates ordinary module-renaming and unrelated control tasks with baseline, instructions and hooks arms for Claude Code and Codex. Separates offline lifecycle replay from real host sessions, records activation and preserved evidence, and grades behavior, protected configuration and verification after the final commit.",
@@ -458,7 +471,7 @@
         "test/automation-benchmark.test.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     }
   },
   "flows": {
@@ -490,7 +503,7 @@
         "src/mcp/server.ts",
         "src/mcp/tools.ts"
       ],
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "Confluence sync flow": {
       "description": "Loads the snapshot, diffs against sync state, and pushes rendered pages to Confluence",
@@ -524,7 +537,7 @@
         "src/decisions/decisions.ts",
         "src/utils/storage.ts"
       ],
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "CI evidence review flow": {
       "description": "Loads recorded test and analysis artifacts, preserves their outcome and freshness, links findings only to operative accepted decision anchors, and renders CLI/MCP review results with optional CI gating.",
@@ -548,10 +561,10 @@
         "src/audit/audit.ts",
         "src/utils/storage.ts"
       ],
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "documentation automation flow": {
-      "description": "Host hooks normalize lifecycle events into the shared runtime, which fingerprints repository evidence, serializes retained baselines/cache, verifies original findings, and returns concise host notifications. CLI or MCP checks resume the same evidence through the final commit.",
+      "description": "Host events drive scoped evidence capture and final-commit verification under a serialized runtime. Bounded execution receipts record outcomes and failures; configured launchers also record lifecycle observations for activation status.",
       "chain": [
         "src/automation/adapters.ts",
         "src/automation/runtime.ts",
@@ -559,9 +572,27 @@
         "src/audit/repair.ts",
         "src/audit/audit.ts",
         "src/automation/store.ts",
-        "src/utils/storage.ts"
+        "src/utils/storage.ts",
+        "src/automation/execution.ts",
+        "src/setup/observations.ts"
       ],
-      "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+    },
+    "project setup and activation flow": {
+      "description": "CLI or explicit MCP setup captures pre-edit audit evidence, installs a pinned distribution, and merges host configuration and instructions. Native host trust enables later MCP and hook use; local observations determine activation separately from verification.",
+      "chain": [
+        "src/automation/cli.ts",
+        "src/mcp/tools.ts",
+        "src/setup/setup.ts",
+        "src/automation/runtime.ts",
+        "src/setup/runtime.ts",
+        "src/setup/config.ts",
+        "src/setup/files.ts",
+        "src/setup/launcher.ts",
+        "src/setup/observations.ts",
+        "src/setup/status.ts"
+      ],
+      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     }
   }
 }
