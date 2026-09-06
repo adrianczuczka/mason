@@ -48,15 +48,7 @@ export async function checkDeadCommands(
   const loadWorkspaceScripts = async (): Promise<Set<string>> => {
     if (workspaceScripts !== null) return workspaceScripts;
     workspaceScripts = new Set<string>();
-    const manifests = await fg("**/package.json", {
-      cwd: ctx.root,
-      ignore: [
-        "**/node_modules/**",
-        "**/dist/**",
-        "**/build/**",
-        "package.json",
-      ],
-    });
+    const manifests = await commandManifests(ctx.root);
     manifestsChecked = ["package.json", ...manifests.sort()];
     for (const manifest of manifests) {
       const scripts = await scriptsOf(path.join(ctx.root, manifest));
@@ -86,4 +78,10 @@ export async function checkDeadCommands(
   }
 
   return result;
+}
+
+/** Shared with automation so ignored workspace manifests remain cache dependencies. */
+export function commandManifests(root: string): Promise<string[]> {
+  return fg("**/package.json", { cwd: root,
+    ignore: ["**/node_modules/**", "**/dist/**", "**/build/**", ".mason/reports/**", "package.json"] });
 }

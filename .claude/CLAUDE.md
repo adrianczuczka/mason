@@ -16,7 +16,7 @@ Mason exposes an MCP server and standalone deterministic CLIs. Entry points:
 - **MCP Server** (`bin/mason-mcp.ts` → `src/mcp/server.ts`) — tool server for AI assistants; all functionality lives here
 - **mason-drift** (`bin/mason-drift.ts` → `src/drift/cli.ts`) — headless CI staleness check for the concept map (exit 0 fresh / 1 stale / 2 error); read-only and LLM-free
 - **mason-audit** (`bin/mason-audit.ts` → `src/audit/cli.ts`) — deterministic context-file audit, read-only by default (exit 0 no issues / 1 issues / 2 error). Explicit `--prepare-repair` saves original evidence; `--verify-repair` reads it and returns 2 for incomplete verification or outstanding advisory review. Works without Mason setup.
-- **mason-auto** (`bin/mason-auto.ts` → `src/automation/cli.ts`) — shared documentation automation with Claude Code and Codex lifecycle adapters. Retains baselines per worktree/branch, resumes repairs, caches checks by dependencies, and reports configured hooks separately from observed events. `status` is read-only; `check` writes local evidence and exits 0 verified / 1 issues / 2 incomplete.
+- **mason-auto** (`bin/mason-auto.ts` → `src/automation/cli.ts`) — shared documentation automation with Claude Code and Codex lifecycle adapters. Retains baselines per worktree/branch, resumes repairs, caches checks by dependencies, and reports configured hooks separately from observed events. `setup --host codex|claude` invokes shared onboarding under `src/setup/`: pinned private runtime, MCP, hooks, instructions, and pre-edit audit evidence. `status` is read-only and reports configured versus observed activation; `check` writes local evidence and exits 0 verified / 1 issues / 2 incomplete.
 - **mason-hook** (`bin/mason-hook.ts` → `src/hook/cli.ts`) — Claude Code PostToolUse hook: injects decision records anchored to the file a session just read or edited; deterministic, per-session deduped, silent on no match (this repo dogfoods it via `.claude/settings.json`)
 - **mason-review** (`bin/mason-review.ts` → `src/review/cli.ts`) — diff review vs a base ref: flags absent historical co-change partners and touched decisions. Optional CI evidence imports preserve outcomes and provenance. Exit 0 no missing partners / 1 missing partners / 2 error; `--require-evidence` additionally gates on current, complete passing checks.
 - **mason** (`bin/mason.ts`) — deprecation shim that prints a migration message
@@ -58,7 +58,7 @@ src/
 ├── mcp/
 │   ├── server.ts       # MCP tool definitions (Zod schemas)
 │   ├── tools.ts        # Tool implementations — the core logic
-│   ├── init.ts         # Quickstart + optional map playbooks
+│   ├── init.ts         # Read-only quickstart/map playbooks + explicit unified setup
 │   ├── onboarding.ts   # Read-only audit/review summaries and store status
 │   └── sampler.ts      # Smart file selection by architectural role
 ├── review/
@@ -67,6 +67,7 @@ src/
 │   ├── evidence.ts     # Read-only CI imports, freshness, file/decision associations
 │   ├── evidence/       # Vitest JSON and SARIF parsers, report path normalization
 │   └── cli.ts          # mason-review CLI (summary, --json, exit codes)
+├── setup/              # Unified runtime/config/instruction installation and observed activation
 ├── snapshot/
 │   ├── snapshot.ts     # Snapshot load/save, batch preparation
 │   ├── partials.ts     # Map-Reduce partials + scoped-refresh scope marker

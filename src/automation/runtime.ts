@@ -1,9 +1,10 @@
+import { recordExecution, executionStatus } from "./execution.js";
 import { randomUUID } from "node:crypto";
 import { prepareRepair, verifyRepair, findingId, type RepairFinding, type RepairVerification } from "../audit/repair.js";
 import { ALL_CHECKS, type AuditReport } from "../audit/types.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { checkCache, git, hash, readInputs, workspace } from "./evidence.js";
-import { stateSchema, withLock, type Event, type Host, type State } from "./store.js";
+import { parseState, withLock, type Event, type Host, type State } from "./store.js";
 
 export interface AutomationEvent {
   event: Event;
@@ -48,7 +49,7 @@ export function summarize(report: AutomationReport): string {
 /** Durable, host-neutral lifecycle. Only evidence/cache/receipts are written. */
 export async function automate(dir: string, event: AutomationEvent) {
   const ws = await workspace(dir);
-  return withLock(ws.root, ws.directory, async () => {
+  return withLock(ws.root, ws.directory, () => recordExecution(ws.root, ws.directory, event.event, async () => {
     const inputs = await readInputs(ws.root);
     const statePath = ws.directory + "/state.json";
     const raw = await readStoreJson(ws.root, statePath);
@@ -56,7 +57,7 @@ export async function automate(dir: string, event: AutomationEvent) {
     const state: State = raw === null ? {
       version: 1, root: ws.root, gitDir: ws.gitDir, branch: ws.branch, baselines: [], sessions: {},
       updatedAt: now, fingerprint: null, latest: null,
-    } : stateSchema.parse(raw);
+    } : parseState(raw);
     if (state.root !== ws.root || state.gitDir !== ws.gitDir || state.branch !== ws.branch) {
       throw new Error("Automation state belongs to another branch or worktree; original evidence was retained.");
     }
@@ -172,18 +173,19 @@ export async function automate(dir: string, event: AutomationEvent) {
     state.latest = report.reportPath;
     // Publish complete evidence before publishing the pointer that refers to it.
     if (persistReport) await writeStoreJson(ws.root, report.reportPath, report);
-    await writeStoreJson(ws.root, ws.directory + "/cache.json", cache.serialize());
+    if (cache.ran.size || cached === null || cache.diagnostic) await writeStoreJson(ws.root, ws.directory + "/cache.json", cache.serialize());
     await writeStoreJson(ws.root, statePath, state);
     return { report, message: notify ? summarize(report) : null, continueOnce };
-  });
+  }));
 }
 
 /** Read-only inspection: configured hooks and observed runtime events are different facts. */
 export async function automationStatus(dir: string) {
   const ws = await workspace(dir);
+  const execution = await executionStatus(ws.root, ws.directory);
   const raw = await readStoreJson(ws.root, ws.directory + "/state.json");
-  if (raw === null) return { version: 1, status: "not-observed", root: ws.root, branch: ws.branch, baselinePaths: [], hosts: {} };
-  const state = stateSchema.parse(raw);
+  if (raw === null) return { version: 1, status: execution.status === "not-observed" ? "not-observed" : "unavailable", root: ws.root, branch: ws.branch, baselinePaths: [], hosts: {}, execution };
+  const state = parseState(raw);
   if (state.root !== ws.root || state.gitDir !== ws.gitDir || state.branch !== ws.branch) throw new Error("Automation state belongs to another workspace.");
   const inputs = await readInputs(ws.root);
   const latest = state.latest ? await readStoreJson(ws.root, state.latest) as AutomationReport | null : null;
@@ -193,8 +195,9 @@ export async function automationStatus(dir: string) {
     host.sessions++;
     host.observedEvents = [...new Set([...host.observedEvents, ...Object.keys(session.events)])];
   }
-  return { version: 1, status: inputs.fingerprint === state.fingerprint ? "current" : "changed", root: ws.root,
+  const unfinished = ["failed", "unknown", "running"].includes(execution.status);
+  return { version: 1, status: unfinished ? "unavailable" : inputs.fingerprint === state.fingerprint ? "current" : "changed", root: ws.root,
     branch: ws.branch, baselinePaths: state.baselines.map(b => b.path), reportPath: state.latest,
-    verificationStatus: latest?.status ?? "unavailable", hosts,
+    verificationStatus: unfinished ? "unavailable" : latest?.status ?? "unavailable", hosts, execution,
     note: "Observed events do not prove all tool paths are intercepted. Run check to verify the retained evidence." };
 }

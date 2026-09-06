@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mason",
   "display_name": "Mason",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Recorded engineering decisions, change impact, and documentation audits for coding assistants. Useful from the first task, with optional architecture maps.",
   "long_description": "Mason retrieves lessons and constraints from .mason/decisions/, checks their freshness, and combines them with references, related tests, and Git change history. Audit documentation and review committed changes without setup. Add an optional feature/flow map for architecture navigation.",
   "author": {
@@ -36,12 +36,13 @@
   "tools": [
     {
       "name": "mason_init",
-      "description": "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Read-only, deterministic, and usable without a map. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. mode: map returns the full Map-Reduce build workflow. Repeat calls refresh findings even after setup.",
+      "description": "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart and map modes are read-only and deterministic. Explicit mode: setup installs a pinned project runtime, MCP configuration, instructions and lifecycle hooks while retaining original audit evidence; use it only when the user requests setup. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. mode: map returns the full Map-Reduce build workflow. Repeat calls refresh findings even after setup.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "mode": { "type": "string", "enum": ["quickstart", "map"], "default": "quickstart", "description": "Quickstart checks and setup guide, or an explicit architecture map build" },
+          "mode": { "type": "string", "enum": ["quickstart", "map", "setup"], "default": "quickstart", "description": "Read-only quickstart checks, architecture map workflow, or explicit installation of runtime, MCP, instructions and hooks" },
+          "host": { "type": "string", "enum": ["codex", "claude"], "description": "Assistant to configure in setup mode; inferred only when unambiguous" },
           "base": { "type": "string", "description": "Git ref for committed-diff review; defaults to an available main branch ref" },
           "evidence": { "type": "array", "items": { "type": "string" }, "maxItems": 10, "description": "Repository-local CI evidence manifests to include in the review. Imports Vitest JSON and SARIF without executing check commands." }
         },

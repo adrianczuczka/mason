@@ -8,7 +8,7 @@
 
 ### Give coding assistants the lessons your team already learned, the changes they might miss, and evidence of what is still current.
 
-Project direction and remaining evidence gaps are recorded in [the roadmap](ROADMAP.md).
+Project direction and remaining evidence gaps are recorded in [the roadmap](ROADMAP.md). Use the [unified setup flow](#unified-project-setup) to connect Codex or Claude Code and enable automatic checks.
 
 Start with useful checks in an existing Git repository — no setup, map build, or model calls:
 
@@ -19,13 +19,14 @@ npx -p mason-context mason-review --dir . --base origin/main
 
 The audit checks claims in `AGENTS.md` and `CLAUDE.md` against the repository. The review checks committed changes from the merge base to HEAD for missing historical change partners and touched decisions. Choose the base branch you normally review against. Missing context files, unavailable history, and skipped checks are reported explicitly; these commands do not certify a patch's correctness.
 
-To capture and retrieve lessons while coding, connect Mason to your assistant:
+To connect Mason and enable automatic checks, run this from your project:
 
 ```bash
-claude mcp add mason --scope user -- npx -p mason-context mason-mcp
+npx --package mason-context@0.13.0 mason-auto setup --host codex
+# For Claude Code, use --host claude.
 ```
 
-Restart Claude Code, then ask: *"Use Mason to check this project and set up decision capture."* `mason_init` returns the audit and review findings plus a short guide for adding Mason instructions to the project's existing `AGENTS.md` or `CLAUDE.md`. It does not build a map by default.
+Setup retains the initial audit, installs a pinned private runtime, and merges MCP, hooks, and project instructions. Review the host's native trust settings, then start a new session and give the assistant a normal task. `npx --package mason-context@0.13.0 mason-auto status` reports observed use separately from configuration. See the [setup guide](#unified-project-setup) for details. A concept map remains optional.
 
 After resolving a real incident or settling a constraint, ask your assistant to record the reason with `save_decision`. On the next related task, `get_context` retrieves it as a proposal with file impact, tests, and trust evidence. Use `review_decision` when you are ready to record acceptance. Both work immediately, even without running setup.
 
@@ -131,7 +132,7 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 
 | Tool | Purpose |
 |---|---|
-| `mason_init` | Read-only audit/review findings and quickstart guide; optional `base` for review, `evidence` for local CI manifests, `mode: "map"` for an architecture build. |
+| `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence`, and `mode: "map"`. `mode: "setup", host: "codex"` (or `"claude"`) installs runtime, MCP, instructions, and hooks using the shared setup engine. |
 | `mason_repair` | Prepare an audit repair baseline; verify the same original findings after edits. Reports unresolved advisories and unavailable checks. |
 | `mason_automation` | Inspect configured hooks and observed events, or capture/resume and verify retained repair evidence across sessions. |
 | `mason_complete_init` | Records assistant instruction setup; preserves prior settings on repeated calls. |
@@ -269,8 +270,10 @@ What it checks:
 | `new-module` | a directory with source files that no context file mentions | likely |
 | `stale-count` | "6 packages" vs what the workspace manifest actually resolves to | certain |
 | `dead-command` | `npm run <script>` naming a script no package.json has | certain |
-| `deps-changed` | dependency manifests committed after the doc's last commit | advisory |
+| `deps-changed` | dependency manifests committed after the doc's last commit, excluding proven Android release metadata | advisory |
 | `decision-anchor-drift` | a decision record whose anchor files changed (only when `.mason/decisions/` exists) | advisory |
+
+The dependency advisory omits only recognized literal `versionName`/`versionCode` changes inside an Android `defaultConfig` block when every touched manifest qualifies. Dependency edits, computed values, unfamiliar syntax, and unrecognized metadata stay advisory. This filter does not approve or remove advisories already retained in a repair baseline.
 
 Issues drive the exit code; **advisories never do** — they're facts an agent can't close by editing the doc, so they're reported for humans instead. Every issue carries a `doc:line` anchor and git-derived evidence (the deleting commit, the rename target, the actual count and its source). A claim you want left alone — say, a deliberate reference to a removed directory — gets an ignore marker: `<!-- mason:ignore -->` on the line, or `<!-- mason:ignore-start -->` / `<!-- mason:ignore-end -->` around a block.
 
@@ -317,6 +320,34 @@ jobs:
 
 Omit `agent-command` for detect-only mode: no agent, no credentials — the job fails when the context files have drifted, which is a reasonable default for repos that want the signal before the automation. Two GitHub notes: the repo setting **"Allow GitHub Actions to create and approve pull requests"** (Settings → Actions → General) must be enabled for the PR step, and PRs created with the default `GITHUB_TOKEN` don't trigger the repo's own CI — run your agent with PAT-backed auth if you need that.
 
+## Unified project setup
+
+Available from 0.13.0. Run setup from the target Git repository, choosing the assistant you use:
+
+```bash
+npx --package mason-context@0.13.0 mason-auto setup --host codex
+# Use --host claude for Claude Code; add --dir /absolute/path/to/project to target another repository.
+npx --package mason-context@0.13.0 mason-auto status
+```
+
+Run setup once for each host you use. Repeating it also upgrades an existing integration to the executing Mason version. Versions before 0.13.0 require the manual hook installation below, which remains supported. For a local source build, run `npm run build` in Mason's checkout and invoke `node dist/mason-auto.js setup --dir /absolute/path/to/project --host codex`.
+
+Setup retains the initial audit before editing instruction files, installs the executing Mason distribution under the ignored `.mason/runtime/` directory, and configures both MCP and lifecycle hooks to use that pinned runtime. Node 20+, npm, and Git are required; installation may download dependencies, with package scripts disabled. It does not create or change the application's npm manifest, so Kotlin, Python, and other repositories use the same flow. Ordinary hooks and MCP launches reuse the installed runtime without downloading packages.
+
+Existing project guidance is preserved outside marked Mason blocks. Codex receives an `AGENTS.md` entry point; Claude Code receives or reuses a `CLAUDE.md` entry point, using a native `@AGENTS.md` import when that is the shared document (or `@../AGENTS.md` from `.claude/CLAUDE.md`). See [Claude Code memory imports](https://code.claude.com/docs/en/memory#agentsmd). Setup merges the named Mason MCP server and its recorded hooks while retaining unrelated settings and explicit disable options. It refuses malformed or ambiguous configuration and concurrent edits. Repeating the command resumes an interrupted install or updates the selected distribution without replacing the retained original audit.
+
+The project changes are reviewable together: assistant instructions, `.gitignore`, `.mason/run.cjs`, `.mason/setup.json`, `.mason/automation.json`, `.mason/project.json`, and the selected host's configuration (`.codex/config.toml` and `.codex/hooks.json`, or `.mcp.json` and `.claude/settings.json`). Ignore rules keep runtime dependencies and `.mason/reports/` local while allowing decision records and setup metadata into version control. A new clone must run setup to install its own runtime; local evidence is not copied or inferred from committed configuration.
+
+Finish activation in the host:
+
+1. Review the project's MCP and hook configuration through the host's native trust controls. Codex provides `/hooks` in its CLI; Claude Code requires approval for project MCP servers. Setup never changes trust on your behalf. See the [Codex hook documentation](https://learn.chatgpt.com/docs/hooks) and [Claude Code project MCP documentation](https://code.claude.com/docs/en/mcp).
+2. Start a new assistant session in that project and give it a normal task. The project instructions direct the assistant to request Mason context; hooks preserve and verify audit evidence during work.
+3. Run `mason-auto status` using the same installed build. Interactive output shows runtime/configuration health, observed events, task context requests, and verification. Use `--json` for structured output; piped status remains JSON.
+
+`pending` means setup needs evidence of use. `active` requires a `get_context` call through the configured MCP server and all five lifecycle events in one session for the current setup revision and worktree/branch. `attention` identifies missing or changed configuration/runtime, disabled settings, or a failed verification attempt. Verification remains a separate result: observed activation does not prove a repair was correct or that Mason improved the task. Local receipts store counts, event names, and hashed session identifiers, not prompts or tool arguments. Higher-priority host settings can still prevent execution.
+
+For an assistant already connected to this build, `mason_init` with `mode: "setup"` and `host: "codex"` or `"claude"` invokes the same engine. Its default quickstart remains read-only. Setup does not build a concept map, approve advisories, or create decision records; decisions should capture actual lessons from subsequent work.
+
 ## Automatic documentation checks (mason-auto)
 
 Mason can preserve documentation audit evidence and resume unfinished repairs through Claude Code or Codex lifecycle hooks. A shared engine owns the evidence, verification, and cache; each host adapter handles its event format. No concept map or model call is required for the checks.
@@ -324,7 +355,7 @@ Mason can preserve documentation audit evidence and resume unfinished repairs th
 Available from 0.12.0. Install or upgrade the package in each project where you want automatic checks:
 
 ```bash
-npm install -D mason-context@0.12.0
+npm install -D mason-context@0.13.0
 npx mason-auto install --host claude   # Claude Code
 npx mason-auto install --host codex    # Codex; review/trust the hooks using /hooks
 npx mason-auto status
@@ -332,13 +363,13 @@ npx mason-auto status
 
 Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in `.mason/automation.json`. Repeating installation updates only those handlers. Keep the host configuration and `.mason/automation.json` together in version control; if you ignore all of `.mason/`, allow the installation record explicitly. Add `.mason/reports/` to your ignore rules. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
 
-When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.12.0`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
+When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.13.0`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
 
 `status` distinguishes configuration from observed events. Host versions, project trust, policy, and specialized tool paths can prevent hooks from running. Configuration alone is not evidence of automatic use. Codex requires review/trust of new or changed non-managed hooks. See the [Claude Code hook reference](https://code.claude.com/docs/en/hooks) and [Codex hook reference](https://learn.chatgpt.com/docs/hooks).
 
 On session start, Mason recovers the current branch/worktree's evidence. Before and after tools, it checks for changed audit inputs and retains newly observed findings before another documentation edit can hide them. Shell and unknown tool calls are included because edits can happen outside a file-edit tool. At turn completion it verifies the retained findings. A relevant unresolved issue can request **one continuation per session**; advisories and unavailable checks never create a repair loop. Fixes remain the assistant's responsibility within the user's task scope.
 
-Checks reuse cached results only when their dependencies match. Documentation and history, file inventory, manifests, and decision evidence have separate invalidation keys. Changes to a dirty manifest invalidate its checks even when Git's status text is unchanged. Skipped checks are retried. Cache corruption causes recomputation; invalid original baselines or active state remain errors. Concurrent events serialize writes, and interrupted local writers' locks are recovered only when their process is gone. New reports are written atomically. Unchanged tool events reuse the existing full report.
+Checks reuse cached results only when their dependencies match. Documentation and history, module candidates, documented workspace counts, command manifests, and decision evidence have separate invalidation keys. Unrelated generated build output does not invalidate these checks; explicitly documented generated files and workspace members still do. Changes to a dirty manifest invalidate its checks even when Git's status text is unchanged. Skipped checks are retried. Cache corruption causes recomputation; invalid original baselines or active state remain errors. Concurrent events serialize writes, and interrupted local writers' locks are recovered only when their process is gone. New reports are written atomically. Unchanged tool events reuse the existing full report.
 
 ```bash
 npx mason-auto check --json   # Capture/resume the active evidence and verify it
@@ -346,7 +377,9 @@ npx mason-auto check --json   # Capture/resume the active evidence and verify it
 npx mason-auto check
 ```
 
-The equivalent MCP operation is `mason_automation(action: "check")`. Its response is concise and links the full local report. `status` is read-only; `check` writes evidence. Exit codes are 0 for verified checks, 1 for unresolved issues, and 2 for incomplete/unavailable checks. Original `mason_repair` baselines remain separately verifiable by their paths. Hook errors are visible and advisory; the existing `mason-hook` decision injector keeps its previous behavior.
+The equivalent MCP operation is `mason_automation(action: "check")`. Its response is concise and links the full local report. `status` is read-only; `check` writes evidence. Exit codes are 0 for verified checks, 1 for unresolved issues, and 2 for incomplete/unavailable checks. Original `mason_repair` baselines remain separately verifiable by their paths. Hook errors are visible and advisory; exit 0 from a hook means the host can continue, not that verification passed. CLI JSON and MCP failures include a category (`inputs-changed`, `storage-full`, `busy`, `invalid-input`, `history-unavailable`, `invalid-evidence`, `io-error`, or `internal`), retryability, and whether a failure receipt was saved. Changing inputs require another check on a stable checkout; they never produce a cached pass.
+
+`status` includes a bounded history of the latest 32 execution attempts, their duration after lock acquisition, and the number of older receipts omitted. A completed attempt includes its verification outcome. A started attempt without a matching live local lock owner is unknown, and a failed or unfinished latest attempt prevents an older report from being presented as current verification. Storage exhaustion can prevent even a failure receipt from being saved; the caller reports that explicitly. Receipts contain no prompts or tool arguments. The existing `mason-hook` decision injector keeps its previous behavior.
 
 Evidence is local to the worktree and branch. Switching assistants in that worktree resumes the same repair; another worktree or branch has separate state. Detached-HEAD commits retain evidence; moving that checkout to a different history requires inspection. Hooks follow the Git worktree of the event's working directory. Reports are not automatically transferred to CI. CI can call `mason-auto check` on retained local artifacts, or `mason-audit --verify-repair <baseline>` after restoring the original artifacts at their recorded root. A fresh checkout cannot reconstruct missing pre-edit evidence. Audited instruction files remain limited to `AGENTS.md`, `CLAUDE.md`, and `.claude/CLAUDE.md`. Automation bounds inventory at 100,000 paths and retained baselines at 128; exceeding a bound reports unavailable evidence without evicting unresolved findings. Symbolic links in the inspected inventory require an explicit audit instead of cached automation. This is not proof of arbitrary repository scale or universal tool interception.
 

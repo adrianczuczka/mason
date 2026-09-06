@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.0 — 2026-09-06
+
+Mason now has one project setup operation for Codex and Claude Code. It preserves the original audit, installs a private pinned runtime, and configures MCP, lifecycle hooks, and assistant instructions without adding an npm manifest to the application. Status distinguishes configured integration from observed use.
+
+- Add unified `mason-auto setup --host codex|claude` and explicit MCP `mason_init(mode: "setup", host)` onboarding. Preserve audit evidence before documentation edits; install a pinned private runtime without changing application manifests; merge MCP, lifecycle hooks, instructions, and ignore rules with repeatable/resumable setup.
+- Add human-readable interactive setup status with structured JSON support. Distinguish configured, pending, active, and attention states using actual MCP context calls and complete hook lifecycles for the current installation and worktree/branch. Preserve native host trust and explicit disabled settings; configuration alone does not establish activation.
+- Scope automation cache keys to the inputs each audit check observes. Generated build churn no longer reruns unrelated checks; documented generated paths, workspace membership, manifest contents, and decision evidence remain dependencies. Read independent instruction-file metadata concurrently.
+- Classify automation failures in CLI JSON and MCP responses, preserve bounded execution receipts and durations, and keep unfinished or failed executions distinct from verified evidence. Report when storage exhaustion also prevents saving a failure receipt; clean up locks whose owner metadata could not be written.
+- Omit dependency advisories for conservatively recognized Android release-version-only changes. Unknown or mixed manifest edits remain advisory, and original retained advisories still require review.
+
+Install or upgrade from the target repository with `npx --package mason-context@0.13.0 mason-auto setup --host codex` (or `--host claude`). Review native MCP/hook trust and start a new session, then use `npx --package mason-context@0.13.0 mason-auto status` after an ordinary task. Setup never grants host trust. Existing manual installations remain supported; decision records and retained repair baselines require no migration.
+
+Validation covers both hosts' setup, original evidence retention, resumable installs, native Claude guidance imports, configuration preservation, and uncertain activation states. Packaged npm installation, real MCP connections, deterministic hook replay, and fresh-clone recovery passed. Replay establishes mechanism behavior; broader agent usefulness and large-repository performance remain separate evidence gaps.
+
 ## 0.12.0 — 2026-09-06
 
 Mason can now run documentation checks automatically through Claude Code and Codex hooks. It preserves findings before edits can hide them, resumes retained evidence across sessions, and verifies repairs against the final commit. Hook installation is opt-in.

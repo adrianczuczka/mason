@@ -5,7 +5,7 @@ import { HOOK_EVENTS, hookConfig } from "./adapters.js";
 import { withLock, type Host } from "./store.js";
 
 const groupSchema = z.object({ hooks: z.array(z.object({ type: z.string(), command: z.string().optional() }).passthrough()) }).passthrough();
-const configSchema = z.object({ hooks: z.record(z.array(groupSchema)).optional() }).passthrough();
+export const automationConfigSchema = z.object({ hooks: z.record(z.array(groupSchema)).optional() }).passthrough();
 const recordSchema = z.object({ version: z.literal(1), hosts: z.record(z.object({ command: z.string() })) });
 export const configPath = (host: Host) => host === "claude" ? ".claude/settings.json" : ".codex/hooks.json";
 
@@ -15,9 +15,9 @@ export async function installAutomation(dir: string, host: Host, command?: strin
   return withLock(ws.root, ".mason/reports/automation-install", () => installLocked(ws.root, host, command));
 }
 
-async function installLocked(root: string, host: Host, command?: string) {
+export async function planAutomationInstall(root: string, host: Host, command?: string) {
   const file = configPath(host);
-  const existing = configSchema.parse(await readStoreJson(root, file) ?? {});
+  const existing = automationConfigSchema.parse(await readStoreJson(root, file) ?? {});
   const record = recordSchema.parse(await readStoreJson(root, ".mason/automation.json") ?? { version: 1, hosts: {} });
   const desired = hookConfig(host, command);
   const newCommand = desired.hooks.SessionStart[0].hooks[0].command;
@@ -31,7 +31,12 @@ async function installLocked(root: string, host: Host, command?: string) {
     hooks[event].push(...desired.hooks[event]);
   }
   record.hosts[host] = { command: newCommand };
-  await writeStoreJson(root, file, { ...existing, hooks });
+  return { file, config: { ...existing, hooks }, record, newCommand };
+}
+
+async function installLocked(root: string, host: Host, command?: string) {
+  const { file, config, record, newCommand } = await planAutomationInstall(root, host, command);
+  await writeStoreJson(root, file, config);
   await writeStoreJson(root, ".mason/automation.json", record);
   return { version: 1, host, configPath: file, status: "configured", command: newCommand,
     events: HOOK_EVENTS,
@@ -50,7 +55,7 @@ export async function installedAutomation(dir: string) {
   for (const host of ["claude", "codex"] as const) {
     const expected = record.hosts[host];
     if (!expected) continue;
-    const current = configSchema.parse(await readStoreJson(ws.root, configPath(host)) ?? {});
+    const current = automationConfigSchema.parse(await readStoreJson(ws.root, configPath(host)) ?? {});
     const configuredEvents = HOOK_EVENTS.filter(event => current.hooks?.[event]?.some(group =>
       group.hooks.some(handler => handler.type === "command" && handler.command === expected.command)));
     result[host] = { configPath: configPath(host), configuredEvents,

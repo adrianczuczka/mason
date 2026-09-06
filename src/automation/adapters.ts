@@ -1,3 +1,4 @@
+import { failureMessage } from "./execution.js";
 import { z } from "zod";
 import { automate, type AutomationEvent } from "./runtime.js";
 import { hostSchema, type Host } from "./store.js";
@@ -31,6 +32,11 @@ export async function runAutomationHook(host: Host, stdin: string): Promise<Reco
     const input = normalizeHook(host, JSON.parse(stdin));
     name = input.name;
     const result = await automate(input.cwd, input.event);
+    const { observeActivation } = await import("../setup/observations.js");
+    const warning = await observeActivation(result.report.root, input.event.event, {
+      sessionId: input.event.sessionId, verificationStatus: result.report.status, reportPath: result.report.reportPath,
+    });
+    if (warning) result.message = [result.message, warning].filter(Boolean).join("\n");
     if (!result.message) return null;
     if (name === "Stop") {
       // A single continuation for actionable task findings; advisories never create a loop.
@@ -38,8 +44,7 @@ export async function runAutomationHook(host: Host, stdin: string): Promise<Reco
     }
     return { hookSpecificOutput: { hookEventName: name, additionalContext: result.message } };
   } catch (error) {
-    const message = "Mason automation unavailable; evidence capture/verification was not established. " +
-      (error instanceof Error ? error.message : String(error)).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").slice(0, 700);
+    const message = failureMessage(error);
     // Hook failure is visible but does not turn documentation advice into an editing permission gate.
     return { systemMessage: message, ...(["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"].includes(name)
       ? { hookSpecificOutput: { hookEventName: name, additionalContext: message } } : {}) };

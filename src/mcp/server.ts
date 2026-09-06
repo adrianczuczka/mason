@@ -42,18 +42,19 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "mason_init",
-    "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Read-only, deterministic, and usable without a map. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. mode: map returns the full Map-Reduce build workflow. Repeat calls refresh findings even after setup.",
+    "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart and map modes are read-only and deterministic. Explicit mode: setup installs a pinned project runtime, MCP configuration, instructions and lifecycle hooks while retaining original audit evidence; use it only when the user requests setup. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. mode: map returns the full Map-Reduce build workflow. Repeat calls refresh findings even after setup.",
     {
       dir: z
         .string()
         .describe("Absolute path to the project root directory"),
-      mode: z.enum(["quickstart", "map"]).optional().default("quickstart")
-        .describe("Quickstart returns checks and a short setup guide; map requests a full architecture build."),
+      mode: z.enum(["quickstart", "map", "setup"]).optional().default("quickstart")
+        .describe("Quickstart inspects without edits; map requests an architecture build; setup installs the shared onboarding flow."),
+      host: z.enum(["codex", "claude"]).optional().describe("Assistant to configure in setup mode; inferred only when unambiguous."),
       base: z.string().optional().describe("Git ref for committed-diff review. Defaults to the first available main branch ref."),
       evidence: z.array(z.string()).max(10).optional().describe("Repository-local CI evidence manifests to include in the review. Imports Vitest JSON and SARIF without executing check commands."),
     },
-    async ({ dir, mode, base, evidence }) => {
-      const result = await masonInit(dir, { mode, base, evidence });
+    async ({ dir, mode, host, base, evidence }) => {
+      const result = await masonInit(dir, { mode, host, base, evidence });
       return { content: [{ type: "text", text: result }] };
     }
   );
@@ -220,6 +221,9 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir, task, files }) => {
       const result = await getContext(dir, task, files);
+      const { observeActivation } = await import("../setup/observations.js");
+      const warning = await observeActivation(dir, "context");
+      if (warning) return { content: [{ type: "text", text: result }, { type: "text", text: warning }] };
       return {
         content: [{ type: "text", text: result }],
       };

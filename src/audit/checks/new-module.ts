@@ -93,13 +93,23 @@ export async function checkNewModules(ctx: CheckContext): Promise<CheckResult> {
     });
   };
 
-  for (const topDir of await listSubdirs(ctx.root)) {
-    const absTop = path.join(ctx.root, topDir);
+  for (const candidate of await moduleCandidates(ctx.root, combinedDocs)) {
+    await flag(candidate.dir, candidate.sourceFileCount);
+  }
+
+  return result;
+}
+
+/** Shared dependency witness: cache exactly the module candidates the audit observes. */
+export async function moduleCandidates(root: string, combinedDocs: string) {
+  const candidates: Array<{ dir: string; sourceFileCount: number }> = [];
+  for (const topDir of await listSubdirs(root)) {
+    const absTop = path.join(root, topDir);
     const topMentioned = isMentioned(combinedDocs, topDir);
 
     if (!topMentioned) {
       const count = await countSourceFiles(absTop);
-      if (count >= 1) await flag(topDir, count);
+      if (count >= 1) candidates.push({ dir: topDir, sourceFileCount: count });
       continue;
     }
 
@@ -114,10 +124,10 @@ export async function checkNewModules(ctx: CheckContext): Promise<CheckResult> {
       if (isMentioned(combinedDocs, sub)) continue;
       const count = await countSourceFiles(path.join(absTop, sub));
       if (count >= SECOND_LEVEL_MIN_SOURCE_FILES) {
-        await flag(`${topDir}/${sub}`, count);
+        candidates.push({ dir: `${topDir}/${sub}`, sourceFileCount: count });
       }
     }
   }
 
-  return result;
+  return candidates;
 }

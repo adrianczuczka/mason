@@ -27,10 +27,9 @@ export async function computeAudit(
   options: AuditOptions = {}
 ): Promise<AuditReport | null> {
   const resolvedRoot = path.resolve(rootDir);
-  const docs = await discoverDocs(resolvedRoot);
+  const [docs, headHash] = await Promise.all([discoverDocs(resolvedRoot), getCurrentGitHash(resolvedRoot)]);
   if (docs.length === 0) return null;
 
-  const headHash = await getCurrentGitHash(resolvedRoot);
   const report: AuditReport = {
     version: 1,
     root: resolvedRoot,

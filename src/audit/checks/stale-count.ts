@@ -136,7 +136,7 @@ async function countCargoCrates(root: string): Promise<CountSource | null> {
  * ecosystem has no workspace manifest in this repo, the claim is skipped —
  * "12 packages" in a Gradle repo proves nothing either way.
  */
-async function resolveCountSource(
+export async function resolveCountSource(
   root: string,
   claim: CountClaim
 ): Promise<CountSource | null> {

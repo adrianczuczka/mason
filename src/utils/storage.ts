@@ -39,7 +39,7 @@ export async function readStoreJson(root: string, relative: string): Promise<unk
     return parsed;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw new Error(`Invalid Mason store ${relative}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Invalid Mason store ${relative}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
 

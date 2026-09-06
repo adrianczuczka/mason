@@ -11,7 +11,8 @@ const harness = fileURLToPath(new URL("../bench/harness/run-automation.mjs", imp
 it("replays both real adapter binaries through protected grading and final committed verification without models", async () => {
   const output = await fs.mkdtemp(path.join(os.tmpdir(), "mason-auto-bench-"));
   try {
-    await exec(process.execPath, [harness, "--validate", "--output", output], { timeout: 60000 });
+    // Four sequential repository/hook replays need room for shared CI or desktop load.
+    await exec(process.execPath, [harness, "--validate", "--output", output], { timeout: 120000 });
     const report = JSON.parse(await fs.readFile(path.join(output, "report.json"), "utf8"));
     expect(report.mode).toBe("replay");
     expect(report.rows).toHaveLength(4);
@@ -20,7 +21,7 @@ it("replays both real adapter binaries through protected grading and final commi
       expect(row.evaluation).toMatchObject({ pass: true, captureBeforeEdit: true, continuations: 0, finalVerification: "verified" });
     }
   } finally { await fs.rm(output, { recursive: true, force: true }); }
-}, 65000);
+}, 125000);
 
 it("does not wait for stdin when hook help is requested", async () => {
   const { spawn } = await import("node:child_process");

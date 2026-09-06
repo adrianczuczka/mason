@@ -44,25 +44,19 @@ Mason provides recorded decisions and file impact over MCP. A concept map is opt
 Inspect source for what the retrieved context does not answer.
 <!-- mason:end -->`;
 
-export type InitMode = "quickstart" | "map";
+export type InitMode = "quickstart" | "map" | "setup";
 
-const ASSISTANT_SETUP = `ASSISTANT INSTRUCTIONS
-If the user requested Mason setup, add the section below to the project's instruction file. If they only requested inspection or a review, return the findings and leave files unchanged.
-Use the file the project already follows:
-  - \`AGENTS.md\` exists → put the section there. If a \`CLAUDE.md\` also exists and does not reference AGENTS.md, add a one-line pointer to it.
-  - only \`CLAUDE.md\` (or \`.claude/CLAUDE.md\`) exists → put the section there.
-  - neither exists → create \`AGENTS.md\` with the section.
-If the \`<!-- mason:start -->\` marker already exists, replace the marked block instead of appending.
+const ASSISTANT_SETUP = `UNIFIED SETUP
+When the user requests Mason setup, call mason_init again with mode: "setup" and host: "codex" or "claude" for the assistant being configured. This uses the same engine as mason-auto setup: retain the initial audit before instruction edits, install a pinned private runtime, merge project MCP configuration and hooks, update marker-delimited instructions and Git ignore rules, and record setup. A concept map is optional.
+If the user only requested inspection or review, report findings without running setup. The setup result distinguishes configured from observed activation. Explain the host's native trust step and request a new session; never trust hooks on the user's behalf or claim activation from generated configuration alone. After a normal task finishes, mason_automation(action: "status") or mason-auto status reports observed context use and hook events. Existing findings remain reviewable; setup does not approve advisories or manufacture decisions.
 
-${CLAUDE_MD_SECTION}
-
-FINALIZE
-After installing assistant instructions, call \`mason_complete_init(dir)\` to record setup. The marker records onboarding; decision capture, context, and impact already work without it. Summarize the findings, any edits, and any checks that could not run.`;
+The managed project guidance is:
+${CLAUDE_MD_SECTION}`;
 
 const QUICKSTART_PLAYBOOK = `Start with the audit and review results included in this response. No concept map is required.
 
 1. Explain the actionable findings with their source evidence. Separate audit issues, advisories, and skipped checks. The review covers committed changes from the merge base to HEAD; workingTree paths are not included in that review. An unavailable or empty check is not proof that the project is correct. Use the CLI for full output if a summary is truncated.
-2. Address findings within the user's requested scope. Setup alone authorizes installing the assistant instructions, not rewriting existing claims. If repair is authorized, call \`mason_repair(dir, action: "prepare")\` before editing; it saves the full original findings even when this summary is truncated. Inspect relevant source, make grounded edits, then call \`mason_repair(dir, action: "verify", baselinePath)\` with that same baseline, including after any final doc commit. Report resolved, unresolved, review-required, unverified, and new findings. Keep suppressed advisories visible even when setup has already dirtied a doc. Do not invent a decision just to populate the store.
+2. Address findings within the user's requested scope. Setup alone authorizes the Mason runtime, host configuration, hooks, instructions, and ignore rules; rewriting existing project claims requires repair scope. If repair is authorized, call \`mason_repair(dir, action: "prepare")\` before editing; it saves the full original findings even when this summary is truncated. Inspect relevant source, make grounded edits, then call \`mason_repair(dir, action: "verify", baselinePath)\` with that same baseline, including after any final doc commit. Report resolved, unresolved, review-required, unverified, and new findings. Keep suppressed advisories visible even when setup has already dirtied a doc. Do not invent a decision just to populate the store.
 3. When the task reveals a real lesson or constraint, call \`save_decision\` with title, body, category, anchors, and known owner/source/actor information. Missing attribution can be added later. The tool writes a local proposal; editing it preserves revision history and requires a new acceptance, while any earlier accepted revision remains operative. An unchanged save never refreshes its evidence. When decision review is requested, \`review_decision\` prepares the record and code evidence before any authorized verdict. Review and commit records through the normal workflow. Retrieve it on the next relevant task with \`get_context(dir, task, files)\`.
 
 ${ASSISTANT_SETUP}

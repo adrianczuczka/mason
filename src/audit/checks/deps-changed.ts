@@ -1,3 +1,4 @@
+import { releaseMetadataOnly } from "../release-metadata.js";
 import { commitsTouchingSince } from "../git.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
@@ -33,6 +34,7 @@ export async function checkDepsChanged(
 ): Promise<CheckResult> {
   const result = emptyResult();
   result.suppressedAdvisories = [];
+  const releaseOnly = new Map<string, boolean>();
 
   for (const doc of ctx.docs) {
     if (!doc.lastCommit) {
@@ -64,6 +66,16 @@ export async function checkDepsChanged(
       });
       continue;
     }
+    // Bound extra history reads. Older/ambiguous commits remain advisory.
+    const relevant = [];
+    for (const commit of range.commits) {
+      if (!releaseOnly.has(commit.hash) && releaseOnly.size < 100) {
+        releaseOnly.set(commit.hash, await releaseMetadataOnly(ctx.root, commit));
+      }
+      if (!releaseOnly.get(commit.hash)) relevant.push(commit);
+    }
+    range.commits = relevant;
+    range.total = relevant.length;
     if (range.total === 0) continue;
 
     const latest = range.commits[0];

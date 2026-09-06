@@ -834,19 +834,20 @@ describe("MCP tools", () => {
       expect(data.mode).toBe("quickstart");
       expect(data.playbook).toMatch(/save_decision/);
       expect(data.playbook).not.toMatch(/PHASE 1 — Map/);
-      expect(data.playbook).toMatch(/mason_complete_init/);
+      expect(data.playbook).toMatch(/mason_init again with mode: "setup"/);
     });
 
     it("playbook carries the CLAUDE.md section with markers", async () => {
       const raw = await masonInit(tmpDir);
       const data = JSON.parse(raw);
 
-      expect(data.playbook).toMatch(/ASSISTANT INSTRUCTIONS/);
+      expect(data.playbook).toMatch(/UNIFIED SETUP/);
       expect(data.playbook).toContain("<!-- mason:start -->");
       expect(data.playbook).toContain("<!-- mason:end -->");
       expect(data.playbook).toMatch(/`get_context` with the task text/);
-      // AGENTS.md is the tool-agnostic standard — the playbook must prefer it
-      expect(data.playbook).toMatch(/`AGENTS\.md` exists → put the section there/);
+      // Installation belongs to the shared setup engine; read-only inspection must stay available.
+      expect(data.playbook).toMatch(/same engine as mason-auto setup/);
+      expect(data.playbook).toMatch(/only requested inspection or review, report findings without running setup/);
     });
 
     it("returns initialized=true after masonCompleteInit", async () => {

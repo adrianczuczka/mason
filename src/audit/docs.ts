@@ -46,22 +46,22 @@ async function isDirty(resolvedRoot: string, relPath: string): Promise<boolean> 
 }
 
 export async function discoverDocs(resolvedRoot: string): Promise<AuditDoc[]> {
-  const docs: AuditDoc[] = [];
-  for (const candidate of DOC_CANDIDATES) {
+  const docs = await Promise.all(DOC_CANDIDATES.map(async (candidate): Promise<AuditDoc | null> => {
     let content: string;
     try {
       content = await fs.readFile(path.join(resolvedRoot, candidate), "utf-8");
     } catch {
-      continue;
+      return null;
     }
-    docs.push({
+    const [lastCommit, dirty] = await Promise.all([lastCommitOf(resolvedRoot, candidate), isDirty(resolvedRoot, candidate)]);
+    return {
       path: candidate,
       content,
       lineCount: content.split("\n").length,
-      lastCommit: await lastCommitOf(resolvedRoot, candidate),
-      dirty: await isDirty(resolvedRoot, candidate),
+      lastCommit,
+      dirty,
       claims: extractClaims(content),
-    });
-  }
-  return docs;
+    };
+  }));
+  return docs.filter((doc): doc is AuditDoc => doc !== null);
 }

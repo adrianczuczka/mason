@@ -21,6 +21,10 @@ export const stateSchema = z.object({
   latest: z.string().nullable(),
 });
 export type State = z.infer<typeof stateSchema>;
+export function parseState(raw: unknown): State {
+  try { return stateSchema.parse(raw); }
+  catch (error) { throw new Error("Invalid automation state; original evidence was retained.", { cause: error }); }
+}
 
 /** Cross-process lock: a killed writer's lock is reclaimed only after its local PID is gone. */
 export async function withLock<T>(root: string, directory: string, run: () => Promise<T>): Promise<T> {
@@ -30,7 +34,13 @@ export async function withLock<T>(root: string, directory: string, run: () => Pr
   while (!handle) {
     try {
       handle = await fs.open(file, "wx", 0o600);
-      await handle.writeFile(JSON.stringify({ pid: process.pid, host: os.hostname() }));
+      try { await handle.writeFile(JSON.stringify({ pid: process.pid, host: os.hostname() })); }
+      catch (error) {
+        await handle.close().catch(() => {});
+        handle = undefined;
+        await fs.rm(file, { force: true }).catch(() => {});
+        throw error;
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       // Do not steal malformed, remote, or live locks on a time-based guess.
