@@ -321,16 +321,18 @@ Omit `agent-command` for detect-only mode: no agent, no credentials — the job 
 
 Mason can preserve documentation audit evidence and resume unfinished repairs through Claude Code or Codex lifecycle hooks. A shared engine owns the evidence, verification, and cache; each host adapter handles its event format. No concept map or model call is required for the checks.
 
-After installing a version that includes this feature:
+Available from 0.12.0. Install or upgrade the package in each project where you want automatic checks:
 
 ```bash
-npm install -D mason-context
+npm install -D mason-context@0.12.0
 npx mason-auto install --host claude   # Claude Code
 npx mason-auto install --host codex    # Codex; review/trust the hooks using /hooks
 npx mason-auto status
 ```
 
-Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in `.mason/automation.json`. Repeating installation updates only those handlers. Add `.mason/reports/` to your ignore rules. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
+Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in `.mason/automation.json`. Repeating installation updates only those handlers. Keep the host configuration and `.mason/automation.json` together in version control; if you ignore all of `.mason/`, allow the installation record explicitly. Add `.mason/reports/` to your ignore rules. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
+
+When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.12.0`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
 
 `status` distinguishes configuration from observed events. Host versions, project trust, policy, and specialized tool paths can prevent hooks from running. Configuration alone is not evidence of automatic use. Codex requires review/trust of new or changed non-managed hooks. See the [Claude Code hook reference](https://code.claude.com/docs/en/hooks) and [Codex hook reference](https://learn.chatgpt.com/docs/hooks).
 

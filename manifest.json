@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mason",
   "display_name": "Mason",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Recorded engineering decisions, change impact, and documentation audits for coding assistants. Useful from the first task, with optional architecture maps.",
   "long_description": "Mason retrieves lessons and constraints from .mason/decisions/, checks their freshness, and combines them with references, related tests, and Git change history. Audit documentation and review committed changes without setup. Add an optional feature/flow map for architecture navigation.",
   "author": {

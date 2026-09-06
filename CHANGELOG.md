@@ -1,10 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 — 2026-09-06
+
+Mason can now run documentation checks automatically through Claude Code and Codex hooks. It preserves findings before edits can hide them, resumes retained evidence across sessions, and verifies repairs against the final commit. Hook installation is opt-in.
 
 - Add a shared documentation automation runtime with Claude Code and Codex lifecycle adapters, `mason-auto` installation/status/check commands, and the `mason_automation` MCP tool. Retain original and newly discovered findings across sessions, isolate branch/worktree state, verify after the final commit, and distinguish configured hooks from observed runtime events.
 - Cache audit checks by their evidence dependencies, retry skipped checks, serialize concurrent captures, and keep full reports accessible behind concise notifications. Request at most one task-relevant continuation per session; never infer advisory approval or expand repair authorization.
 - Add ordinary-request automation evaluations for module renames and unrelated edits, with baseline, instructions, and hooks arms. Offline lifecycle replay is separate from live agent performance evidence.
+
+Upgrade with `npm install -D mason-context@0.12.0` in each project that will use the default hook command. Run `npx mason-auto install --host claude` or `npx mason-auto install --host codex`, then start a new assistant session; Codex also requires review/trust through `/hooks`. Keep the host configuration and `.mason/automation.json` together in version control, and ignore `.mason/reports/`. Update any separately pinned MCP server command, restart it, and refresh the Mason instructions through `mason_init`. No decision-store migration is required.
+
+Validation includes 414 automated tests, live rename/control smoke tests in both hosts, and a Codex trial in an existing Kotlin Multiplatform/iOS project. These trials observed capture and final-commit verification without requiring forced continuation. The controlled live forced-repair continuation test remains deferred; broader mistake-rate, false-positive, and large-repository performance claims remain unproven. See the [recorded smoke results](https://github.com/adrianczuczka/mason/blob/v0.12.0/bench/harness/automation/SMOKE_RESULTS.md).
 
 ## 0.11.0 — 2026-09-05
 
