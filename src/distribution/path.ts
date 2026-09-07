@@ -15,14 +15,19 @@ export type PathChange = z.infer<typeof pathChangeSchema>;
 export type PathResult = { status: "configured" | "manual"; message: string; changes: PathChange[] };
 export type PathOptions = { platform?: NodeJS.Platform; userHome?: string; env?: NodeJS.ProcessEnv };
 const quote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
-const message = "Open a new terminal, then run: mason setup --host codex";
 
 // Store the ownership intent before changing settings, so interrupted installs
 // can resume and uninstall can distinguish our addition from existing settings.
 export async function configurePath(bin: string, previous: PathChange[], save: (changes: PathChange[]) => Promise<void>, options: PathOptions = {}): Promise<PathResult> {
   const env = options.env ?? process.env, platform = options.platform ?? process.platform;
   const changes = [...previous];
-  const manual = (reason: string): PathResult => ({ status: "manual", changes, message: `${reason}\nAdd ${bin} to your PATH, then run: mason setup --host codex` });
+  // Profile/registry changes affect future shells. The inherited PATH tells us
+  // whether this terminal already has the installation directory available.
+  const currentPath = platform === "win32" ? Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1] : env.PATH;
+  const alreadyOnPath = platform === "win32" ? hasWindowsEntry(currentPath ?? null, bin, env)
+    : (currentPath ?? "").split(":").some(entry => path.posix.isAbsolute(entry) && path.posix.resolve(entry) === path.posix.resolve(bin));
+  const message = alreadyOnPath ? "Run: mason setup --host codex" : "Open a new terminal, then run: mason setup --host codex";
+  const manual = (reason: string): PathResult => ({ status: "manual", changes, message: `${reason}\n${alreadyOnPath ? message : `Add ${bin} to your PATH, then run: mason setup --host codex`}` });
   if (env.MASON_NO_MODIFY_PATH === "1") return manual("Automatic PATH setup is disabled (MASON_NO_MODIFY_PATH=1).");
   if (/[\r\n\0]/.test(bin) || bin.includes(platform === "win32" ? ";" : ":")) return manual("This installation path cannot be represented safely in PATH.");
   try {

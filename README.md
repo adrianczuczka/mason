@@ -28,7 +28,7 @@ irm https://github.com/adrianczuczka/mason/releases/latest/download/install.ps1 
 
 No Node or npm required. Git is required. The installer configures PATH for Bash, Zsh, and Windows. [Platform details](docs/distribution.md) · [npm installation](docs/setup.md#unified-project-setup)
 
-Open a new terminal, then run this in your Git repository:
+Run this in your Git repository (open a new terminal if the installer asks):
 
 ```bash
 mason setup --host codex
