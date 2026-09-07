@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-07T12:48:07.086Z",
-  "gitHash": "506b8332b0f22f4fb2efe25d006ca11ea52a48ff",
+  "updatedAt": "2026-09-07T15:46:06.399Z",
+  "gitHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including explicit unified project setup and automation status/checks. Configured get_context calls record local activation observations without storing prompts.",
@@ -312,7 +312,7 @@
       "refreshedHash": "953f4653012a5e9d1c56fc0d4c0af581e7af930e"
     },
     "AI context audit": {
-      "description": "Audits documentation claims and preserves original findings through repair and commits. Conservative Android release-version-only manifest changes are excluded from dependency advisories; unknown or mixed edits remain advisory. Check inputs support scoped automation caching.",
+      "description": "Audits documentation claims and preserves original findings through repair and commits. Module discovery applies Git and Mason exclusions; explicit paths and workspace declarations retain ignored inputs. Shared bounded discovery and reads reject unsupported symlinks. Conservative Android release metadata is excluded from dependency advisories.",
       "files": [
         "src/audit/audit.ts",
         "src/audit/checks/dead-command.ts",
@@ -330,17 +330,20 @@
         "src/audit/types.ts",
         "bin/mason-audit.ts",
         "src/audit/repair.ts",
-        "src/audit/release-metadata.ts"
+        "src/audit/release-metadata.ts",
+        "src/audit/inputs.ts"
       ],
       "tests": [
         "test/audit-claims.test.ts",
         "test/audit-cli.test.ts",
         "test/audit.test.ts",
         "test/audit-repair.test.ts",
-        "test/release-metadata.test.ts"
+        "test/release-metadata.test.ts",
+        "test/automation-reliability.test.ts",
+        "test/setup.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6"
     },
     "decision injection hook": {
       "description": "Injects operative accepted decisions with separately labeled pending proposals and their freshness. Deduplicates per repository/session/revision and updates previously seen decisions after acceptance or retirement even when their anchors move.",
@@ -384,7 +387,7 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "project onboarding": {
-      "description": "Defaults to read-only audit/review findings. Explicit setup retains the initial audit, installs a pinned npm runtime or verified standalone copy, and merges MCP, hooks, instructions and ignore rules with resumable writes. Standalone project launchers use bundled Node. Status distinguishes configuration from observed activation and checks runtime integrity per host and worktree.",
+      "description": "Defaults to read-only audit/review findings. Explicit setup retains the initial audit, installs a pinned runtime, and merges MCP, hooks, instructions and ignore rules with resumable writes. Check-scoped evidence permits setup amid ignored generated files. Status separates configuration from observed activation and checks runtime integrity per host and worktree.",
       "files": [
         "src/mcp/init.ts",
         "src/mcp/onboarding.ts",
@@ -404,7 +407,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "70ebce56a1f8f0aad8b0332b9ae557eb3790a225"
+      "refreshedHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -435,7 +438,7 @@
       "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "documentation automation": {
-      "description": "Retains and verifies documentation evidence across sessions and final commits in worktree/branch state. Check-specific cache keys skip unrelated churn; adapters bound notifications and continuations. Execution receipts classify failed or unfinished attempts and preserve uncertainty instead of reusing an older passing result.",
+      "description": "Retains documentation evidence across sessions and final commits in worktree/branch state. Cache keys use each check's dependencies instead of a repository-wide inventory; workspace commands are discovered only when needed. Execution receipts preserve failed or unfinished attempts, and adapters bound notifications and continuations.",
       "files": [
         "bin/mason-auto.ts",
         "src/automation/adapters.ts",
@@ -444,14 +447,16 @@
         "src/automation/install.ts",
         "src/automation/runtime.ts",
         "src/automation/store.ts",
-        "src/automation/execution.ts"
+        "src/automation/execution.ts",
+        "src/audit/inputs.ts"
       ],
       "tests": [
         "test/automation.test.ts",
-        "test/automation-reliability.test.ts"
+        "test/automation-reliability.test.ts",
+        "test/setup.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6"
     },
     "automatic-use evaluations": {
       "description": "Evaluates ordinary module-renaming and unrelated control tasks with baseline, instructions and hooks arms for Claude Code and Codex. Separates offline lifecycle replay from real host sessions, records activation and preserved evidence, and grades behavior, protected configuration and verification after the final commit.",
@@ -590,11 +595,12 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "documentation automation flow": {
-      "description": "Host events drive scoped evidence capture and final-commit verification under a serialized runtime. Bounded execution receipts record outcomes and failures; configured launchers also record lifecycle observations for activation status.",
+      "description": "Host events drive check-scoped evidence capture and final-commit verification under a serialized runtime. Validated discovery avoids a full filesystem inventory; bounded receipts preserve failures and uncertainty, and launchers record activation observations.",
       "chain": [
         "src/automation/adapters.ts",
         "src/automation/runtime.ts",
         "src/automation/evidence.ts",
+        "src/audit/inputs.ts",
         "src/audit/repair.ts",
         "src/audit/audit.ts",
         "src/automation/store.ts",
@@ -602,7 +608,7 @@
         "src/automation/execution.ts",
         "src/setup/observations.ts"
       ],
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6"
     },
     "project setup and activation flow": {
       "description": "CLI or explicit MCP setup retains pre-edit audit evidence, installs a pinned npm runtime or verified standalone copy, then merges configuration and instructions. Native host trust enables later MCP and hooks; local observations determine activation independently of verification. Explicit setup upgrades one host while global upgrades leave project pins intact.",
