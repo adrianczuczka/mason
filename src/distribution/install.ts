@@ -48,7 +48,22 @@ export async function installStandalone(source: string) {
     const destination = await storePath(home, "versions/" + id);
     const launchers: Record<string, string> = process.platform === "win32" ? {
       "mason.cmd": '@echo off\r\npowershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0mason.ps1" %*\r\nexit /b %ERRORLEVEL%\r\n',
-      "mason.ps1": `& ${psQuote(path.join(destination, "node.exe"))} ${psQuote(path.join(destination, "app/dist/mason.js"))} @args\nexit $LASTEXITCODE\n`,
+      "mason.ps1": `$ErrorActionPreference = 'Stop'
+$previousToken = $env:MASON_UNINSTALL_TOKEN
+$token = [Guid]::NewGuid().ToString()
+$env:MASON_UNINSTALL_TOKEN = $token
+try {
+  & ${psQuote(path.join(destination, "node.exe"))} ${psQuote(path.join(destination, "app/dist/mason.js"))} @args
+  $code = $LASTEXITCODE
+  if ($code -eq 0 -and $args.Count -eq 1 -and $args[0] -eq 'uninstall') {
+    if ([IO.File]::ReadAllText(${psQuote(path.join(home, ".uninstall-request.txt"))}) -cne $token) { throw 'Mason did not authorize installation cleanup.' }
+    Remove-Item -LiteralPath ${psQuote(home)} -Recurse -Force
+    Write-Output ${psQuote("Removed standalone installation: " + home)}
+  }
+  exit $code
+} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 2 }
+finally { $env:MASON_UNINSTALL_TOKEN = $previousToken }
+`,
     } : { mason: `#!/bin/sh\nexec ${shQuote(path.join(destination, "node"))} ${shQuote(path.join(destination, "app/dist/mason.js"))} "$@"\n` };
     for (const [name, content] of Object.entries(launchers)) {
       const file = await storePath(bin, name);
@@ -103,6 +118,10 @@ export async function upgradeStandalone(version?: string) {
 
 export async function uninstallStandalone() {
   const { home, record } = await currentInstallation();
+  const token = process.env.MASON_UNINSTALL_TOKEN;
+  if (process.platform === "win32" && (!token || !/^[a-f0-9-]{36}$/i.test(token))) {
+    throw new Error("Run mason uninstall through the installed Windows launcher so it can remove Node after exit.");
+  }
   await withLock(home, ".install-lock", async () => {
     for (const [name, expected] of Object.entries(record.launchers)) {
       if (!["mason", "mason.cmd", "mason.ps1"].includes(name)) throw new Error("Invalid owned launcher name.");
@@ -110,35 +129,12 @@ export async function uninstallStandalone() {
       const actual = await fs.readFile(file, "utf8").catch(error => { if (error.code === "ENOENT") return null; throw error; });
       if (actual !== null && actual !== expected) throw new Error("Launcher was edited; retained: " + file);
     }
+    if (process.platform === "win32") await replace(await storePath(home, ".uninstall-request.txt", true), token!);
     for (const name of Object.keys(record.launchers)) await fs.rm(await storePath(record.bin, name), { force: true });
   });
-  if (process.platform === "win32") {
-    // Windows locks the running node.exe. Remove the owned installation after exit.
-    // Detached PowerShell needs a console handle even without a visible window:
-    // https://github.com/nodejs/node/issues/51018
-    const status = await storePath(home, ".uninstall-status.txt");
-    await fs.rm(status, { force: true });
-    const script = `$ErrorActionPreference = 'Stop'; try {
-      [IO.File]::WriteAllText(${psQuote(status)}, 'waiting');
-      Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue;
-      [IO.File]::WriteAllText(${psQuote(status)}, 'removing');
-      Remove-Item -LiteralPath ${psQuote(home)} -Recurse -Force
-    } catch { [IO.File]::WriteAllText(${psQuote(status)}, 'failed: ' + $_.Exception.Message); exit 1 }`;
-    const child = spawn("conhost.exe", ["--headless", "powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
-      { detached: true, stdio: "ignore", windowsHide: true });
-    let failure: Error | undefined;
-    child.once("error", error => { failure = error; });
-    child.once("exit", code => { failure = new Error("Windows cleanup process exited before acknowledgement: " + code); });
-    try {
-      const deadline = Date.now() + 15000;
-      while (true) {
-        if (failure) throw failure;
-        const progress = await fs.readFile(status, "utf8").catch(error => { if (error.code === "ENOENT") return null; throw error; });
-        if (progress === "waiting") break;
-        if (progress || Date.now() >= deadline) throw new Error("Windows cleanup did not start: " + (progress ?? home));
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    } finally { child.unref(); }
-  } else await fs.rm(home, { recursive: true, force: true });
+  // The Windows launcher supervises Node and removes its locked executable only
+  // after this process exits. Its exit status includes cleanup failures. Detached
+  // PowerShell did not start reliably: https://github.com/nodejs/node/issues/51018
+  if (process.platform !== "win32") await fs.rm(home, { recursive: true, force: true });
   return home;
 }

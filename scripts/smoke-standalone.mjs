@@ -184,11 +184,8 @@ try {
   assert(refused && refused.message.includes('unrelated or edited launcher'));
   await fs.writeFile(launcher, record.launchers[path.basename(launcher)], { mode: 0o755 });
   await mason('uninstall');
-  console.log('Uninstall returned; waiting for deferred Windows runtime cleanup…');
-  for (let i = 0; i < 240 && await fs.access(home).then(() => true, () => false); i++) await new Promise(resolve => setTimeout(resolve, 250));
   const remaining = await fs.readdir(home, { recursive: true }).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-  const cleanupStatus = await fs.readFile(path.join(home, '.uninstall-status.txt'), 'utf8').catch(() => 'unavailable');
-  assert(remaining === null, `Installation cleanup ${cleanupStatus}; left ${remaining?.length} entries: ${remaining?.slice(0, 20).join(', ')}`);
+  assert(remaining === null, `Uninstall returned with ${remaining?.length} entries remaining: ${remaining?.slice(0, 20).join(', ')}`);
   await context('codex'); await hook('codex', 'Stop');
   console.log('Corrupt upgrade and edited launcher rejected; uninstall retained working project runtimes.');
   console.log(`Standalone smoke passed on ${target}. Native host trust/activation UI is outside this protocol test.`);

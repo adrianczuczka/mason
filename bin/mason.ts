@@ -37,7 +37,7 @@ try {
       const { upgradeStandalone, uninstallStandalone } = await import("../src/distribution/install.js");
       if (args.length > (command === "upgrade" ? 1 : 0)) throw new Error("Unexpected arguments.");
       if (command === "upgrade") process.exitCode = await upgradeStandalone(args[0]);
-      else console.log((process.platform === "win32" ? "Removed launchers; runtime cleanup is scheduled after exit: " : "Removed standalone installation: ") + await uninstallStandalone() + ". Project configurations and pinned runtimes were retained.");
+      else console.log((process.platform === "win32" ? "Finishing installation cleanup after runtime exit: " : "Removed standalone installation: ") + await uninstallStandalone() + ". Project configurations and pinned runtimes were retained.");
     }
   } else if (["setup", "status", "check", "auto"].includes(command)) {
     const forwarded = command === "auto" ? args : [command, ...args];
