@@ -2,43 +2,48 @@
   "version": 2,
   "id": "detached-windows-powershell-can-exit-before-cleanup-starts",
   "title": "Detached Windows PowerShell can exit before cleanup starts",
-  "body": "Native Windows x64 and ARM64 CI on 2026-09-07 reproduced a silent uninstall failure: spawning PowerShell with detached:true and ignored stdio returned successfully, but the full installation remained even after a 60-second wait. Installer, MCP, hooks and upgrades had already passed. Node issue #51018 describes PowerShell terminating without an attached console; its suggested conhost.exe --headless workaround also exited before acknowledgement in our native CI. Keeping the installed PowerShell launcher alive to supervise Node allowed removal after Node exited, but the batch launcher then failed by reading its next line from its now-deleted file. Keep the batch exit on the same parsed line as the child invocation and verify both successful self-removal and propagation of a failing CLI exit status. Verify actual directory removal at command completion; successful spawn or a longer sleep is not cleanup evidence. Keep copied project runtimes outside the user-installation cleanup scope. The subsequent native regression check also showed that bare EXIT /B on that line masked a failing CLI status as success; explicitly preserve Mason's 0/1/2 contract with runtime ERRORLEVEL checks.",
+  "body": "Native Windows x64 and ARM64 CI on 2026-09-07 reproduced a silent uninstall failure: detached PowerShell with ignored stdio returned successfully, but the installation remained after a 60-second wait. Installer, MCP, hooks and upgrades had passed. Node issue #51018 describes PowerShell terminating without a console; the suggested conhost.exe --headless variant also exited before acknowledgement in our CI. Supervising Node from the installed PowerShell launcher allowed cleanup after Node exited, but returning into a now-deleted batch file caused another failure. Bare EXIT /B masked a failing CLI status, while explicit ERRORLEVEL branches still attempted to reopen the deleted batch file. The proposed launcher uses npm cmd-shim's handoff out of batch context before calling PowerShell. Keep the native regression for exit codes 0/1/2 and removal of the executing launcher, plus the full packaged uninstall test. Verify directory removal at command completion; successful spawn or a longer sleep is not cleanup evidence. Copied project runtimes must remain outside user-installation cleanup.",
   "category": "gotcha",
   "files": [
     "src/distribution/install.ts",
     "scripts/smoke-standalone.mjs"
   ],
   "createdAt": "2026-09-07T09:14:55.478Z",
-  "updatedAt": "2026-09-07T09:38:53.582Z",
+  "updatedAt": "2026-09-07T09:51:12.678Z",
   "refreshedHash": "3836ee0ef062d7ee998aa2c2a301e4cbf8507cf0",
   "status": "active",
   "approval": "proposed",
-  "revision": 4,
+  "revision": 5,
   "sources": [
     {
       "kind": "incident",
       "reference": "https://github.com/adrianczuczka/mason/actions/runs/34103725754",
-      "note": "Native Windows retained the full installation after the bounded uninstall wait."
+      "note": "Native Windows retained the installation after the bounded cleanup wait."
     },
     {
       "kind": "incident",
       "reference": "https://github.com/adrianczuczka/mason/actions/runs/34104813516",
-      "note": "The headless-console variant failed its startup acknowledgement."
-    },
-    {
-      "kind": "incident",
-      "reference": "https://github.com/adrianczuczka/mason/actions/runs/34105859947",
-      "note": "Supervised cleanup removed the installation; the executing batch launcher then reported its file missing."
-    },
-    {
-      "kind": "issue",
-      "reference": "https://github.com/nodejs/node/issues/51018",
-      "note": "Upstream reproduction and discussion of detached PowerShell console requirements."
+      "note": "The headless-console variant failed startup acknowledgement."
     },
     {
       "kind": "incident",
       "reference": "https://github.com/adrianczuczka/mason/actions/runs/34106712517",
-      "note": "The early batch-launcher regression received exit 0 for an invalid Mason command expected to exit 2."
+      "note": "The batch wrapper masked an invalid command's exit status."
+    },
+    {
+      "kind": "incident",
+      "reference": "https://github.com/adrianczuczka/mason/actions/runs/34107206932",
+      "note": "Explicit batch exit branches still reported the removed launcher missing after successful cleanup."
+    },
+    {
+      "kind": "issue",
+      "reference": "https://github.com/nodejs/node/issues/51018",
+      "note": "Upstream detached PowerShell console requirements."
+    },
+    {
+      "kind": "document",
+      "reference": "https://github.com/npm/cmd-shim/blob/main/lib/index.js",
+      "note": "Established batch-context handoff used by npm's Windows shims."
     }
   ],
   "history": [
@@ -185,6 +190,56 @@
             "kind": "incident",
             "reference": "https://github.com/adrianczuczka/mason/actions/runs/34106712517",
             "note": "The early batch-launcher regression received exit 0 for an invalid Mason command expected to exit 2."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "3836ee0ef062d7ee998aa2c2a301e4cbf8507cf0"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-07T09:51:12.678Z",
+      "actor": "Codex",
+      "revision": 5,
+      "content": {
+        "title": "Detached Windows PowerShell can exit before cleanup starts",
+        "body": "Native Windows x64 and ARM64 CI on 2026-09-07 reproduced a silent uninstall failure: detached PowerShell with ignored stdio returned successfully, but the installation remained after a 60-second wait. Installer, MCP, hooks and upgrades had passed. Node issue #51018 describes PowerShell terminating without a console; the suggested conhost.exe --headless variant also exited before acknowledgement in our CI. Supervising Node from the installed PowerShell launcher allowed cleanup after Node exited, but returning into a now-deleted batch file caused another failure. Bare EXIT /B masked a failing CLI status, while explicit ERRORLEVEL branches still attempted to reopen the deleted batch file. The proposed launcher uses npm cmd-shim's handoff out of batch context before calling PowerShell. Keep the native regression for exit codes 0/1/2 and removal of the executing launcher, plus the full packaged uninstall test. Verify directory removal at command completion; successful spawn or a longer sleep is not cleanup evidence. Copied project runtimes must remain outside user-installation cleanup.",
+        "category": "gotcha",
+        "files": [
+          "src/distribution/install.ts",
+          "scripts/smoke-standalone.mjs"
+        ],
+        "sources": [
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34103725754",
+            "note": "Native Windows retained the installation after the bounded cleanup wait."
+          },
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34104813516",
+            "note": "The headless-console variant failed startup acknowledgement."
+          },
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34106712517",
+            "note": "The batch wrapper masked an invalid command's exit status."
+          },
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34107206932",
+            "note": "Explicit batch exit branches still reported the removed launcher missing after successful cleanup."
+          },
+          {
+            "kind": "issue",
+            "reference": "https://github.com/nodejs/node/issues/51018",
+            "note": "Upstream detached PowerShell console requirements."
+          },
+          {
+            "kind": "document",
+            "reference": "https://github.com/npm/cmd-shim/blob/main/lib/index.js",
+            "note": "Established batch-context handoff used by npm's Windows shims."
           }
         ]
       },
