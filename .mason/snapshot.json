@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-07T11:32:57.725Z",
-  "gitHash": "70ebce56a1f8f0aad8b0332b9ae557eb3790a225",
+  "updatedAt": "2026-09-07T12:48:07.086Z",
+  "gitHash": "506b8332b0f22f4fb2efe25d006ca11ea52a48ff",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including explicit unified project setup and automation status/checks. Configured get_context calls record local activation observations without storing prompts.",
@@ -478,7 +478,7 @@
       "refreshedHash": "70ebce56a1f8f0aad8b0332b9ae557eb3790a225"
     },
     "standalone distribution": {
-      "description": "Builds verified bundles with pinned Node and dependencies, installs owned user launchers, and configures user PATH with tracked shell/registry additions. Upgrades retain project pins; uninstall preserves other settings and edited PATH blocks. Native CI checks fresh-terminal discovery, MCP/hooks, repair evidence, upgrades, clones and cleanup.",
+      "description": "Builds verified bundles with pinned Node and dependencies, installs owned user launchers, and configures user PATH with tracked shell/registry additions. Setup instructions use the inherited PATH to request a new terminal only when needed. Upgrades retain project pins; uninstall preserves other settings and edited PATH blocks. Native CI checks fresh-terminal discovery, MCP/hooks, repair evidence, upgrades, clones and cleanup.",
       "files": [
         "src/distribution/bundle.ts",
         "src/distribution/install.ts",
@@ -497,7 +497,7 @@
         "test/distribution-path.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "70ebce56a1f8f0aad8b0332b9ae557eb3790a225"
+      "refreshedHash": "506b8332b0f22f4fb2efe25d006ca11ea52a48ff"
     }
   },
   "flows": {
