@@ -5,7 +5,11 @@ on:
     tags: ["v*"]
 
 jobs:
+  standalone:
+    uses: ./.github/workflows/standalone.yml
+
   publish:
+    needs: standalone
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,8 +24,29 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
+      - name: Verify release version
+        run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + JSON.parse(require("fs").readFileSync("package.json")).version) process.exit(1)'
       - run: npm test
       - run: NODE_AUTH_TOKEN="" npm publish --provenance --access public
+
+  downloads:
+    needs: [standalone, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: standalone-*
+          path: .standalone-release
+          merge-multiple: true
+      - run: node scripts/publish-standalone.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   smithery:
     needs: publish

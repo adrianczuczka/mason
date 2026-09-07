@@ -24,7 +24,9 @@
     "bench:validate": "node bench/harness/run-patches.mjs --validate",
     "bench:automation": "node bench/harness/run-automation.mjs",
     "test:watch": "vitest",
-    "pack:mcpb": "node scripts/pack-mcpb.mjs"
+    "pack:mcpb": "node scripts/pack-mcpb.mjs",
+    "pack:standalone": "node scripts/build-standalone.mjs",
+    "test:standalone": "node scripts/smoke-standalone.mjs"
   },
   "keywords": [
     "mcp",

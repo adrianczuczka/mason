@@ -30,16 +30,16 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
     const existing = await loadSetup(ws.root);
     const previousReceipt = await loadSetupReceipt(ws.root, ws.directory, host);
     const marker = await loadProjectMarker(ws.root);
-    // Preflight every edit before npm runs or shared project files are changed.
+    const selected = await sourceRuntime();
+    // Preflight every edit before runtime installation or shared files change.
     const instructions = await instructionEdits(ws.root, host);
-    const mcp = await mcpEdit(ws.root, host);
-    const hooks = await hookEdits(ws.root, host);
+    const mcp = await mcpEdit(ws.root, host, selected.runtime);
+    const hooks = await hookEdits(ws.root, host, selected.runtime);
     const ancillary = await ancillaryEdits(ws.root);
     const edits = [...ancillary, ...instructions, mcp, ...hooks];
     const setupBefore = await readText(ws.root, ".mason/setup.json");
-    const selected = await sourceRuntime();
-    const mcpFingerprint = hash((await inspectHostConfig(ws.root, host, mcp.after)).mcp);
-    const desiredHooks = hookConfig(host, hookCommand(host)).hooks;
+    const mcpFingerprint = hash((await inspectHostConfig(ws.root, host, mcp.after, selected.runtime)).mcp);
+    const desiredHooks = hookConfig(host, hookCommand(host, selected.runtime)).hooks;
     const fingerprint = hash({ runtime: selected.runtime, launcher: LAUNCHER,
       mcp: mcpFingerprint, hooks: desiredHooks,
       instructions: instructions.map(edit => edit.path) });
@@ -59,6 +59,10 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
     await writeStoreJson(ws.root, receiptPath, { version: 1, host, status: "installing", initialReportPath,
       initialBaselinePaths, root: ws.root, revision });
     await installRuntime(ws.root, selected);
+    if (selected.runtime.bundle) {
+      const pointer = `.mason/runtime/${host}.txt`;
+      await applyEdit(ws.root, { path: pointer, before: await readText(ws.root, pointer), after: selected.runtime.id + "\n" });
+    }
     const changedFiles: string[] = [];
     for (const edit of edits) if (await applyEdit(ws.root, edit)) changedFiles.push(edit.path);
     if (await applyEdit(ws.root, { path: ".mason/setup.json", before: setupBefore, after: JSON.stringify(setup, null, 2) + "\n" })) changedFiles.push(".mason/setup.json");
@@ -68,7 +72,7 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
     }
     // Ensure a repo that initially had no instructions now has a baseline too.
     const checked = await automate(ws.root, { event: "turn_start" });
-    const configured = await inspectHostConfig(ws.root, host);
+    const configured = await inspectHostConfig(ws.root, host, undefined, selected.runtime);
     await writeStoreJson(ws.root, receiptPath, { version: 1, host, status: "configured", initialReportPath,
       initialBaselinePaths, root: ws.root, revision, configuredAt: new Date().toISOString() });
     return { version: 1, action: "setup", status: "configured", host, root: ws.root,

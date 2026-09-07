@@ -7,7 +7,8 @@ import { hookConfig } from "../automation/adapters.js";
 import { configPath, automationConfigSchema } from "../automation/install.js";
 import type { Host } from "../automation/store.js";
 import { readText, managedBlock, type FileEdit } from "./files.js";
-import { hookCommand, LAUNCHER, mcpCommand } from "./launcher.js";
+import { hookCommand, LAUNCHER, mcpCommand, SHELL_LAUNCHER, POWERSHELL_LAUNCHER } from "./launcher.js";
+import type { Runtime } from "./model.js";
 
 const object = z.record(z.unknown());
 export const mcpPath = (host: Host) => host === "codex" ? ".codex/config.toml" : ".mcp.json";
@@ -39,24 +40,24 @@ export async function instructionEdits(root: string, host?: Host) {
 }
 
 /** Retain host options and environment; replace only transport/launch details. */
-function managedMcp(previous: unknown, host: Host) {
+function managedMcp(previous: unknown, host: Host, runtime?: Runtime) {
   const options = previous === undefined ? {} : object.parse(previous);
   for (const key of ["command", "args", "url", "type", "headers", "http_headers", "env_http_headers", "bearer_token_env_var"]) delete options[key];
-  return { ...options, ...mcpCommand(host) };
+  return { ...options, ...mcpCommand(host, runtime) };
 }
 
-export async function mcpEdit(root: string, host: Host): Promise<FileEdit> {
+export async function mcpEdit(root: string, host: Host, runtime?: Runtime): Promise<FileEdit> {
   const file = mcpPath(host), before = await readText(root, file);
   if (host === "claude") {
     const config = before === null ? {} : object.parse(JSON.parse(before));
     const servers = object.parse(config.mcpServers ?? {});
     // Mason owns only its named server; other servers and settings retain their values.
-    return { path: file, before, after: JSON.stringify({ ...config, mcpServers: { ...servers, mason: managedMcp(servers.mason, host) } }, null, 2) + "\n" };
+    return { path: file, before, after: JSON.stringify({ ...config, mcpServers: { ...servers, mason: managedMcp(servers.mason, host, runtime) } }, null, 2) + "\n" };
   }
   const config = parse(before ?? "");
   const managed = (before ?? "").includes(TOML_START);
   const servers = config.mcp_servers as Record<string, unknown> | undefined;
-  const desired = managedMcp(servers?.mason, host);
+  const desired = managedMcp(servers?.mason, host, runtime);
   let base = before ?? "";
   if (servers?.mason && !managed) {
     // Migrate ordinary explicit tables without reserializing the rest of TOML.
@@ -74,10 +75,10 @@ export async function mcpEdit(root: string, host: Host): Promise<FileEdit> {
   return { path: file, before, after };
 }
 
-export async function hookEdits(root: string, host: Host): Promise<FileEdit[]> {
+export async function hookEdits(root: string, host: Host, runtime?: Runtime): Promise<FileEdit[]> {
   const file = configPath(host), before = await readText(root, file);
   const { planAutomationInstall } = await import("../automation/install.js");
-  const plan = await planAutomationInstall(root, host, hookCommand(host));
+  const plan = await planAutomationInstall(root, host, hookCommand(host, runtime));
   return [{ path: file, before, after: JSON.stringify(plan.config, null, 2) + "\n" },
     { path: ".mason/automation.json", before: await readText(root, ".mason/automation.json"), after: JSON.stringify(plan.record, null, 2) + "\n" }];
 }
@@ -89,17 +90,19 @@ export async function ancillaryEdits(root: string) {
   try { parentIgnored = !!(await git(root, "check-ignore", "--no-index", ".mason")).trim(); }
   catch (error) { if ((error as { code?: number }).code !== 1) throw error; }
   const retainParentRule = parentIgnored || !!ignore?.replace(/\r\n/g, "\n").includes("# mason:ignore:start\n!/.mason/\n/.mason/*");
-  const rules = [...(retainParentRule ? ["!/.mason/", "/.mason/*"] : []), "!/.mason/decisions/", "!/.mason/decisions/**", "!/.mason/setup.json", "!/.mason/automation.json", "!/.mason/project.json", "!/.mason/run.cjs", "/.mason/reports/", "/.mason/runtime/"].join("\n");
+  const rules = [...(retainParentRule ? ["!/.mason/", "/.mason/*"] : []), "!/.mason/decisions/", "!/.mason/decisions/**", "!/.mason/setup.json", "!/.mason/automation.json", "!/.mason/project.json", "!/.mason/run.cjs", "!/.mason/run.sh", "!/.mason/run.ps1", "/.mason/reports/", "/.mason/runtime/"].join("\n");
   return [{ path: ".gitignore", before: ignore, after: managedBlock(ignore ?? "", "# mason:ignore:start", "# mason:ignore:end", rules) },
-    { path: ".mason/run.cjs", before: await readText(root, ".mason/run.cjs"), after: LAUNCHER }];
+    { path: ".mason/run.cjs", before: await readText(root, ".mason/run.cjs"), after: LAUNCHER },
+    { path: ".mason/run.sh", before: await readText(root, ".mason/run.sh"), after: SHELL_LAUNCHER },
+    { path: ".mason/run.ps1", before: await readText(root, ".mason/run.ps1"), after: POWERSHELL_LAUNCHER }];
 }
 
-export async function inspectHostConfig(root: string, host: Host, plannedMcp?: string) {
+export async function inspectHostConfig(root: string, host: Host, plannedMcp?: string, runtime?: Runtime) {
   const text = plannedMcp ?? await readText(root, mcpPath(host));
   const config = host === "codex" ? parse(text ?? "") : object.parse(JSON.parse(text ?? "{}"));
   const servers = (host === "codex" ? config.mcp_servers : config.mcpServers) as Record<string, unknown> | undefined;
   const hooks = automationConfigSchema.parse(JSON.parse(await readText(root, configPath(host)) ?? "{}"));
-  const expected = hookConfig(host, hookCommand(host));
+  const expected = hookConfig(host, hookCommand(host, runtime));
   const mcp = servers?.mason === undefined ? null : object.parse(servers.mason);
   return { mcp, mcpDisabled: mcp?.enabled === false, hooks: Object.fromEntries(Object.keys(expected.hooks).map(event => [event,
     (hooks.hooks?.[event] ?? []).flatMap(group => group.hooks.filter(handler => handler.command === expected.hooks.SessionStart[0].hooks[0].command).map(handler => ({ ...group, hooks: [handler] })) ?? [])])),

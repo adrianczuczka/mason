@@ -1,0 +1,51 @@
+name: Standalone distributions
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+    paths: ['src/**', 'bin/**', 'scripts/**', 'install.*', 'package*.json', 'tsup.config.ts', '.github/workflows/standalone.yml']
+  push:
+    branches: [main]
+    paths: ['src/**', 'bin/**', 'scripts/**', 'install.*', 'package*.json', 'tsup.config.ts', '.github/workflows/standalone.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, target: darwin-arm64 }
+          - { runner: macos-15-intel, target: darwin-x64 }
+          - { runner: ubuntu-24.04, target: linux-x64 }
+          - { runner: ubuntu-24.04-arm, target: linux-arm64 }
+          - { runner: windows-2025, target: win32-x64 }
+          - { runner: windows-11-arm, target: win32-arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          architecture: ${{ contains(matrix.target, 'arm64') && 'arm64' || 'x64' }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run pack:standalone -- --target ${{ matrix.target }}
+      - name: Installer, MCP, hooks, upgrades and uninstall without system Node/npm
+        run: npm run test:standalone
+      - uses: actions/upload-artifact@v4
+        with:
+          name: standalone-${{ matrix.target }}
+          path: |
+            .standalone/mason-${{ matrix.target }}.tar.gz
+            .standalone/mason-${{ matrix.target }}.tar.gz.sha256
+            .standalone/mason-${{ matrix.target }}.zip
+            .standalone/mason-${{ matrix.target }}.zip.sha256
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7

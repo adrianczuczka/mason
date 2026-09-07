@@ -14,6 +14,8 @@ Works through MCP, with automatic documentation checks for **Codex** and **Claud
 
 ## Get started
 
+Standalone installers are being prepared for the next release. [Preview and source-build guide](docs/distribution.md)
+
 Run this in your Git repository:
 
 ```bash

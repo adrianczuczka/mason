@@ -7,7 +7,7 @@ import { hookConfig } from "../automation/adapters.js";
 import { loadSetup, loadSetupReceipt } from "./model.js";
 import { verifyRuntime } from "./runtime.js";
 import { inspectHostConfig, instructionEdits } from "./config.js";
-import { LAUNCHER, hookCommand, mcpCommand } from "./launcher.js";
+import { LAUNCHER, SHELL_LAUNCHER, POWERSHELL_LAUNCHER, hookCommand, mcpCommand } from "./launcher.js";
 import { readText } from "./files.js";
 import { readObservation } from "./observations.js";
 
@@ -24,18 +24,22 @@ export async function setupStatus(dir: string) {
   }
   const hosts: Record<string, { status: string; runtime: string; mcp: string; instructions: string; hookConfiguration: string;
     observedEvents: string[]; contextCalls: number; verificationStatus: string; pending: string[] }> = {};
-  const launcherCurrent = await readText(ws.root, ".mason/run.cjs") === LAUNCHER;
+  const commonLauncherCurrent = await readText(ws.root, ".mason/run.cjs") === LAUNCHER;
   const automation = await automationStatus(ws.root);
   for (const host of ["codex", "claude"] as const) {
     const entry = setup.hosts[host];
     if (!entry) continue;
+    const launcherCurrent = commonLauncherCurrent && (!entry.runtime.bundle ||
+      await readText(ws.root, ".mason/run.sh") === SHELL_LAUNCHER &&
+      await readText(ws.root, ".mason/run.ps1") === POWERSHELL_LAUNCHER &&
+      await readText(ws.root, `.mason/runtime/${host}.txt`) === entry.runtime.id + "\n");
     const instructions = await instructionEdits(ws.root, host);
     const instructionsCurrent = instructions.every(edit => edit.before === edit.after);
     const installed = await verifyRuntime(ws.root, entry.runtime);
-    const config = await inspectHostConfig(ws.root, host);
+    const config = await inspectHostConfig(ws.root, host, undefined, entry.runtime);
     const mcp = !config.mcpDisabled && hash(config.mcp) === entry.mcpFingerprint &&
-      isDeepStrictEqual({ command: config.mcp?.command, args: config.mcp?.args }, mcpCommand(host));
-    const hooks = isDeepStrictEqual(config.hooks, hookConfig(host, hookCommand(host)).hooks) && !config.disabled;
+      isDeepStrictEqual({ command: config.mcp?.command, args: config.mcp?.args }, mcpCommand(host, entry.runtime));
+    const hooks = isDeepStrictEqual(config.hooks, hookConfig(host, hookCommand(host, entry.runtime)).hooks) && !config.disabled;
     const local = await loadSetupReceipt(ws.root, ws.directory, host);
     const configured = local?.status === "configured" && local.root === ws.root && local.revision === entry.revision;
     const observation = await readObservation(ws.root, ws.directory, host, entry.revision);

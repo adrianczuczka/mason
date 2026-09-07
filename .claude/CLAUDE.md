@@ -19,7 +19,7 @@ Mason exposes an MCP server and standalone deterministic CLIs. Entry points:
 - **mason-auto** (`bin/mason-auto.ts` → `src/automation/cli.ts`) — shared documentation automation with Claude Code and Codex lifecycle adapters. Retains baselines per worktree/branch, resumes repairs, caches checks by dependencies, and reports configured hooks separately from observed events. `setup --host codex|claude` invokes shared onboarding under `src/setup/`: pinned private runtime, MCP, hooks, instructions, and pre-edit audit evidence. `status` is read-only and reports configured versus observed activation; `check` writes local evidence and exits 0 verified / 1 issues / 2 incomplete.
 - **mason-hook** (`bin/mason-hook.ts` → `src/hook/cli.ts`) — Claude Code PostToolUse hook: injects decision records anchored to the file a session just read or edited; deterministic, per-session deduped, silent on no match (this repo dogfoods it via `.claude/settings.json`)
 - **mason-review** (`bin/mason-review.ts` → `src/review/cli.ts`) — diff review vs a base ref: flags absent historical co-change partners and touched decisions. Optional CI evidence imports preserve outcomes and provenance. Exit 0 no missing partners / 1 missing partners / 2 error; `--require-evidence` additionally gates on current, complete passing checks.
-- **mason** (`bin/mason.ts`) — deprecation shim that prints a migration message
+- **mason** (`bin/mason.ts`) — unified setup/status/check/audit/review/drift/MCP CLI, plus standalone upgrade/uninstall; dedicated binaries remain supported
 
 ### Core Modules
 
@@ -44,6 +44,7 @@ src/
 │   ├── provenance.ts   # Validated history, approval, sources, owner, shared guidance
 │   ├── review.ts       # Prepared evidence and authorized verdicts with conflict checks
 │   └── drift.ts        # Committed and local anchor freshness
+├── distribution/       # Standalone bundle validation and user installation lifecycle
 ├── drift/
 │   ├── drift.ts        # computeDrift — per-entry staleness vs git HEAD
 │   └── cli.ts          # mason-drift CLI (arg parsing, summary, exit codes)
@@ -90,6 +91,8 @@ npm test               # Run tests (vitest run)
 npm run test:evidence  # Run tests and record artifacts for mason-review
 npm run typecheck      # Check TypeScript without emitting files
 npm run test:watch     # Run tests in watch mode
+npm run pack:standalone # Bundle the current platform with a pinned Node runtime
+npm run test:standalone # Packaged installer/MCP/hooks smoke test without system Node/npm
 ```
 
 ## Code Conventions
@@ -108,7 +111,7 @@ npm run test:watch     # Run tests in watch mode
 - Benchmarks live in `bench/` — `bench/harness/` drives real headless claude sessions in baseline-vs-mason arms (superseded older deepeval harness sits in `bench/tests/`)
 - `bench/harness/run-patches.mjs` evaluates actual patches using the built-in Claude driver or a custom JSON agent adapter. `bench/harness/patches/` owns controlled tasks, fixtures, held-out grading, and reports. `npm run bench:validate` is offline; live runs use model calls. Never describe reference-patch validation as agent-performance evidence.
 - `bench/harness/run-automation.mjs` evaluates ordinary rename and control requests across Claude Code and Codex; `bench/harness/automation/` owns fixtures, real host sessions, and grading. `npm run bench:automation -- --validate` replays lifecycle events offline; `--live` uses actual hosts, preserving transcripts and configuration/activation evidence. The original patch harness still disables hooks for its controlled comparison.
-- Repository scripts live in `scripts/`; `scripts/pack-mcpb.mjs` builds the MCP bundle. `scripts/test-evidence.mjs` runs Vitest and records its actual exit status, original commit, and checkout cleanliness before/after execution for CI review. Reports under `.mason/reports/` are ignored.
+- Repository scripts live in `scripts/`; `scripts/pack-mcpb.mjs` builds the MCP bundle. `scripts/build-standalone.mjs` packages locked production dependencies and the Node runtime pinned in `scripts/standalone-node.json`; `scripts/smoke-standalone.mjs` validates the actual installers, MCP/hooks, upgrade pins, clone recovery and uninstall. Global standalone upgrades do not change project runtimes; rerun setup explicitly per host. `scripts/test-evidence.mjs` records Vitest's actual exit status, original commit, and checkout cleanliness before/after execution. Reports under `.mason/reports/` are ignored.
 - CI evidence uses a version 1 manifest with named expected checks and Vitest JSON or SARIF artifacts. Imports never execute commands or fetch URLs. Missing/invalid reports stay unavailable; stale or dirty/unknown runs never satisfy the optional gate. Imported provenance is an assertion, not authenticated execution. File matches and test pairs associate accepted decisions without asserting a violation. Review JSON stays version 1 with optional additive `evidence`; default exit codes stay unchanged.
 
 ## Concept-Map Lifecycle (key patterns)

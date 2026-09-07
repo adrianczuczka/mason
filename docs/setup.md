@@ -2,6 +2,8 @@
 
 [← Mason](../README.md)
 
+For the upcoming download-and-run installer, see [standalone distribution](distribution.md). Published 0.13.0 installations use the npm flow below.
+
 - [Unified project setup](#unified-project-setup)
 - [Automatic documentation checks (mason-auto)](#automatic-documentation-checks-mason-auto)
 - [Decision injection (mason-hook)](#decision-injection-mason-hook)
@@ -176,4 +178,4 @@ If you used Mason before v0.4.0, the standalone `mason <command>` CLI has been r
 | `mason impact File.kt` | Ask your assistant: *"what would changing File.kt affect?"* — it calls `get_impact`. |
 | `mason snapshot --install-hook` | Removed. The map auto-refreshes when the assistant detects stale state. |
 
-The package provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-auto`, `mason-hook`, and `mason-review`. Running `mason` directly prints a migration message and exits.
+The package provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-auto`, `mason-hook`, and `mason-review`. Released versions through 0.13.0 use `mason` as a migration shim. The upcoming standalone release adds `mason setup`, `status`, `check`, `audit`, `review`, `drift`, and `mcp`, while retaining the dedicated commands. The removed pre-0.4 workflows stay removed.

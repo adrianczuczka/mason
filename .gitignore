@@ -5,6 +5,8 @@ dist/
 # MCPB bundle artifacts
 *.mcpb
 .mcpb-bundle/
+.standalone/
+.standalone-release/
 
 # OS
 .DS_Store

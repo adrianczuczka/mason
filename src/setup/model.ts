@@ -4,6 +4,7 @@ import { readStoreJson } from "../utils/storage.js";
 export const runtimeSchema = z.object({
   id: z.string().regex(/^[a-f0-9]{24}$/), version: z.string().regex(/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/),
   hashes: z.record(z.string().regex(/^[a-f0-9]{64}$/)),
+  bundle: z.object({ target: z.string(), manifestHash: z.string().regex(/^[a-f0-9]{64}$/) }).optional(),
 });
 export type Runtime = z.infer<typeof runtimeSchema>;
 export const setupHostSchema = z.object({
