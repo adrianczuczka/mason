@@ -98,7 +98,7 @@ try {
   assert.equal((await mason('--version')).stdout.trim(), original.version);
   if (windows) {
     const rejected = await run('cmd.exe', ['/d', '/s', '/c', `""${path.join(bin, 'mason.cmd')}" invalid-smoke-command"`], { windowsVerbatimArguments: true, allowFailure: true });
-    assert.equal(rejected.code, 2, 'The batch launcher must preserve a failing CLI exit status.');
+    assert.equal(rejected.code, 2, 'The batch launcher must preserve a failing CLI exit status: ' + JSON.stringify(rejected));
   }
   await install(); // Idempotent download/install.
   await fs.mkdir(path.join(repo, 'src'), { recursive: true });

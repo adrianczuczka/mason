@@ -47,9 +47,9 @@ export async function installStandalone(source: string) {
     const id = bundle.manifestHash.slice(0, 24);
     const destination = await storePath(home, "versions/" + id);
     const launchers: Record<string, string> = process.platform === "win32" ? {
-      // Parse the exit before PowerShell may delete this batch file. Omitting
-      // an exit code preserves PowerShell's result without early % expansion.
-      "mason.cmd": '@echo off\r\npowershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0mason.ps1" %* & exit /b\r\n',
+      // Parse the exit before PowerShell may delete this batch file. Test
+      // ERRORLEVEL at execution time to preserve Mason's 0/1/2 status contract.
+      "mason.cmd": '@echo off\r\npowershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0mason.ps1" %* & if errorlevel 2 (exit /b 2) else if errorlevel 1 (exit /b 1) else if errorlevel 0 (exit /b 0) else exit /b 2\r\n',
       "mason.ps1": `$ErrorActionPreference = 'Stop'
 $previousToken = $env:MASON_UNINSTALL_TOKEN
 $token = [Guid]::NewGuid().ToString()
