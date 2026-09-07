@@ -26,9 +26,9 @@ Windows PowerShell:
 irm https://github.com/adrianczuczka/mason/releases/latest/download/install.ps1 | iex
 ```
 
-No Node or npm required. Git is required. Follow the installer's PATH instructions. [Platform details](docs/distribution.md) · [npm installation](docs/setup.md#unified-project-setup)
+No Node or npm required. Git is required. The installer configures PATH for Bash, Zsh, and Windows. [Platform details](docs/distribution.md) · [npm installation](docs/setup.md#unified-project-setup)
 
-Run this in your Git repository:
+Open a new terminal, then run this in your Git repository:
 
 ```bash
 mason setup --host codex

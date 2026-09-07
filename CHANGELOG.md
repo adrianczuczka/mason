@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.1 — 2026-09-07
+
+- Configure PATH automatically during standalone installation for Bash, Zsh, POSIX sh, and Windows. Supported installations finish with a simple instruction to open a new terminal and run setup.
+- Preserve existing shell settings, profile symlinks, Windows PATH entries and registry value types. Track owned additions across repeat installs and upgrades; uninstall removes unchanged additions and retains user edits.
+- Support `MASON_PROFILE` for custom shell profiles and `MASON_NO_MODIFY_PATH=1` for opt-out. Unsupported or unwritable settings receive explicit manual instructions.
+- Test fresh-terminal discovery, duplicate prevention, and PATH cleanup in native package checks. Bound retries for transient Windows test-directory locks and report smoke success only after teardown completes.
+
+Run the [installer](docs/distribution.md) again to upgrade from 0.14.0 and configure PATH. Existing project integrations remain pinned until you rerun `mason setup --host codex` or `--host claude` in each project.
+
 ## 0.14.0 — 2026-09-07
 
 Install Mason without installing Node or npm. Standalone downloads bundle the runtime for macOS, Linux, and Windows.

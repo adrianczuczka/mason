@@ -23,6 +23,10 @@ const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'mason-st
 const home = path.join(temp, "Mason's $installation"), bin = path.join(temp, 'user bin');
 const repo = path.join(temp, "project's $files"), nativeBin = path.join(temp, 'native');
 await fs.mkdir(nativeBin);
+const profileDir = path.join(temp, 'shell-profile'), profile = path.join(profileDir, process.platform === 'darwin' ? '.zshrc' : '.bashrc');
+await fs.mkdir(profileDir);
+const originalProfile = '# Existing user shell settings\n';
+await fs.writeFile(profile, originalProfile);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const resolve = command => execFileSync(windows ? 'where.exe' : '/bin/sh', windows ? [command] : ['-c', 'command -v "$1"', 'resolve', command], { encoding: 'utf8' }).trim().split(/\r?\n/)[0];
 let nativePath;
@@ -32,8 +36,9 @@ else {
   nativePath = nativeBin;
 }
 const env = { ...process.env, PATH: nativePath, MASON_HOME: home, MASON_BIN_DIR: bin, MASON_VERSION: original.version,
+  MASON_PROFILE: profile, ZDOTDIR: profileDir, SHELL: process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash',
   GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(temp, 'empty-gitconfig'), GIT_AUTHOR_NAME: 'Mason test', GIT_AUTHOR_EMAIL: 'mason@example.invalid', GIT_COMMITTER_NAME: 'Mason test', GIT_COMMITTER_EMAIL: 'mason@example.invalid' };
-for (const key of ['MASON_SETUP_ROOT', 'MASON_SETUP_HOST', 'MASON_SETUP_REVISION', 'NODE_OPTIONS', 'NODE_PATH']) delete env[key];
+for (const key of ['MASON_SETUP_ROOT', 'MASON_SETUP_HOST', 'MASON_SETUP_REVISION', 'NODE_OPTIONS', 'NODE_PATH', 'MASON_NO_MODIFY_PATH']) delete env[key];
 function run(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd: options.cwd ?? temp, env, windowsHide: true, ...options, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -67,6 +72,11 @@ const server = http.createServer(async (request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 env.MASON_RELEASE_BASE = `http://127.0.0.1:${server.address().port}`;
 const install = () => windows ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'install.ps1')]) : run('sh', [path.join(root, 'install.sh')]);
+const freshTerminal = () => windows
+  ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$env:Path = [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path; mason --version; exit $LASTEXITCODE"])
+  : process.platform === 'darwin' ? run('/bin/zsh', ['-ic', 'mason --version'])
+  : run('/bin/bash', ['--noprofile', '--rcfile', profile, '-ic', 'mason --version']);
+const userPathEntries = async () => JSON.parse((await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "ConvertTo-Json -Compress -InputObject @(([Environment]::GetEnvironmentVariable('Path','User') -split ';') | Where-Object { $_ -ceq $env:MASON_BIN_DIR })"])).stdout);
 async function context(host, directory = repo) {
   const config = host === 'codex' ? parse(await fs.readFile(path.join(directory, '.codex/config.toml'), 'utf8')).mcp_servers.mason
     : JSON.parse(await fs.readFile(path.join(directory, '.mcp.json'), 'utf8')).mcpServers.mason;
@@ -94,13 +104,20 @@ try {
   const probe = await run(windows ? 'powershell.exe' : 'sh', windows ? ['-NoProfile', '-Command', 'if ((Get-Command node,npm -ErrorAction SilentlyContinue)) { exit 1 }'] : ['-c', 'if command -v node || command -v npm; then exit 1; fi']);
   assert.equal(probe.code, 0);
   console.log('Node and npm absent from child PATH. Installing through the release installer…');
-  await install();
+  assert((await install()).stdout.includes('Open a new terminal'));
   assert.equal((await mason('--version')).stdout.trim(), original.version);
+  assert.equal((await freshTerminal()).stdout.trim(), original.version);
   if (windows) {
     const rejected = await run('cmd.exe', ['/d', '/s', '/c', `""${path.join(bin, 'mason.cmd')}" invalid-smoke-command"`], { windowsVerbatimArguments: true, allowFailure: true });
     assert.equal(rejected.code, 2, 'The batch launcher must preserve a failing CLI exit status: ' + JSON.stringify(rejected));
   }
-  await install(); // Idempotent download/install.
+  const installedProfile = await fs.readFile(profile, 'utf8');
+  await install(); // Idempotent download/install, including persistent PATH.
+  if (windows) assert.equal((await userPathEntries()).length, 1);
+  else assert.equal(await fs.readFile(profile, 'utf8'), installedProfile);
+  assert.equal((await freshTerminal()).stdout.trim(), original.version);
+  await fs.appendFile(profile, '# User settings added after installation\n');
+  console.log('Fresh terminal finds Mason automatically; repeat installation preserves PATH settings.');
   await fs.mkdir(path.join(repo, 'src'), { recursive: true });
   await git('init');
   await fs.writeFile(path.join(repo, 'src/old.ts'), 'export const answer = 42;\n');
@@ -159,6 +176,7 @@ try {
   releases.set(nextVersion, nextArchive);
   await mason('upgrade', nextVersion);
   assert.equal((await mason('--version')).stdout.trim(), nextVersion);
+  assert.equal((await freshTerminal()).stdout.trim(), nextVersion);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, '.mason/setup.json'), 'utf8')), before);
   await context('codex'); await hook('codex', 'Stop');
   const cloned = path.join(temp, 'fresh clone');
@@ -193,11 +211,18 @@ try {
   else await mason('uninstall');
   const remaining = await fs.readdir(home, { recursive: true }).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
   assert(remaining === null, `Uninstall returned with ${remaining?.length} entries remaining: ${remaining?.slice(0, 20).join(', ')}`);
+  if (windows) assert.equal((await userPathEntries()).length, 0);
+  else assert.equal(await fs.readFile(profile, 'utf8'), originalProfile + '# User settings added after installation\n');
   await context('codex'); await hook('codex', 'Stop');
   console.log('Corrupt upgrade and edited launcher rejected; uninstall retained working project runtimes.');
-  console.log(`Standalone smoke passed on ${target}. Native host trust/activation UI is outside this protocol test.`);
 } finally {
   server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
+  if (windows) {
+    // On failed tests remove only the unique temporary PATH entry. Never restore
+    // a whole captured user PATH over unrelated concurrent changes.
+    await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$p = [Environment]::GetEnvironmentVariable('Path','User'); if (($p -split ';') -ccontains $env:MASON_BIN_DIR) { [Environment]::SetEnvironmentVariable('Path', ((@($p -split ';' | Where-Object { $_ -cne $env:MASON_BIN_DIR })) -join ';'), 'User') }"]);
+  }
   if (process.env.MASON_KEEP_SMOKE) console.log('Kept smoke directory: ' + temp);
-  else await fs.rm(temp, { recursive: true, force: true });
+  else await fs.rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
+console.log(`Standalone smoke and teardown passed on ${target}. Native host trust/activation UI is outside this protocol test.`);

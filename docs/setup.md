@@ -24,8 +24,8 @@ mason status
 With npm instead (requires Node 20+ and npm):
 
 ```bash
-npx --package mason-context@0.14.0 mason setup --host codex
-npx --package mason-context@0.14.0 mason status
+npx --package mason-context@0.14.1 mason setup --host codex
+npx --package mason-context@0.14.1 mason status
 ```
 
 Run setup once for each host you use. Repeating it also upgrades an existing integration to the executing Mason version. Versions before 0.13.0 require the manual hook installation below, which remains supported. For a local source build, run `npm run build` in Mason's checkout and invoke `node dist/mason-auto.js setup --dir /absolute/path/to/project --host codex`.
@@ -53,7 +53,7 @@ Mason can preserve documentation audit evidence and resume unfinished repairs th
 Unified setup already installs these hooks. For manual npm hook installation (available from 0.12.0), install or upgrade the package in each project:
 
 ```bash
-npm install -D mason-context@0.14.0
+npm install -D mason-context@0.14.1
 npx mason-auto install --host claude   # Claude Code
 npx mason-auto install --host codex    # Codex; review/trust the hooks using /hooks
 npx mason-auto status
@@ -61,7 +61,7 @@ npx mason-auto status
 
 Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in `.mason/automation.json`. Repeating installation updates only those handlers. Keep the host configuration and `.mason/automation.json` together in version control; if you ignore all of `.mason/`, allow the installation record explicitly. Add `.mason/reports/` to your ignore rules. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
 
-When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.14.0`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
+When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.14.1`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
 
 `status` distinguishes configuration from observed events. Host versions, project trust, policy, and specialized tool paths can prevent hooks from running. Configuration alone is not evidence of automatic use. Codex requires review/trust of new or changed non-managed hooks. See the [Claude Code hook reference](https://code.claude.com/docs/en/hooks) and [Codex hook reference](https://learn.chatgpt.com/docs/hooks).
 

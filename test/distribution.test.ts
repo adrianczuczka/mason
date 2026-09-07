@@ -31,6 +31,7 @@ beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "mason-distribution-")));
   source = path.join(root, "bundle"); home = path.join(root, "install"); bin = path.join(root, "bin");
   vi.stubEnv("MASON_HOME", home); vi.stubEnv("MASON_BIN_DIR", bin);
+  vi.stubEnv("MASON_NO_MODIFY_PATH", "1");
   await fixture();
 });
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await fs.rm(root, { recursive: true, force: true }); });

@@ -38,6 +38,9 @@ jobs:
       - name: Windows batch launcher regression
         if: runner.os == 'Windows'
         run: npx vitest run test/distribution.test.ts -t 'batch launcher'
+      - name: Windows user PATH registration
+        if: runner.os == 'Windows'
+        run: npx vitest run test/distribution-path.test.ts -t 'Windows user PATH'
       - run: npm run pack:standalone -- --target ${{ matrix.target }}
       - name: Installer, MCP, hooks, upgrades and uninstall without system Node/npm
         run: npm run test:standalone

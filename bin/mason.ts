@@ -30,7 +30,7 @@ try {
     if (!selected.bundleRoot) throw new Error("This command requires a standalone bundle.");
     const { installStandalone } = await import("../src/distribution/install.js");
     const installed = await installStandalone(selected.bundleRoot);
-    console.log(`Installed Mason ${installed.version} in ${installed.home}.\nLauncher: ${installed.bin}\nAdd that directory to PATH if needed, then run: mason setup --host codex`);
+    console.log(`Installed Mason ${installed.version} in ${installed.home}.\n${installed.path.message}`);
   } else if (command === "upgrade" || command === "uninstall") {
     if (args.includes("--help")) console.log(command === "upgrade" ? "Usage: mason upgrade [version]. Project versions change only when you rerun setup." : "Usage: mason uninstall. Removes the standalone user installation; project runtimes, configuration and knowledge are retained.");
     else {

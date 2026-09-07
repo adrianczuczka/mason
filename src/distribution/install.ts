@@ -8,9 +8,11 @@ import { z } from "zod";
 import { verifyBundle } from "./bundle.js";
 import { storePath, readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { withLock } from "../automation/store.js";
+import { configurePath, removePath, pathChangeSchema } from "./path.js";
 
 const recordSchema = z.object({ format: z.literal(1), home: z.string(), bin: z.string(),
-  current: z.string().regex(/^[a-f0-9]{24}$/), version: z.string(), launchers: z.record(z.string()), previousLaunchers: z.record(z.string()).optional() });
+  current: z.string().regex(/^[a-f0-9]{24}$/), version: z.string(), launchers: z.record(z.string()), previousLaunchers: z.record(z.string()).optional(),
+  pathChanges: z.array(pathChangeSchema).optional() });
 const shQuote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 const psQuote = (s: string) => "'" + s.replace(/'/g, "''") + "'";
 // Leave batch context before invoking PowerShell, as npm's cmd-shim does. A
@@ -74,7 +76,7 @@ finally { $env:MASON_UNINSTALL_TOKEN = $previousToken }
       const old = await fs.readFile(file, "utf8").catch(error => { if (error.code === "ENOENT") return null; throw error; });
       if (old !== null && old !== previous?.launchers[name] && old !== previous?.previousLaunchers?.[name] && old !== content) throw new Error("Refusing to replace an unrelated or edited launcher: " + file);
     }
-    const receipt = { format: 1, home, bin, current: id, version: bundle.manifest.version, launchers };
+    const receipt = { format: 1, home, bin, current: id, version: bundle.manifest.version, launchers, pathChanges: previous?.pathChanges ?? [] };
     // Claim only the preflighted installation, retaining old launchers for interrupted upgrades.
     await writeStoreJson(home, "install.json", { ...receipt, previousLaunchers: previous?.previousLaunchers ?? previous?.launchers });
     const stage = await storePath(home, "versions/.install-" + randomUUID(), true);
@@ -92,7 +94,11 @@ finally { $env:MASON_UNINSTALL_TOKEN = $previousToken }
       for (const [name, content] of Object.entries(launchers)) await replace(await storePath(bin, name, true), content, 0o755);
       await writeStoreJson(home, "install.json", receipt);
     } finally { await fs.rm(stage, { recursive: true, force: true }); }
-    return { home, bin, version: bundle.manifest.version };
+    const pathResult = await configurePath(bin, receipt.pathChanges, async changes => {
+      receipt.pathChanges = changes;
+      await writeStoreJson(home, "install.json", receipt);
+    });
+    return { home, bin, version: bundle.manifest.version, path: pathResult };
   });
 }
 
@@ -133,6 +139,7 @@ export async function uninstallStandalone() {
       const actual = await fs.readFile(file, "utf8").catch(error => { if (error.code === "ENOENT") return null; throw error; });
       if (actual !== null && actual !== expected) throw new Error("Launcher was edited; retained: " + file);
     }
+    for (const warning of await removePath(record.pathChanges ?? [])) console.error(warning);
     if (process.platform === "win32") await replace(await storePath(home, ".uninstall-request.txt", true), token!);
     for (const name of Object.keys(record.launchers)) await fs.rm(await storePath(record.bin, name), { force: true });
   });
