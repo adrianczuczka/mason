@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-07T11:14:51.218Z",
-  "gitHash": "00cf8adab7305a04e23ce83a4acc701302f9e467",
+  "updatedAt": "2026-09-07T11:28:53.714Z",
+  "gitHash": "9d69b55baed0bb91c616f84fe25401e00ee113ab",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including explicit unified project setup and automation status/checks. Configured get_context calls record local activation observations without storing prompts.",
@@ -404,7 +404,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "00cf8adab7305a04e23ce83a4acc701302f9e467"
+      "refreshedHash": "9d69b55baed0bb91c616f84fe25401e00ee113ab"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -475,7 +475,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "00cf8adab7305a04e23ce83a4acc701302f9e467"
+      "refreshedHash": "9d69b55baed0bb91c616f84fe25401e00ee113ab"
     },
     "standalone distribution": {
       "description": "Builds verified bundles with pinned Node and dependencies, installs owned user launchers, and configures user PATH with tracked shell/registry additions. Upgrades retain project pins; uninstall preserves other settings and edited PATH blocks. Native CI checks fresh-terminal discovery, MCP/hooks, repair evidence, upgrades, clones and cleanup.",
@@ -497,7 +497,7 @@
         "test/distribution-path.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "00cf8adab7305a04e23ce83a4acc701302f9e467"
+      "refreshedHash": "9d69b55baed0bb91c616f84fe25401e00ee113ab"
     }
   },
   "flows": {
