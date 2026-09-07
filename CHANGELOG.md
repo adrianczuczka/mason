@@ -1,13 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.14.0 — 2026-09-07
+
+Install Mason without installing Node or npm. Standalone downloads bundle the runtime for macOS, Linux, and Windows.
 
 - Add self-contained release archives with a pinned Node runtime and locked production dependencies for macOS, Linux (glibc), and Windows on x64/arm64. Shell and PowerShell installers verify downloads and retain unrelated launchers.
 - Add `mason setup`, `status`, `check`, `audit`, `review`, `drift`, and `mcp`, plus standalone `upgrade` and `uninstall`. Existing dedicated binaries and npm installation remain supported.
 - Run standalone project MCP and hooks from copied, pinned runtimes without system Node/npm. Global upgrades leave project versions unchanged; explicit setup preserves repair evidence and resets changed activation. Fresh clones install their own runtime.
 - Gate standalone publication on native installer/MCP/hook/upgrade/uninstall smoke tests for all six targets. Protocol validation is separate from native host trust and agent-performance evidence.
 
-Standalone downloads are not yet published. See the [distribution guide](docs/distribution.md) for local builds, platform limits, and release requirements.
+See the [installation guide](docs/distribution.md). Existing npm users can continue with `npx --package mason-context@0.14.0 mason setup --host codex` (or `--host claude`), or install the standalone CLI and run `mason setup` for each host to switch its project runtime. Decision records and retained repair baselines need no migration.
 
 ## 0.13.0 — 2026-09-06
 

@@ -2,7 +2,7 @@
 
 [← Mason](../README.md)
 
-For the upcoming download-and-run installer, see [standalone distribution](distribution.md). Published 0.13.0 installations use the npm flow below.
+Install the [standalone CLI](distribution.md) to use Mason without system Node or npm. npm installation remains supported below.
 
 - [Unified project setup](#unified-project-setup)
 - [Automatic documentation checks (mason-auto)](#automatic-documentation-checks-mason-auto)
@@ -13,27 +13,34 @@ For the upcoming download-and-run installer, see [standalone distribution](distr
 
 ## Unified project setup
 
-Available from 0.13.0. Run setup from the target Git repository, choosing the assistant you use:
+Run setup from the target Git repository, choosing the assistant you use:
 
 ```bash
-npx --package mason-context@0.13.0 mason-auto setup --host codex
+mason setup --host codex
 # Use --host claude for Claude Code; add --dir /absolute/path/to/project to target another repository.
-npx --package mason-context@0.13.0 mason-auto status
+mason status
+```
+
+With npm instead (requires Node 20+ and npm):
+
+```bash
+npx --package mason-context@0.14.0 mason setup --host codex
+npx --package mason-context@0.14.0 mason status
 ```
 
 Run setup once for each host you use. Repeating it also upgrades an existing integration to the executing Mason version. Versions before 0.13.0 require the manual hook installation below, which remains supported. For a local source build, run `npm run build` in Mason's checkout and invoke `node dist/mason-auto.js setup --dir /absolute/path/to/project --host codex`.
 
-Setup retains the initial audit before editing instruction files, installs the executing Mason distribution under the ignored `.mason/runtime/` directory, and configures both MCP and lifecycle hooks to use that pinned runtime. Node 20+, npm, and Git are required; installation may download dependencies, with package scripts disabled. It does not create or change the application's npm manifest, so Kotlin, Python, and other repositories use the same flow. Ordinary hooks and MCP launches reuse the installed runtime without downloading packages.
+Setup retains the initial audit before editing instruction files, installs the executing Mason distribution under the ignored `.mason/runtime/` directory, and configures both MCP and lifecycle hooks to use that pinned runtime. Git is required. Standalone setup copies its verified bundle, including Node; npm setup downloads dependencies with package scripts disabled and uses system Node. It does not create or change the application's npm manifest, so Kotlin, Python, and other repositories use the same flow. Ordinary hooks and MCP launches reuse the installed runtime without downloading packages.
 
 Existing project guidance is preserved outside marked Mason blocks. Codex receives an `AGENTS.md` entry point; Claude Code receives or reuses a `CLAUDE.md` entry point, using a native `@AGENTS.md` import when that is the shared document (or `@../AGENTS.md` from `.claude/CLAUDE.md`). See [Claude Code memory imports](https://code.claude.com/docs/en/memory#agentsmd). Setup merges the named Mason MCP server and its recorded hooks while retaining unrelated settings and explicit disable options. It refuses malformed or ambiguous configuration and concurrent edits. Repeating the command resumes an interrupted install or updates the selected distribution without replacing the retained original audit.
 
-The project changes are reviewable together: assistant instructions, `.gitignore`, `.mason/run.cjs`, `.mason/setup.json`, `.mason/automation.json`, `.mason/project.json`, and the selected host's configuration (`.codex/config.toml` and `.codex/hooks.json`, or `.mcp.json` and `.claude/settings.json`). Ignore rules keep runtime dependencies and `.mason/reports/` local while allowing decision records and setup metadata into version control. A new clone must run setup to install its own runtime; local evidence is not copied or inferred from committed configuration.
+The project changes are reviewable together: assistant instructions, `.gitignore`, `.mason/run.cjs`, the standalone `.mason/run.sh` and `.mason/run.ps1` launchers, `.mason/setup.json`, `.mason/automation.json`, `.mason/project.json`, and the selected host's configuration (`.codex/config.toml` and `.codex/hooks.json`, or `.mcp.json` and `.claude/settings.json`). Ignore rules keep runtime dependencies and `.mason/reports/` local while allowing decision records and setup metadata into version control. A new clone must run setup to install its own runtime; local evidence is not copied or inferred from committed configuration.
 
 Finish activation in the host:
 
 1. Review the project's MCP and hook configuration through the host's native trust controls. Codex provides `/hooks` in its CLI; Claude Code requires approval for project MCP servers. Setup never changes trust on your behalf. See the [Codex hook documentation](https://learn.chatgpt.com/docs/hooks) and [Claude Code project MCP documentation](https://code.claude.com/docs/en/mcp).
 2. Start a new assistant session in that project and give it a normal task. The project instructions direct the assistant to request Mason context; hooks preserve and verify audit evidence during work.
-3. Run `mason-auto status` using the same installed build. Interactive output shows runtime/configuration health, observed events, task context requests, and verification. Use `--json` for structured output; piped status remains JSON.
+3. Run `mason status` using the same installed build. Interactive output shows runtime/configuration health, observed events, task context requests, and verification. Use `--json` for structured output; piped status remains JSON.
 
 `pending` means setup needs evidence of use. `active` requires a `get_context` call through the configured MCP server and all five lifecycle events in one session for the current setup revision and worktree/branch. `attention` identifies missing or changed configuration/runtime, disabled settings, or a failed verification attempt. Verification remains a separate result: observed activation does not prove a repair was correct or that Mason improved the task. Local receipts store counts, event names, and hashed session identifiers, not prompts or tool arguments. Higher-priority host settings can still prevent execution.
 
@@ -43,10 +50,10 @@ For an assistant already connected to this build, `mason_init` with `mode: "setu
 
 Mason can preserve documentation audit evidence and resume unfinished repairs through Claude Code or Codex lifecycle hooks. A shared engine owns the evidence, verification, and cache; each host adapter handles its event format. No concept map or model call is required for the checks.
 
-Available from 0.12.0. Install or upgrade the package in each project where you want automatic checks:
+Unified setup already installs these hooks. For manual npm hook installation (available from 0.12.0), install or upgrade the package in each project:
 
 ```bash
-npm install -D mason-context@0.13.0
+npm install -D mason-context@0.14.0
 npx mason-auto install --host claude   # Claude Code
 npx mason-auto install --host codex    # Codex; review/trust the hooks using /hooks
 npx mason-auto status
@@ -54,7 +61,7 @@ npx mason-auto status
 
 Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in `.mason/automation.json`. Repeating installation updates only those handlers. Keep the host configuration and `.mason/automation.json` together in version control; if you ignore all of `.mason/`, allow the installation record explicitly. Add `.mason/reports/` to your ignore rules. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
 
-When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.13.0`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
+When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.14.0`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
 
 `status` distinguishes configuration from observed events. Host versions, project trust, policy, and specialized tool paths can prevent hooks from running. Configuration alone is not evidence of automatic use. Codex requires review/trust of new or changed non-managed hooks. See the [Claude Code hook reference](https://code.claude.com/docs/en/hooks) and [Codex hook reference](https://learn.chatgpt.com/docs/hooks).
 
@@ -159,7 +166,7 @@ Add to your VS Code settings (`settings.json`):
 
 ## Upgrading from earlier versions
 
-**0.13.0:** Use the [unified setup command](#unified-project-setup) for each host you use, then review native trust and start a new session. Existing decision records and retained repair baselines need no migration.
+**0.14.0:** Install the [standalone CLI](distribution.md), or use the npm command above, then run setup in each project for each host you use. Global `mason upgrade` leaves existing project runtimes pinned until setup is rerun. Review changed native trust settings and start a new session. Existing decision records and retained repair baselines need no migration.
 
 **0.10.1 decision fix:** Accepted constraints remain visible while replacement revisions are proposed. Clients sharing a decision store should use a version containing this fix. See the [release notes](../CHANGELOG.md#0101--2026-09-05).
 
@@ -167,7 +174,7 @@ Add to your VS Code settings (`settings.json`):
 
 ## 0.4.0 migration
 
-If you used Mason before v0.4.0, the standalone `mason <command>` CLI has been removed. MCP tools handle assistant-driven workflows, and dedicated CLIs provide setup, audit, review, drift, and hooks.
+The pre-v0.4.0 LLM-driven CLI workflows were removed. MCP tools handle assistant-driven workflows; the current `mason` CLI provides setup and deterministic checks.
 
 | Old CLI | New flow |
 |---|---|
@@ -178,4 +185,4 @@ If you used Mason before v0.4.0, the standalone `mason <command>` CLI has been r
 | `mason impact File.kt` | Ask your assistant: *"what would changing File.kt affect?"* — it calls `get_impact`. |
 | `mason snapshot --install-hook` | Removed. The map auto-refreshes when the assistant detects stale state. |
 
-The package provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-auto`, `mason-hook`, and `mason-review`. Released versions through 0.13.0 use `mason` as a migration shim. The upcoming standalone release adds `mason setup`, `status`, `check`, `audit`, `review`, `drift`, and `mcp`, while retaining the dedicated commands. The removed pre-0.4 workflows stay removed.
+The package provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-auto`, `mason-hook`, and `mason-review`. Versions through 0.13.0 use `mason` as a migration shim. From 0.14.0, `mason` provides `setup`, `status`, `check`, `audit`, `review`, `drift`, and `mcp`, while retaining the dedicated commands. The removed pre-0.4 workflows stay removed.

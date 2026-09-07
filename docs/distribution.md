@@ -2,14 +2,15 @@
 
 [← Mason](../README.md)
 
-**Unreleased.** Version 0.13.0 on npm still requires Node and npm. Standalone downloads become available when the next release passes the native platform checks and publishes its archives. The commands below describe that release; use the source-build instructions to test the implementation now.
+From **0.14.0**, Mason provides standalone downloads with a bundled runtime. You do not need to install Node or npm. The npm distribution remains supported.
 
 ## Install
 
-macOS or Linux, once a release with standalone assets is published:
+macOS or Linux:
 
 ```sh
 curl -fsSL https://github.com/adrianczuczka/mason/releases/latest/download/install.sh | sh
+# Follow the printed PATH instructions, then run in your Git repository:
 mason setup --host codex
 # Use --host claude for Claude Code.
 mason status
@@ -19,6 +20,7 @@ Windows PowerShell:
 
 ```powershell
 irm https://github.com/adrianczuczka/mason/releases/latest/download/install.ps1 | iex
+# Follow the printed PATH instructions, then run in your Git repository:
 mason setup --host codex
 mason status
 ```

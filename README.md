@@ -14,21 +14,33 @@ Works through MCP, with automatic documentation checks for **Codex** and **Claud
 
 ## Get started
 
-Standalone installers are being prepared for the next release. [Preview and source-build guide](docs/distribution.md)
+Install on macOS or Linux:
+
+```sh
+curl -fsSL https://github.com/adrianczuczka/mason/releases/latest/download/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://github.com/adrianczuczka/mason/releases/latest/download/install.ps1 | iex
+```
+
+No Node or npm required. Git is required. Follow the installer's PATH instructions. [Platform details](docs/distribution.md) · [npm installation](docs/setup.md#unified-project-setup)
 
 Run this in your Git repository:
 
 ```bash
-npx --package mason-context@0.13.0 mason-auto setup --host codex
+mason setup --host codex
 # For Claude Code, use --host claude.
 ```
 
-Requires Node 20+, npm, and Git. Setup connects MCP, hooks, and project instructions. Review your host's trust settings, start a new session, and give your agent a normal task.
+Setup connects MCP, hooks, and project instructions. Review your host's trust settings, start a new session, and give your agent a normal task.
 
 Check that Mason is being used:
 
 ```bash
-npx --package mason-context@0.13.0 mason-auto status
+mason status
 ```
 
 Status distinguishes installed configuration from observed use. [Setup and upgrades](docs/setup.md#unified-project-setup) · [Other MCP clients](docs/setup.md#other-clients)
@@ -36,8 +48,8 @@ Status distinguishes installed configuration from observed use. [Setup and upgra
 ### Try a check without setup
 
 ```bash
-npx -p mason-context mason-audit --dir .
-npx -p mason-context mason-review --dir . --base origin/main
+mason audit --dir .
+mason review --dir . --base origin/main
 ```
 
 The audit checks claims in `AGENTS.md` and `CLAUDE.md`. The review checks committed changes against your chosen base. Both are read-only and need no model calls.
