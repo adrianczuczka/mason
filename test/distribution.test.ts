@@ -1,9 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { spawn } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { verifyBundle, sha256 } from "../src/distribution/bundle.js";
-import { installStandalone } from "../src/distribution/install.js";
+import { installStandalone, WINDOWS_BATCH_LAUNCHER } from "../src/distribution/install.js";
 import { installRuntime, verifyRuntime } from "../src/setup/runtime.js";
 
 let root: string, source: string, home: string, bin: string;
@@ -35,6 +36,27 @@ beforeEach(async () => {
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await fs.rm(root, { recursive: true, force: true }); });
 
 describe("standalone distribution integrity and ownership", () => {
+  it.skipIf(process.platform !== "win32")("preserves batch launcher exit codes when the running launcher is removed", async () => {
+    const directory = path.join(root, "batch's $files");
+    await fs.mkdir(directory);
+    const launcher = path.join(directory, "mason.cmd");
+    await fs.writeFile(path.join(directory, "mason.ps1"), `param([int]$Code, [switch]$Remove)
+if ($Remove) { Remove-Item -LiteralPath (Join-Path $PSScriptRoot 'mason.cmd') -Force }
+exit $Code
+`);
+    for (const [code, remove] of [[0, false], [1, false], [2, false], [0, true], [2, true]] as const) {
+      await fs.writeFile(launcher, WINDOWS_BATCH_LAUNCHER);
+      const result = await new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
+        const child = spawn("cmd.exe", ["/d", "/s", "/c", `""${launcher}" ${code}${remove ? " -Remove" : ""}"`],
+          { windowsVerbatimArguments: true, windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+        let stderr = "";
+        child.stderr.on("data", bytes => { stderr += bytes; });
+        child.on("error", reject); child.on("close", status => resolve({ code: status, stderr }));
+      });
+      expect(result, `code=${code}, remove=${remove}`).toEqual({ code, stderr: "" });
+      expect(await fs.access(launcher).then(() => true, () => false)).toBe(!remove);
+    }
+  }, 30000);
   it("rejects a changed dependency before creating an installation", async () => {
     await fs.writeFile(path.join(source, "app/node_modules/example/index.js"), "changed dependency");
     await expect(installStandalone(source)).rejects.toThrow("checksum mismatch");

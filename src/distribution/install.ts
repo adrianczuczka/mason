@@ -13,6 +13,10 @@ const recordSchema = z.object({ format: z.literal(1), home: z.string(), bin: z.s
   current: z.string().regex(/^[a-f0-9]{24}$/), version: z.string(), launchers: z.record(z.string()), previousLaunchers: z.record(z.string()).optional() });
 const shQuote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 const psQuote = (s: string) => "'" + s.replace(/'/g, "''") + "'";
+// Leave batch context before invoking PowerShell, as npm's cmd-shim does. A
+// continuing batch can lose the child exit code or reopen its deleted launcher.
+// https://github.com/npm/cmd-shim/blob/main/lib/index.js
+export const WINDOWS_BATCH_LAUNCHER = '@echo off\r\ngoto #_mason_handoff_# 2>NUL || title %COMSPEC% & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0mason.ps1" %*\r\n';
 export const defaultHome = () => process.env.MASON_HOME ?? (process.platform === "win32"
   ? path.join(process.env.LOCALAPPDATA ?? os.homedir(), "Mason") : path.join(os.homedir(), ".local/share/mason"));
 
@@ -47,9 +51,7 @@ export async function installStandalone(source: string) {
     const id = bundle.manifestHash.slice(0, 24);
     const destination = await storePath(home, "versions/" + id);
     const launchers: Record<string, string> = process.platform === "win32" ? {
-      // Parse the exit before PowerShell may delete this batch file. Test
-      // ERRORLEVEL at execution time to preserve Mason's 0/1/2 status contract.
-      "mason.cmd": '@echo off\r\npowershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0mason.ps1" %* & if errorlevel 2 (exit /b 2) else if errorlevel 1 (exit /b 1) else if errorlevel 0 (exit /b 0) else exit /b 2\r\n',
+      "mason.cmd": WINDOWS_BATCH_LAUNCHER,
       "mason.ps1": `$ErrorActionPreference = 'Stop'
 $previousToken = $env:MASON_UNINSTALL_TOKEN
 $token = [Guid]::NewGuid().ToString()

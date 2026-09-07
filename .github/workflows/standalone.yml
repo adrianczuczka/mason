@@ -35,6 +35,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Windows batch launcher regression
+        if: runner.os == 'Windows'
+        run: npx vitest run test/distribution.test.ts -t 'batch launcher'
       - run: npm run pack:standalone -- --target ${{ matrix.target }}
       - name: Installer, MCP, hooks, upgrades and uninstall without system Node/npm
         run: npm run test:standalone
