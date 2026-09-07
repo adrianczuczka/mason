@@ -1,0 +1,73 @@
+{
+  "version": 2,
+  "id": "same-name-powershell-helpers-shadow-windows-command-launcher",
+  "title": "Same-name PowerShell helpers shadow Windows command launchers",
+  "body": "During 0.14.1 native CI on 2026-09-07, both Windows x64 and ARM64 reproduced a first-run problem in a controlled legacy layout: typing mason selected mason.ps1 ahead of mason.cmd and failed under Restricted script policy. The corrected layout keeps the helper as mason-launcher.ps1, leaving mason.cmd as the user command; both architectures passed the policy regression after removing the legacy same-name script. Keep the public command test under Restricted policy, alongside exit-code and self-removal tests, and remove an old helper during upgrades only when its ownership bytes still match. Do not solve this by changing user or machine execution policy. The initial regression assertion incorrectly expected PSSecurityException text: with ErrorActionPreference=Stop, CI reported ParentContainsErrorRecordException with SecurityError/UnauthorizedAccess instead. Assert the policy failure and command behavior rather than one assumed exception wrapper name.",
+  "category": "gotcha",
+  "files": [
+    "src/distribution/install.ts",
+    "test/distribution.test.ts",
+    "scripts/smoke-standalone.mjs"
+  ],
+  "createdAt": "2026-09-07T11:37:46.614Z",
+  "updatedAt": "2026-09-07T11:37:46.614Z",
+  "refreshedHash": "6fb1e41b4bb8f8713c02063ee53eee729d4b5270",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "incident",
+      "reference": "https://github.com/adrianczuczka/mason/actions/runs/34116839379",
+      "note": "Both Windows legacy-layout controls failed because script execution was disabled; the assertion over-specified the exception wrapper."
+    },
+    {
+      "kind": "incident",
+      "reference": "https://github.com/adrianczuczka/mason/actions/runs/34117190878",
+      "note": "Both native Windows batch-launcher regression steps passed, including legacy failure and corrected restricted-policy invocation."
+    },
+    {
+      "kind": "document",
+      "reference": "https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies",
+      "note": "Default client policy and per-process policy scope; no persistent user/machine setting is changed."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-09-07T11:37:46.614Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Same-name PowerShell helpers shadow Windows command launchers",
+        "body": "During 0.14.1 native CI on 2026-09-07, both Windows x64 and ARM64 reproduced a first-run problem in a controlled legacy layout: typing mason selected mason.ps1 ahead of mason.cmd and failed under Restricted script policy. The corrected layout keeps the helper as mason-launcher.ps1, leaving mason.cmd as the user command; both architectures passed the policy regression after removing the legacy same-name script. Keep the public command test under Restricted policy, alongside exit-code and self-removal tests, and remove an old helper during upgrades only when its ownership bytes still match. Do not solve this by changing user or machine execution policy. The initial regression assertion incorrectly expected PSSecurityException text: with ErrorActionPreference=Stop, CI reported ParentContainsErrorRecordException with SecurityError/UnauthorizedAccess instead. Assert the policy failure and command behavior rather than one assumed exception wrapper name.",
+        "category": "gotcha",
+        "files": [
+          "src/distribution/install.ts",
+          "test/distribution.test.ts",
+          "scripts/smoke-standalone.mjs"
+        ],
+        "sources": [
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34116839379",
+            "note": "Both Windows legacy-layout controls failed because script execution was disabled; the assertion over-specified the exception wrapper."
+          },
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34117190878",
+            "note": "Both native Windows batch-launcher regression steps passed, including legacy failure and corrected restricted-policy invocation."
+          },
+          {
+            "kind": "document",
+            "reference": "https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies",
+            "note": "Default client policy and per-process policy scope; no persistent user/machine setting is changed."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "6fb1e41b4bb8f8713c02063ee53eee729d4b5270"
+    }
+  ]
+}
