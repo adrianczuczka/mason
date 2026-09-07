@@ -114,10 +114,31 @@ export async function uninstallStandalone() {
   });
   if (process.platform === "win32") {
     // Windows locks the running node.exe. Remove the owned installation after exit.
-    const script = `Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue; Remove-Item -LiteralPath ${psQuote(home)} -Recurse -Force`;
-    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
+    // Detached PowerShell needs a console handle even without a visible window:
+    // https://github.com/nodejs/node/issues/51018
+    const status = await storePath(home, ".uninstall-status.txt");
+    await fs.rm(status, { force: true });
+    const script = `$ErrorActionPreference = 'Stop'; try {
+      [IO.File]::WriteAllText(${psQuote(status)}, 'waiting');
+      Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue;
+      [IO.File]::WriteAllText(${psQuote(status)}, 'removing');
+      Remove-Item -LiteralPath ${psQuote(home)} -Recurse -Force
+    } catch { [IO.File]::WriteAllText(${psQuote(status)}, 'failed: ' + $_.Exception.Message); exit 1 }`;
+    const child = spawn("conhost.exe", ["--headless", "powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
       { detached: true, stdio: "ignore", windowsHide: true });
-    child.unref();
+    let failure: Error | undefined;
+    child.once("error", error => { failure = error; });
+    child.once("exit", code => { failure = new Error("Windows cleanup process exited before acknowledgement: " + code); });
+    try {
+      const deadline = Date.now() + 15000;
+      while (true) {
+        if (failure) throw failure;
+        const progress = await fs.readFile(status, "utf8").catch(error => { if (error.code === "ENOENT") return null; throw error; });
+        if (progress === "waiting") break;
+        if (progress || Date.now() >= deadline) throw new Error("Windows cleanup did not start: " + (progress ?? home));
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    } finally { child.unref(); }
   } else await fs.rm(home, { recursive: true, force: true });
   return home;
 }
