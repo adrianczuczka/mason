@@ -120,7 +120,7 @@ npm run test:watch     # Run tests in watch mode
 - **Scoped refresh**: `generate_snapshot_batch` with a `files` list walks only the drift set and writes a scope marker (`.mason/partial-snapshots/scope.json`); `reduce_snapshot` then merges partials into the existing map instead of rebuilding.
 - **Incremental save**: `save_snapshot` merge mode accepts `removeFeatures`/`removeFlows` for renamed/deleted features and stamps refreshed entries with HEAD while backfilling untouched entries with the previous hash.
 - **Sampler**: `src/mcp/sampler.ts` selects representative files by role (config, entry point, viewmodel, repository, service, handler, middleware, test). Configurable via project-level `.mason/config.json` with custom sampling patterns.
-- **Tool metadata lives in three places** — keep them in sync when adding/changing tools: `src/mcp/server.ts` (Zod schemas), `manifest.json` (MCPB manifest), README tools table.
+- **Tool metadata lives in three places** — keep them in sync when adding/changing tools: `src/mcp/server.ts` (Zod schemas), `manifest.json` (MCPB manifest), and the [tools table](../docs/reference.md#mcp-tools).
 
 ## LLM Provider Support
 
