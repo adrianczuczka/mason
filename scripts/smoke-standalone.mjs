@@ -183,7 +183,10 @@ try {
   const refused = await install().then(() => null, error => error);
   assert(refused && refused.message.includes('unrelated or edited launcher'));
   await fs.writeFile(launcher, record.launchers[path.basename(launcher)], { mode: 0o755 });
-  await mason('uninstall');
+  // Exercise the user-facing batch launcher too, including removal of the
+  // currently executing launcher after its Node child releases the runtime.
+  if (windows) await run('cmd.exe', ['/d', '/s', '/c', `""${path.join(bin, 'mason.cmd')}" uninstall"`], { windowsVerbatimArguments: true });
+  else await mason('uninstall');
   const remaining = await fs.readdir(home, { recursive: true }).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
   assert(remaining === null, `Uninstall returned with ${remaining?.length} entries remaining: ${remaining?.slice(0, 20).join(', ')}`);
   await context('codex'); await hook('codex', 'Stop');
