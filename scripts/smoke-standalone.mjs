@@ -28,7 +28,7 @@ const resolve = command => execFileSync(windows ? 'where.exe' : '/bin/sh', windo
 let nativePath;
 if (windows) nativePath = [path.dirname(resolve('git.exe')), path.join(process.env.SystemRoot, 'System32'), path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0')].join(path.delimiter);
 else {
-  for (const command of ['sh', 'git', 'uname', 'curl', 'grep', 'awk', 'tar', 'mktemp', 'rm', 'dirname', 'cat', ...(process.platform === 'darwin' ? ['shasum'] : ['sha256sum'])]) await fs.symlink(resolve(command), path.join(nativeBin, command));
+  for (const command of ['sh', 'git', 'uname', 'curl', 'grep', 'awk', 'tar', 'gzip', 'mktemp', 'rm', 'dirname', 'cat', ...(process.platform === 'darwin' ? ['shasum'] : ['sha256sum'])]) await fs.symlink(resolve(command), path.join(nativeBin, command));
   nativePath = nativeBin;
 }
 const env = { ...process.env, PATH: nativePath, MASON_HOME: home, MASON_BIN_DIR: bin, MASON_VERSION: original.version,
@@ -42,7 +42,10 @@ function run(command, args = [], options = {}) {
     child.on('error', reject);
     const timer = setTimeout(() => { child.kill(); reject(new Error(`Timed out: ${command} ${args.join(' ')}`)); }, 120000);
     child.on('close', code => { clearTimeout(timer); if (code !== 0 && !options.allowFailure) reject(new Error(`${command} exited ${code}: ${stderr}\n${stdout}`)); else resolve({ code, stdout, stderr }); });
-    child.stdin.end(options.input ?? '');
+    // Short-lived commands may close stdin before a write completes. Their exit
+    // status and the protocol assertions below still determine success.
+    child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
+    child.stdin.end(options.input);
   });
 }
 const mason = (...args) => windows ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(bin, 'mason.ps1'), ...args]) : run(path.join(bin, 'mason'), args);

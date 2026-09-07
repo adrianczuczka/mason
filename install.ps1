@@ -1,5 +1,6 @@
 # Download a self-contained Mason release; works in Windows PowerShell 5.1+.
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 $arch = switch ($architecture) { 'ARM64' { 'arm64' } 'AMD64' { 'x64' } default { throw "Unsupported architecture: $architecture" } }
@@ -23,7 +24,11 @@ try {
     $checksumLines = @($checksums -split "`n" | Where-Object { $_ -cmatch ('^[a-f0-9]{64}\s+' + [regex]::Escape($asset) + '\s*$') })
     if ($checksumLines.Count -ne 1) { throw 'Missing or ambiguous release checksum.' }
     $expected = ($checksumLines[0] -split '\s+')[0]
-    if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Mason archive checksum mismatch; installation unchanged.' }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($archive)
+    try { $actual = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $sha.Dispose() }
+    if ($actual -ne $expected) { throw 'Mason archive checksum mismatch; installation unchanged.' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($archive)
     try {
