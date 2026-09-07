@@ -40,7 +40,7 @@ function run(command, args = [], options = {}) {
     let stdout = '', stderr = '';
     child.stdout.on('data', b => { stdout += b; }); child.stderr.on('data', b => { stderr += b; });
     child.on('error', reject);
-    const timer = setTimeout(() => { child.kill(); reject(new Error(`Timed out: ${command} ${args.join(' ')}`)); }, 120000);
+    const timer = setTimeout(() => { child.kill(); reject(new Error(`Timed out: ${command} ${args.join(' ')}`)); }, options.timeoutMs ?? 120000);
     child.on('close', code => { clearTimeout(timer); if (code !== 0 && !options.allowFailure) reject(new Error(`${command} exited ${code}: ${stderr}\n${stdout}`)); else resolve({ code, stdout, stderr }); });
     // Short-lived commands may close stdin before a write completes. Their exit
     // status and the protocol assertions below still determine success.
@@ -78,11 +78,11 @@ async function context(host, directory = repo) {
 }
 async function hook(host, event, directory = repo) {
   const config = JSON.parse(await fs.readFile(path.join(directory, host === 'codex' ? '.codex/hooks.json' : '.claude/settings.json'), 'utf8'));
-  const command = config.hooks[event][0].hooks[0].command;
+  const handler = config.hooks[event][0].hooks[0], command = handler.command;
   const input = JSON.stringify({ cwd: directory, session_id: 'ordinary-' + host, hook_event_name: event, tool_name: 'Edit', tool_use_id: event });
   // Match Node's shell launch: cmd.exe needs the whole command quoted verbatim,
   // otherwise argument escaping inserts literal backslashes into PowerShell.
-  const output = await run(windows ? 'cmd.exe' : 'sh', windows ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command], { cwd: path.join(directory, 'src'), input, windowsVerbatimArguments: windows });
+  const output = await run(windows ? 'cmd.exe' : 'sh', windows ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command], { cwd: path.join(directory, 'src'), input, windowsVerbatimArguments: windows, timeoutMs: handler.timeout * 1000 });
   if (output.stdout.trim()) assert.doesNotThrow(() => JSON.parse(output.stdout));
   return output.stdout.trim() ? JSON.parse(output.stdout) : null;
 }
@@ -184,8 +184,10 @@ try {
   assert(refused && refused.message.includes('unrelated or edited launcher'));
   await fs.writeFile(launcher, record.launchers[path.basename(launcher)], { mode: 0o755 });
   await mason('uninstall');
-  for (let i = 0; i < 40 && await fs.access(home).then(() => true, () => false); i++) await new Promise(resolve => setTimeout(resolve, 250));
-  assert.equal(await fs.access(home).then(() => true, () => false), false);
+  console.log('Uninstall returned; waiting for deferred Windows runtime cleanup…');
+  for (let i = 0; i < 240 && await fs.access(home).then(() => true, () => false); i++) await new Promise(resolve => setTimeout(resolve, 250));
+  const remaining = await fs.readdir(home, { recursive: true }).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+  assert.equal(remaining, null, `Installation cleanup left ${remaining?.length} entries: ${remaining?.slice(0, 20).join(', ')}`);
   await context('codex'); await hook('codex', 'Stop');
   console.log('Corrupt upgrade and edited launcher rejected; uninstall retained working project runtimes.');
   console.log(`Standalone smoke passed on ${target}. Native host trust/activation UI is outside this protocol test.`);
