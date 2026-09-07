@@ -2,18 +2,18 @@
   "version": 2,
   "id": "detached-windows-powershell-can-exit-before-cleanup-starts",
   "title": "Detached Windows PowerShell can exit before cleanup starts",
-  "body": "Native Windows x64 and ARM64 CI on 2026-09-07 reproduced a silent uninstall failure: spawning PowerShell with detached:true and ignored stdio returned successfully, but the full installation remained even after a 60-second wait. Installer, MCP, hooks and upgrades had already passed. Node issue #51018 describes PowerShell terminating without an attached console; its suggested conhost.exe --headless workaround also exited before acknowledgement in our native CI. The proposed implementation therefore keeps the installed PowerShell launcher alive to supervise Node, checks a per-invocation cleanup request, and removes the user installation only after Node exits. Verify actual directory removal and the launcher's exit status in native Windows tests; successful spawn or a longer sleep is not cleanup evidence. Keep copied project runtimes outside the user-installation cleanup scope.",
+  "body": "Native Windows x64 and ARM64 CI on 2026-09-07 reproduced a silent uninstall failure: spawning PowerShell with detached:true and ignored stdio returned successfully, but the full installation remained even after a 60-second wait. Installer, MCP, hooks and upgrades had already passed. Node issue #51018 describes PowerShell terminating without an attached console; its suggested conhost.exe --headless workaround also exited before acknowledgement in our native CI. Keeping the installed PowerShell launcher alive to supervise Node allowed removal after Node exited, but the batch launcher then failed by reading its next line from its now-deleted file. Keep the batch exit on the same parsed line as the child invocation and verify both successful self-removal and propagation of a failing CLI exit status. Verify actual directory removal at command completion; successful spawn or a longer sleep is not cleanup evidence. Keep copied project runtimes outside the user-installation cleanup scope.",
   "category": "gotcha",
   "files": [
     "src/distribution/install.ts",
     "scripts/smoke-standalone.mjs"
   ],
   "createdAt": "2026-09-07T09:14:55.478Z",
-  "updatedAt": "2026-09-07T09:24:43.375Z",
+  "updatedAt": "2026-09-07T09:33:39.056Z",
   "refreshedHash": "3836ee0ef062d7ee998aa2c2a301e4cbf8507cf0",
   "status": "active",
   "approval": "proposed",
-  "revision": 2,
+  "revision": 3,
   "sources": [
     {
       "kind": "incident",
@@ -24,6 +24,11 @@
       "kind": "incident",
       "reference": "https://github.com/adrianczuczka/mason/actions/runs/34104813516",
       "note": "The headless-console variant failed its startup acknowledgement."
+    },
+    {
+      "kind": "incident",
+      "reference": "https://github.com/adrianczuczka/mason/actions/runs/34105859947",
+      "note": "Supervised cleanup removed the installation; the executing batch launcher then reported its file missing."
     },
     {
       "kind": "issue",
@@ -85,6 +90,46 @@
             "kind": "incident",
             "reference": "https://github.com/adrianczuczka/mason/actions/runs/34104813516",
             "note": "The headless-console variant failed its startup acknowledgement."
+          },
+          {
+            "kind": "issue",
+            "reference": "https://github.com/nodejs/node/issues/51018",
+            "note": "Upstream reproduction and discussion of detached PowerShell console requirements."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "3836ee0ef062d7ee998aa2c2a301e4cbf8507cf0"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-07T09:33:39.056Z",
+      "actor": "Codex",
+      "revision": 3,
+      "content": {
+        "title": "Detached Windows PowerShell can exit before cleanup starts",
+        "body": "Native Windows x64 and ARM64 CI on 2026-09-07 reproduced a silent uninstall failure: spawning PowerShell with detached:true and ignored stdio returned successfully, but the full installation remained even after a 60-second wait. Installer, MCP, hooks and upgrades had already passed. Node issue #51018 describes PowerShell terminating without an attached console; its suggested conhost.exe --headless workaround also exited before acknowledgement in our native CI. Keeping the installed PowerShell launcher alive to supervise Node allowed removal after Node exited, but the batch launcher then failed by reading its next line from its now-deleted file. Keep the batch exit on the same parsed line as the child invocation and verify both successful self-removal and propagation of a failing CLI exit status. Verify actual directory removal at command completion; successful spawn or a longer sleep is not cleanup evidence. Keep copied project runtimes outside the user-installation cleanup scope.",
+        "category": "gotcha",
+        "files": [
+          "src/distribution/install.ts",
+          "scripts/smoke-standalone.mjs"
+        ],
+        "sources": [
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34103725754",
+            "note": "Native Windows retained the full installation after the bounded uninstall wait."
+          },
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34104813516",
+            "note": "The headless-console variant failed its startup acknowledgement."
+          },
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34105859947",
+            "note": "Supervised cleanup removed the installation; the executing batch launcher then reported its file missing."
           },
           {
             "kind": "issue",
