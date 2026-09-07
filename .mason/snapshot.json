@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-07T09:13:29.863Z",
-  "gitHash": "f7899b8d3a2d1ea869b837994d0beac71634cf65",
+  "updatedAt": "2026-09-07T09:24:43.358Z",
+  "gitHash": "59071a7606e78d4537b03868006a2b619a936839",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including explicit unified project setup and automation status/checks. Configured get_context calls record local activation observations without storing prompts.",
@@ -475,7 +475,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "4feb46568488bec3ceeae44c53386a96ce4c85e6"
+      "refreshedHash": "59071a7606e78d4537b03868006a2b619a936839"
     },
     "standalone distribution": {
       "description": "Builds platform archives with pinned Node and production dependencies, verifies every shipped file, and installs owned user launchers with resumable upgrades. Project bundles stay pinned independently; native CI exercises installers, MCP, hooks, repair evidence, clone recovery and uninstall without system Node/npm.",
@@ -495,7 +495,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "f7899b8d3a2d1ea869b837994d0beac71634cf65"
+      "refreshedHash": "59071a7606e78d4537b03868006a2b619a936839"
     }
   },
   "flows": {
@@ -618,7 +618,7 @@
         "src/setup/observations.ts",
         "src/setup/status.ts"
       ],
-      "refreshedHash": "98384d7c1cfb318641409d960bc7ada6157d966e"
+      "refreshedHash": "59071a7606e78d4537b03868006a2b619a936839"
     }
   }
 }
