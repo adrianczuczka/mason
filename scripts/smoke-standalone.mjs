@@ -96,6 +96,10 @@ try {
   console.log('Node and npm absent from child PATH. Installing through the release installer…');
   await install();
   assert.equal((await mason('--version')).stdout.trim(), original.version);
+  if (windows) {
+    const rejected = await run('cmd.exe', ['/d', '/s', '/c', `""${path.join(bin, 'mason.cmd')}" invalid-smoke-command"`], { windowsVerbatimArguments: true, allowFailure: true });
+    assert.equal(rejected.code, 2, 'The batch launcher must preserve a failing CLI exit status.');
+  }
   await install(); // Idempotent download/install.
   await fs.mkdir(path.join(repo, 'src'), { recursive: true });
   await git('init');
