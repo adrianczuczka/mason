@@ -53,9 +53,42 @@ beforeEach(async () => {
     return selected.runtime;
   });
 });
-afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); await fs.rm(root, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); await fs.rm(root, { recursive: true, force: true }); }, 120000);
 
 describe("unified setup", { timeout: 20000 }, () => {
+  it("sets up with over 100,000 ignored generated paths and retains evidence for a later source change", async () => {
+    await write(".gitignore", "artifacts/\n.mason/reports/\n");
+    await commitAll(root, "ignore generated artifacts");
+    const initial = await automate(root, { event: "session_start" });
+    const baseline = initial.report.baselinePaths[0];
+    const original = await fs.readFile(path.join(root, baseline));
+    const artifacts = path.join(root, "artifacts");
+    await fs.mkdir(artifacts);
+    // Real files exercise Git pruning and the complete setup path, including
+    // the second capture after instruction/configuration edits.
+    const count = 100001;
+    await Promise.all(Array.from({ length: 64 }, async (_, worker) => {
+      for (let index = worker; index < count; index += 64) {
+        await fs.writeFile(path.join(artifacts, `generated-${index}.ts`), "");
+      }
+    }));
+    expect((await fs.readdir(artifacts)).length).toBe(count);
+    const result = await setupProject(root, { host: "codex" });
+    expect(result.status).toBe("configured");
+    expect(result.findings.audit.issues).toEqual([]);
+    const configured = await automate(root, { event: "task_end" });
+    expect(configured.report.baselinePaths).toContain(baseline);
+    await write("new-feature/main.kt", "fun feature() = true\n");
+    const changed = await automate(root, { event: "task_end" });
+    expect(changed.report.findings.some(f => f.original.type === "new-module" && f.status === "unresolved")).toBe(true);
+    await fs.appendFile(path.join(root, "AGENTS.md"), "\nThe new-feature directory contains the added capability.\n");
+    await commitAll(root, "document the new feature and commit setup metadata");
+    const verified = await automate(root, { event: "task_end" });
+    expect(verified.report.status).toBe("verified");
+    expect(verified.report.baselinePaths).toEqual(changed.report.baselinePaths);
+    expect(await fs.readFile(path.join(root, baseline))).toEqual(original);
+  }, 120000);
+
   it.each(["codex", "claude"] as const)("sets up %s in a non-npm repo and retains original evidence before instruction edits", async host => {
     const original = "The `src/missing.kt` entry point.\n";
     await write("AGENTS.md", original);

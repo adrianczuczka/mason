@@ -1,6 +1,8 @@
 import fg from "fast-glob";
+import fs from "node:fs/promises";
 import path from "node:path";
-import { SOURCE_GLOB, SOURCE_IGNORE } from "../../snapshot/snapshot.js";
+import { loadProjectConfig, SOURCE_IGNORE } from "../../utils/files.js";
+import { auditGlob, auditInputPath, gitIgnoredPaths, gitSourcePaths } from "../inputs.js";
 import { firstCommitOf } from "../git.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
@@ -51,24 +53,6 @@ function isMentioned(combinedDocs: string, name: string): boolean {
   return re.test(combinedDocs);
 }
 
-async function listSubdirs(absDir: string): Promise<string[]> {
-  const dirs = await fg("*", {
-    cwd: absDir,
-    onlyDirectories: true,
-    suppressErrors: true,
-  });
-  return dirs.filter((d) => !DIR_DENYLIST.has(d)).sort();
-}
-
-async function countSourceFiles(absDir: string): Promise<number> {
-  const files = await fg(SOURCE_GLOB, {
-    cwd: absDir,
-    ignore: SOURCE_IGNORE,
-    suppressErrors: true,
-  });
-  return files.length;
-}
-
 export async function checkNewModules(ctx: CheckContext): Promise<CheckResult> {
   const result = emptyResult();
   if (ctx.docs.length === 0) return result;
@@ -102,13 +86,40 @@ export async function checkNewModules(ctx: CheckContext): Promise<CheckResult> {
 
 /** Shared dependency witness: cache exactly the module candidates the audit observes. */
 export async function moduleCandidates(root: string, combinedDocs: string) {
+  const [config, sourcePaths] = await Promise.all([loadProjectConfig(root), gitSourcePaths(root)]);
+  const ignore = [...SOURCE_IGNORE, ...(config.ignore ?? [])];
+  const sources = sourcePaths.filter(file => !file.split("/").some(part => part.startsWith(".")));
+  const listSubdirs = async (dir: string): Promise<string[]> => {
+    const entries = await fs.readdir(await auditInputPath(root, dir), { withFileTypes: true });
+    const dirs = entries.filter(entry => (entry.isDirectory() || entry.isSymbolicLink())
+      && !entry.name.startsWith(".") && !DIR_DENYLIST.has(entry.name))
+      .map(entry => path.posix.join(dir, entry.name));
+    const ignored = await gitIgnoredPaths(root, dirs);
+    // An ignore rule does not remove already tracked source from the audit.
+    const visible = new Set(dirs.filter(dir => !ignored.has(dir) || sources.some(file => file.startsWith(dir + "/"))));
+    return (await auditGlob(root, dir === "." ? "*" : `${fg.escapePath(dir)}/*`, {
+      ignore, onlyDirectories: true, label: "Module directory discovery", select: file => visible.has(file),
+    })).map(file => path.posix.basename(file));
+  };
+  const countSourceFiles = async (dir: string): Promise<number> => {
+    const files = sources.filter(file => file.startsWith(dir + "/"));
+    let count = 0;
+    // Literal path batches avoid compiling one enormous glob pattern set in a
+    // genuinely large source module. Apply exclusions before counting results.
+    for (let offset = 0; offset < files.length; offset += 256) {
+      count += (await auditGlob(root, files.slice(offset, offset + 256).map(file => fg.escapePath(file)), {
+        ignore, followSymbolicLinks: false, label: `Source discovery in ${dir}`,
+      })).length;
+      if (count > 100000) throw new Error(`Source discovery in ${dir} exceeds 100,000 relevant files. Exclude generated source with .mason/config.json ignore patterns or narrow this audit's checks.`);
+    }
+    return count;
+  };
   const candidates: Array<{ dir: string; sourceFileCount: number }> = [];
-  for (const topDir of await listSubdirs(root)) {
-    const absTop = path.join(root, topDir);
+  for (const topDir of await listSubdirs(".")) {
     const topMentioned = isMentioned(combinedDocs, topDir);
 
     if (!topMentioned) {
-      const count = await countSourceFiles(absTop);
+      const count = await countSourceFiles(topDir);
       if (count >= 1) candidates.push({ dir: topDir, sourceFileCount: count });
       continue;
     }
@@ -116,13 +127,13 @@ export async function moduleCandidates(root: string, combinedDocs: string) {
     // The docs know this dir. If they enumerate its children (several
     // subdirs already mentioned), an unmentioned sibling is drift — this is
     // how a freshly added module under src/ gets caught.
-    const subdirs = await listSubdirs(absTop);
+    const subdirs = await listSubdirs(topDir);
     const mentioned = subdirs.filter((s) => isMentioned(combinedDocs, s));
     if (mentioned.length < ENUMERATION_THRESHOLD) continue;
 
     for (const sub of subdirs) {
       if (isMentioned(combinedDocs, sub)) continue;
-      const count = await countSourceFiles(path.join(absTop, sub));
+      const count = await countSourceFiles(`${topDir}/${sub}`);
       if (count >= SECOND_LEVEL_MIN_SOURCE_FILES) {
         candidates.push({ dir: `${topDir}/${sub}`, sourceFileCount: count });
       }

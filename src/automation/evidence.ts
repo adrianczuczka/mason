@@ -11,7 +11,7 @@ import { checkResultSchema } from "../audit/repair.js";
 import { CHECKS, type CheckResult } from "../audit/checks/index.js";
 import type { AuditOptions } from "../audit/audit.js";
 import type { CheckName } from "../audit/types.js";
-import { readBoundedFile, SOURCE_IGNORE } from "../utils/files.js";
+import { readAuditInput } from "../audit/inputs.js";
 import { moduleCandidates } from "../audit/checks/new-module.js";
 import { resolveCountSource } from "../audit/checks/stale-count.js";
 import { commandManifests } from "../audit/checks/dead-command.js";
@@ -34,16 +34,7 @@ export async function workspace(dir: string) {
   return { root, gitDir, branch, directory: ".mason/reports/automation/" + hash([root, gitDir, branch]).slice(0, 24) };
 }
 
-async function content(root: string, file: string): Promise<string | null> {
-  try {
-    const value = await readBoundedFile(await storePath(root, file), 10 * 1024 * 1024);
-    if (value === null) throw new Error("Unreadable or oversized audit input: " + file);
-    return value;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-}
+const content = readAuditInput;
 
 const internal = (file: string) => file === ".mason" || file === ".mason/reports" || file.startsWith(".mason/reports/");
 
@@ -55,17 +46,12 @@ export interface Inputs {
 }
 
 export async function readInputs(root: string): Promise<Inputs> {
-  const [headText, docStatus, inventory, shallowPath, replacements] = await Promise.all([
+  const [headText, docStatus, shallowPath, replacements] = await Promise.all([
     git(root, "rev-parse", "HEAD"),
     git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...DOC_CANDIDATES),
-    fg("**/*", { cwd: root, dot: true, onlyFiles: false, followSymbolicLinks: false, objectMode: true,
-      ignore: SOURCE_IGNORE }),
     git(root, "rev-parse", "--git-path", "shallow"),
     git(root, "for-each-ref", "--format=%(refname) %(objectname)", "refs/replace"),
   ]);
-  const entries = inventory.filter(f => !internal(f.path) && f.path !== ".git").sort((a, b) => a.path.localeCompare(b.path));
-  const files = entries.map(f => f.path);
-  if (files.length > 100000) throw new Error("Automation input inventory exceeds 100,000 paths; use an explicit scoped audit.");
   const head = headText.trim();
   let shallow: string | null = null;
   try { shallow = await fs.readFile(path.resolve(root, shallowPath.trim()), "utf8"); }
@@ -84,11 +70,16 @@ export async function readInputs(root: string): Promise<Inputs> {
       claims.push([claim.path, await exists(claim.path), await exists(path.dirname(claim.path))]);
     }
   }
-  // The existing audit follows some directory symlinks. Refuse to cache an
-  // unbounded external dependency instead of claiming its targets were checked.
-  if (entries.some(f => f.dirent.isSymbolicLink())) throw new Error("Automation inventory contains a symbolic link; use an explicit audit to inspect its scope. No cached verification was recorded.");
   const combinedDocs = docContents.map(([, text]) => text ?? "").join("\n");
   const countClaims = docContents.flatMap(([, text]) => text ? extractClaims(text).counts : []);
+  const commandClaims = docContents.flatMap(([, text]) => text ? extractClaims(text).commands : []);
+  const rootPackage = await content(root, "package.json");
+  let rootScripts: string[] | null = null;
+  if (rootPackage !== null) {
+    try { const pkg = JSON.parse(rootPackage); rootScripts = pkg?.scripts && typeof pkg.scripts === "object" ? Object.keys(pkg.scripts) : []; }
+    catch { /* The dead-command check reports a malformed manifest as skipped. */ }
+  }
+  const needsWorkspaceScripts = rootScripts !== null && commandClaims.some(claim => !rootScripts!.includes(claim.scriptName));
   const decisionDirectory = await storePath(root, ".mason/decisions");
   const decisionPresence = await fs.lstat(decisionDirectory).then(stat => stat.isDirectory() ? "directory" : "file", error => {
     if (error.code === "ENOENT") return "absent";
@@ -97,18 +88,21 @@ export async function readInputs(root: string): Promise<Inputs> {
   const [modules, counts, manifests, decisionFiles] = await Promise.all([
     combinedDocs ? moduleCandidates(root, combinedDocs) : [],
     Promise.all(countClaims.map(claim => resolveCountSource(root, claim))),
-    commandManifests(root),
+    needsWorkspaceScripts ? commandManifests(root) : [],
     fg(".mason/decisions/*.json", { cwd: root, dot: true, onlyFiles: false, followSymbolicLinks: false }),
   ]);
-  const packages = await Promise.all(["package.json", ...manifests.sort()].map(async file => [file, await content(root, file)]));
-  const decisions = await Promise.all(decisionFiles.sort().map(async file => [file, await content(root, file)]));
+  const packages = [["package.json", rootPackage], ...await Promise.all(manifests.sort().map(async file => [file, await content(root, file)]))];
+  const decisions = await Promise.all(decisionFiles.sort().map(async file => {
+    await storePath(root, file);
+    return [file, await content(root, file)];
+  }));
   // Decision freshness observes tracked and local anchor changes; other checks
   // do not need a repository-wide status or index scan.
   const [status, index] = decisions.length ? await Promise.all([
     git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".", ":(exclude).mason/reports"),
     git(root, "ls-files", "--stage", "-z", "--", ".", ":(exclude).mason/reports"),
   ]) : ["", ""];
-  const common = [2, engineVersion, head, shallow, replacements, docContents];
+  const common = [3, engineVersion, head, shallow, replacements, docContents];
   const keys: Record<CheckName, string> = {
     "deleted-reference": hash([common, claims, docStatus]),
     "new-module": hash([common, modules]),

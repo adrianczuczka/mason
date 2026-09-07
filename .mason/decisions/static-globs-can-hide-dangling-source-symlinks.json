@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "id": "static-globs-can-hide-dangling-source-symlinks",
+  "title": "Static globs can hide dangling source symlinks",
+  "body": "While fixing a maintainer-reported setup failure above 100,000 inventory paths on 2026-09-07, removing the blanket filesystem scan exposed a lost protection: a regression with a dangling source-file symlink returned verified instead of unavailable. A focused probe against fast-glob 3.3.3 showed that a literal file pattern with followSymbolicLinks enabled omitted the dangling link, even with onlyFiles false; a wildcard pattern returned it. The proposed fix keeps links visible when selecting literal Git source paths, then validates the selected path and its parents. Exact workspace declarations have the same risk, including a dangling package.json or parent directory: validate static lstat inputs before the glob can discard them. Dynamic workspace discovery separately validates directories before traversing them. Preserve these regressions when changing discovery: an empty glob result alone is not evidence that every intended input was inspected. The later 487-test run passed with these guards, including setup over 100,001 ignored generated files and retained verification through the final metadata commit. The affected other laptop's actual directory inventory has not been inspected.",
+  "category": "gotcha",
+  "files": [
+    "src/audit/inputs.ts",
+    "src/audit/checks/new-module.ts",
+    "src/automation/evidence.ts",
+    "test/automation-reliability.test.ts"
+  ],
+  "createdAt": "2026-09-07T15:34:55.146Z",
+  "updatedAt": "2026-09-07T15:40:45.898Z",
+  "refreshedHash": "975a1c058766edddb28a2985b2be73006096a1d3",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 2,
+  "sources": [
+    {
+      "kind": "discussion",
+      "reference": "Maintainer conversation, 2026-09-07: mason setup incomplete because automation input inventory exceeds 100,000 paths on another laptop",
+      "note": "Reported failure and authorization to fix the inventory scan; remote directory contents were not supplied."
+    },
+    {
+      "kind": "document",
+      "reference": "test/automation-reliability.test.ts",
+      "note": "Dangling source-link regression that initially returned verified; corrected discovery preserves uncertainty."
+    },
+    {
+      "kind": "document",
+      "reference": "test/setup.test.ts",
+      "note": "Real 100,001-file setup regression, subsequent source detection, and final commit verification."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-09-07T15:34:55.146Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Static globs can hide dangling source symlinks",
+        "body": "While fixing a maintainer-reported setup failure above 100,000 inventory paths on 2026-09-07, removing the blanket filesystem scan exposed a lost protection: a regression with a dangling source-file symlink returned verified instead of unavailable. A focused probe against fast-glob 3.3.3 showed that a literal file pattern with followSymbolicLinks enabled omitted the dangling link, even with onlyFiles false; a wildcard pattern returned it. The proposed fix keeps links visible when selecting literal Git source paths, then validates the selected path and its parents. Dynamic workspace discovery separately validates directories before traversing them. Preserve the regression when changing discovery: an empty glob result alone is not evidence that every intended input was inspected. The later 485-test run passed with this guard, including setup over 100,001 ignored generated files and retained verification through the final metadata commit. The affected other laptop's actual directory inventory has not been inspected.",
+        "category": "gotcha",
+        "files": [
+          "src/audit/inputs.ts",
+          "src/audit/checks/new-module.ts",
+          "src/automation/evidence.ts",
+          "test/automation-reliability.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-09-07: mason setup incomplete because automation input inventory exceeds 100,000 paths on another laptop",
+            "note": "Reported failure and authorization to fix the inventory scan; remote directory contents were not supplied."
+          },
+          {
+            "kind": "document",
+            "reference": "test/automation-reliability.test.ts",
+            "note": "Dangling source-link regression that initially returned verified; corrected discovery preserves uncertainty."
+          },
+          {
+            "kind": "document",
+            "reference": "test/setup.test.ts",
+            "note": "Real 100,001-file setup regression, subsequent source detection, and final commit verification."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "975a1c058766edddb28a2985b2be73006096a1d3"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-07T15:40:45.898Z",
+      "actor": "Codex",
+      "revision": 2,
+      "content": {
+        "title": "Static globs can hide dangling source symlinks",
+        "body": "While fixing a maintainer-reported setup failure above 100,000 inventory paths on 2026-09-07, removing the blanket filesystem scan exposed a lost protection: a regression with a dangling source-file symlink returned verified instead of unavailable. A focused probe against fast-glob 3.3.3 showed that a literal file pattern with followSymbolicLinks enabled omitted the dangling link, even with onlyFiles false; a wildcard pattern returned it. The proposed fix keeps links visible when selecting literal Git source paths, then validates the selected path and its parents. Exact workspace declarations have the same risk, including a dangling package.json or parent directory: validate static lstat inputs before the glob can discard them. Dynamic workspace discovery separately validates directories before traversing them. Preserve these regressions when changing discovery: an empty glob result alone is not evidence that every intended input was inspected. The later 487-test run passed with these guards, including setup over 100,001 ignored generated files and retained verification through the final metadata commit. The affected other laptop's actual directory inventory has not been inspected.",
+        "category": "gotcha",
+        "files": [
+          "src/audit/inputs.ts",
+          "src/audit/checks/new-module.ts",
+          "src/automation/evidence.ts",
+          "test/automation-reliability.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-09-07: mason setup incomplete because automation input inventory exceeds 100,000 paths on another laptop",
+            "note": "Reported failure and authorization to fix the inventory scan; remote directory contents were not supplied."
+          },
+          {
+            "kind": "document",
+            "reference": "test/automation-reliability.test.ts",
+            "note": "Dangling source-link regression that initially returned verified; corrected discovery preserves uncertainty."
+          },
+          {
+            "kind": "document",
+            "reference": "test/setup.test.ts",
+            "note": "Real 100,001-file setup regression, subsequent source detection, and final commit verification."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "975a1c058766edddb28a2985b2be73006096a1d3"
+    }
+  ]
+}

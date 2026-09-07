@@ -1,6 +1,5 @@
-import fs from "node:fs/promises";
 import path from "node:path";
-import fg from "fast-glob";
+import { auditGlob, readAuditInput } from "../inputs.js";
 import type { CountClaim } from "../types.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
@@ -13,17 +12,9 @@ interface CountSource {
   members: string[];
 }
 
-async function readIfExists(absPath: string): Promise<string | null> {
-  try {
-    return await fs.readFile(absPath, "utf-8");
-  } catch {
-    return null;
-  }
-}
-
 async function countGradleModules(root: string): Promise<CountSource | null> {
   for (const name of ["settings.gradle.kts", "settings.gradle"]) {
-    const content = await readIfExists(path.join(root, name));
+    const content = await readAuditInput(root, name);
     if (content === null) continue;
     // include(":a", ":b") — count quoted project strings, not include() calls.
     const members: string[] = [];
@@ -39,32 +30,33 @@ async function countGradleModules(root: string): Promise<CountSource | null> {
 }
 
 async function countNpmWorkspaces(root: string): Promise<CountSource | null> {
-  const pkgRaw = await readIfExists(path.join(root, "package.json"));
+  const pkgRaw = await readAuditInput(root, "package.json");
   if (pkgRaw !== null) {
+    let globs: string[] = [];
     try {
       const pkg = JSON.parse(pkgRaw);
-      const globs: string[] = Array.isArray(pkg.workspaces)
+      globs = Array.isArray(pkg.workspaces)
         ? pkg.workspaces
         : Array.isArray(pkg.workspaces?.packages)
           ? pkg.workspaces.packages
           : [];
-      if (globs.length > 0) {
-        const matched = await fg(
-          globs.map((g) => `${g.replace(/\/+$/, "")}/package.json`),
-          { cwd: root, ignore: ["**/node_modules/**"] }
-        );
-        return {
-          actual: matched.length,
-          countedFrom: "package.json workspaces",
-          members: matched.map((m) => path.dirname(m)).sort(),
-        };
-      }
     } catch {
       // Malformed package.json — nothing provable here.
     }
+    if (globs.length > 0) {
+      const matched = await auditGlob(root,
+        globs.map((g) => `${g.replace(/\/+$/, "")}/package.json`),
+        { ignore: ["**/node_modules/**"], label: "npm workspace discovery" }
+      );
+      return {
+        actual: matched.length,
+        countedFrom: "package.json workspaces",
+        members: matched.map((m) => path.dirname(m)).sort(),
+      };
+    }
   }
 
-  const pnpmRaw = await readIfExists(path.join(root, "pnpm-workspace.yaml"));
+  const pnpmRaw = await readAuditInput(root, "pnpm-workspace.yaml");
   if (pnpmRaw !== null) {
     const globs: string[] = [];
     let inPackages = false;
@@ -83,9 +75,9 @@ async function countNpmWorkspaces(root: string): Promise<CountSource | null> {
       }
     }
     if (globs.length > 0) {
-      const matched = await fg(
+      const matched = await auditGlob(root,
         globs.map((g) => `${g.replace(/\/+$/, "")}/package.json`),
-        { cwd: root, ignore: ["**/node_modules/**"] }
+        { ignore: ["**/node_modules/**"], label: "pnpm workspace discovery" }
       );
       return {
         actual: matched.length,
@@ -98,7 +90,7 @@ async function countNpmWorkspaces(root: string): Promise<CountSource | null> {
 }
 
 async function countCargoCrates(root: string): Promise<CountSource | null> {
-  const content = await readIfExists(path.join(root, "Cargo.toml"));
+  const content = await readAuditInput(root, "Cargo.toml");
   if (content === null) return null;
   const membersBlock = content.match(/members\s*=\s*\[([\s\S]*?)\]/);
   if (!membersBlock) return null;
@@ -112,13 +104,13 @@ async function countCargoCrates(root: string): Promise<CountSource | null> {
   const members = new Set<string>();
   for (const entry of entries) {
     if (/[*?[\]{}]/.test(entry)) {
-      const matched = await fg(`${entry.replace(/\/+$/, "")}/Cargo.toml`, {
-        cwd: root,
+      const matched = await auditGlob(root, `${entry.replace(/\/+$/, "")}/Cargo.toml`, {
         ignore: ["**/target/**"],
+        label: "Cargo workspace discovery",
       });
       for (const m of matched) members.add(path.dirname(m));
     } else if (
-      (await readIfExists(path.join(root, entry, "Cargo.toml"))) !== null
+      (await readAuditInput(root, path.posix.join(entry, "Cargo.toml"))) !== null
     ) {
       members.add(entry);
     }

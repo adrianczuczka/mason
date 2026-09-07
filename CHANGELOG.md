@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.2 — 2026-09-07
+
+- Remove the repository-wide automation inventory that blocked setup above 100,000 files and directories. Discover module source through Git and Mason exclusions, and search workspace command manifests only when needed.
+- Preserve checks of explicitly documented ignored paths and workspace members. Validate symlinks at the inputs actually read, bound scoped discovery, and identify the operation responsible for a limit failure.
+- Cover setup with 100,001 ignored generated files, retained evidence, and detection of a later source module.
+- Request a new terminal after installation only when the installation directory is absent from the inherited PATH.
+
 ## 0.14.1 — 2026-09-07
 
 - Configure PATH automatically during standalone installation for Bash, Zsh, POSIX sh, and Windows. Supported installations finish with a simple instruction to open a new terminal and run setup.

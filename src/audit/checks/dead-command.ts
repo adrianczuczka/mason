@@ -1,14 +1,14 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import fg from "fast-glob";
+import { auditGlob, readAuditInput } from "../inputs.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
 
 const AVAILABLE_SCRIPTS_CAP = 30;
 
-async function scriptsOf(absManifest: string): Promise<string[] | null> {
+async function scriptsOf(root: string, manifest: string): Promise<string[] | null> {
+  const raw = await readAuditInput(root, manifest);
+  if (raw === null) return null;
   try {
-    const pkg = JSON.parse(await fs.readFile(absManifest, "utf-8"));
+    const pkg = JSON.parse(raw);
     return pkg && typeof pkg.scripts === "object" && pkg.scripts !== null
       ? Object.keys(pkg.scripts)
       : [];
@@ -33,7 +33,7 @@ export async function checkDeadCommands(
   );
   if (commandClaims.length === 0) return result;
 
-  const rootScripts = await scriptsOf(path.join(ctx.root, "package.json"));
+  const rootScripts = await scriptsOf(ctx.root, "package.json");
   if (rootScripts === null) {
     result.skipped.push({
       check: "dead-command",
@@ -51,7 +51,7 @@ export async function checkDeadCommands(
     const manifests = await commandManifests(ctx.root);
     manifestsChecked = ["package.json", ...manifests.sort()];
     for (const manifest of manifests) {
-      const scripts = await scriptsOf(path.join(ctx.root, manifest));
+      const scripts = await scriptsOf(ctx.root, manifest);
       for (const name of scripts ?? []) workspaceScripts.add(name);
     }
     return workspaceScripts;
@@ -82,6 +82,8 @@ export async function checkDeadCommands(
 
 /** Shared with automation so ignored workspace manifests remain cache dependencies. */
 export function commandManifests(root: string): Promise<string[]> {
-  return fg("**/package.json", { cwd: root,
-    ignore: ["**/node_modules/**", "**/dist/**", "**/build/**", ".mason/reports/**", "package.json"] });
+  return auditGlob(root, "**/package.json", {
+    ignore: ["**/node_modules/**", "**/dist/**", "**/build/**", ".mason/reports/**", "package.json"],
+    label: "Command manifest discovery",
+  });
 }

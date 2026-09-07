@@ -29,6 +29,76 @@ beforeEach(async () => {
 afterEach(async () => { vi.restoreAllMocks(); await fs.rm(root, { recursive: true, force: true }); });
 
 describe("automation reliability", { timeout: 20000 }, () => {
+  it("respects Git and Mason discovery exclusions and invalidates an exclusion change", async () => {
+    await write(".gitignore", "artifacts/\n.mason/reports/\n");
+    await write(".mason/config.json", '{"ignore":["scratch/**"]}');
+    await write("artifacts/copy.ts", "generated");
+    await write("scratch/experiment.ts", "untracked experiment");
+    await commitAll(root, "configure exclusions");
+    const initial = await automate(root, { event: "session_start" });
+    expect(initial.report.findings.filter(f => f.original.type === "new-module")).toEqual([]);
+    await write("artifacts/more.ts", "more generated");
+    expect((await automate(root, { event: "after_tool" })).report.checks.reused).toHaveLength(6);
+    await write(".mason/config.json", '{"ignore":[]}');
+    const changed = await automate(root, { event: "after_tool" });
+    expect(changed.report.checks.ran).toContain("new-module");
+    expect(changed.report.findings.some(f => f.original.type === "new-module" && f.original.anchor.excerpt === "scratch")).toBe(true);
+    expect(changed.report.findings.some(f => f.original.anchor.excerpt === "artifacts")).toBe(false);
+  });
+
+  it("keeps tracked source visible under Git ignore rules and handles literal directory names", async () => {
+    await write("feature [draft]/main.ts", "tracked source");
+    await commitAll(root, "add source module");
+    await write(".gitignore", "feature*/\n.mason/reports/\n");
+    const result = await automate(root, { event: "session_start" });
+    expect(result.report.findings.some(f => f.original.type === "new-module" && f.original.anchor.excerpt === "feature [draft]")).toBe(true);
+  });
+
+  it("does not turn a broken source symlink into an empty module", async () => {
+    await fs.mkdir(path.join(root, "new-module"));
+    await fs.symlink(path.join(root, "missing-source.ts"), path.join(root, "new-module/alias.ts"));
+    await expect(automate(root, { event: "session_start" })).rejects.toThrow("symbolic link");
+  });
+
+  it.each(["directory", "manifest"])("does not hide a broken literal workspace %s link", async kind => {
+    await write("package.json", '{"workspaces":["packages/alias"]}');
+    await write("CLAUDE.md", "The src directory. There are 1 workspaces.\n");
+    await fs.mkdir(path.join(root, "packages"));
+    if (kind === "directory") {
+      await fs.symlink(path.join(root, "missing-package"), path.join(root, "packages/alias"), "junction");
+    } else {
+      await fs.mkdir(path.join(root, "packages/alias"));
+      await fs.symlink(path.join(root, "missing-package.json"), path.join(root, "packages/alias/package.json"));
+    }
+    await expect(automate(root, { event: "session_start" })).rejects.toThrow("symbolic link");
+  });
+
+  it("ignores unrelated generated symlinks but refuses linked workspace dependencies", async () => {
+    await write(".gitignore", "artifacts/\n.mason/reports/\n");
+    await fs.mkdir(path.join(root, "artifacts"));
+    await fs.symlink(path.join(root, "src"), path.join(root, "artifacts/alias"), "junction");
+    expect((await automate(root, { event: "session_start" })).report.status).toBe("verified");
+    await write("package.json", '{"workspaces":["build/packages/*"]}');
+    await write("CLAUDE.md", "The src directory. There are 1 workspaces.\n");
+    await write("build/packages/real/package.json", "{}");
+    await fs.symlink(path.join(root, "build/packages/real"), path.join(root, "build/packages/alias"), "junction");
+    await expect(automate(root, { event: "task_end" })).rejects.toMatchObject({ failure: { code: "invalid-evidence", receiptRecorded: true } });
+    const ws = await workspace(root);
+    expect((await executionStatus(root, ws.directory)).status).toBe("failed");
+  });
+
+  it("does not discover command manifests when the documented scripts are all at the root", async () => {
+    // Module discovery only needs src's immediate directories. Keep the link
+    // below that depth; command discovery needs it only for a missing script.
+    await write("src/nested/file.js", "code");
+    await fs.symlink(path.join(root, "src/nested"), path.join(root, "src/nested/alias"), "junction");
+    await commitAll(root, "document root command");
+    const initial = await automate(root, { event: "session_start" });
+    expect(initial.report.status).toBe("verified");
+    await write("CLAUDE.md", "The src directory. Run `npm run missing`.\n");
+    await expect(automate(root, { event: "task_end" })).rejects.toThrow("symbolic link");
+  });
+
   it("reuses all checks during ignored build churn, including churn inside verification", async () => {
     await automate(root, { event: "session_start" });
     const before = await readInputs(root);

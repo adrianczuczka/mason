@@ -24,8 +24,8 @@ mason status
 With npm instead (requires Node 20+ and npm):
 
 ```bash
-npx --package mason-context@0.14.1 mason setup --host codex
-npx --package mason-context@0.14.1 mason status
+npx --package mason-context@0.14.2 mason setup --host codex
+npx --package mason-context@0.14.2 mason status
 ```
 
 Run setup once for each host you use. Repeating it also upgrades an existing integration to the executing Mason version. Versions before 0.13.0 require the manual hook installation below, which remains supported. For a local source build, run `npm run build` in Mason's checkout and invoke `node dist/mason-auto.js setup --dir /absolute/path/to/project --host codex`.
@@ -53,7 +53,7 @@ Mason can preserve documentation audit evidence and resume unfinished repairs th
 Unified setup already installs these hooks. For manual npm hook installation (available from 0.12.0), install or upgrade the package in each project:
 
 ```bash
-npm install -D mason-context@0.14.1
+npm install -D mason-context@0.14.2
 npx mason-auto install --host claude   # Claude Code
 npx mason-auto install --host codex    # Codex; review/trust the hooks using /hooks
 npx mason-auto status
@@ -61,7 +61,7 @@ npx mason-auto status
 
 Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in `.mason/automation.json`. Repeating installation updates only those handlers. Keep the host configuration and `.mason/automation.json` together in version control; if you ignore all of `.mason/`, allow the installation record explicitly. Add `.mason/reports/` to your ignore rules. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
 
-When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.14.1`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
+When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.14.2`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
 
 `status` distinguishes configuration from observed events. Host versions, project trust, policy, and specialized tool paths can prevent hooks from running. Configuration alone is not evidence of automatic use. Codex requires review/trust of new or changed non-managed hooks. See the [Claude Code hook reference](https://code.claude.com/docs/en/hooks) and [Codex hook reference](https://learn.chatgpt.com/docs/hooks).
 
@@ -79,7 +79,11 @@ The equivalent MCP operation is `mason_automation(action: "check")`. Its respons
 
 `status` includes a bounded history of the latest 32 execution attempts, their duration after lock acquisition, and the number of older receipts omitted. A completed attempt includes its verification outcome. A started attempt without a matching live local lock owner is unknown, and a failed or unfinished latest attempt prevents an older report from being presented as current verification. Storage exhaustion can prevent even a failure receipt from being saved; the caller reports that explicitly. Receipts contain no prompts or tool arguments. The existing `mason-hook` decision injector keeps its previous behavior.
 
-Evidence is local to the worktree and branch. Switching assistants in that worktree resumes the same repair; another worktree or branch has separate state. Detached-HEAD commits retain evidence; moving that checkout to a different history requires inspection. Hooks follow the Git worktree of the event's working directory. Reports are not automatically transferred to CI. CI can call `mason-auto check` on retained local artifacts, or `mason-audit --verify-repair <baseline>` after restoring the original artifacts at their recorded root. A fresh checkout cannot reconstruct missing pre-edit evidence. Audited instruction files remain limited to `AGENTS.md`, `CLAUDE.md`, and `.claude/CLAUDE.md`. Automation bounds inventory at 100,000 paths and retained baselines at 128; exceeding a bound reports unavailable evidence without evicting unresolved findings. Symbolic links in the inspected inventory require an explicit audit instead of cached automation. This is not proof of arbitrary repository scale or universal tool interception.
+Evidence is local to the worktree and branch. Switching assistants in that worktree resumes the same repair; another worktree or branch has separate state. Detached-HEAD commits retain evidence; moving that checkout to a different history requires inspection. Hooks follow the Git worktree of the event's working directory. Reports are not automatically transferred to CI. CI can call `mason-auto check` on retained local artifacts, or `mason-audit --verify-repair <baseline>` after restoring the original artifacts at their recorded root. A fresh checkout cannot reconstruct missing pre-edit evidence. Audited instruction files remain limited to `AGENTS.md`, `CLAUDE.md`, and `.claude/CLAUDE.md`.
+
+Automation reads each check's dependencies rather than inventorying every file and directory. Module discovery uses Git's tracked and non-ignored source paths, then applies Mason's built-in exclusions and `.mason/config.json` `ignore` patterns. Tracked source remains visible under Git ignore rules. Explicit documentation references and workspace declarations still observe ignored paths; exclusions cannot silently remove those claims from verification. Workspace command discovery runs only when a documented script is absent from the root manifest.
+
+Each scoped glob is bounded at 100,000 relevant results and 100,000 traversed directories; errors name the discovery operation and its scope. Input reads are bounded too. Retained baselines remain capped at 128, with unresolved findings preserved on failure. Symlinks in inputs actually read or traversed remain unsupported evidence; unrelated ignored symlinks do not block setup. These bounds are not proof of arbitrary repository scale or universal tool interception.
 
 The [automation evaluation](../bench/harness/automation/README.md) compares ordinary module-renaming requests and unrelated edits across hosts, with baseline, instructions, and hooks arms. Deterministic replay verifies the mechanism; live sessions measure actual activation.
 
