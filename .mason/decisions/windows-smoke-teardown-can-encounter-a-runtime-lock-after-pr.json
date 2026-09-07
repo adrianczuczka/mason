@@ -1,0 +1,59 @@
+{
+  "version": 2,
+  "id": "windows-smoke-teardown-can-encounter-a-runtime-lock-after-pr",
+  "title": "Windows smoke teardown can encounter a runtime lock after protocol checks pass",
+  "body": "The first v0.14.0 publish attempt on 2026-09-07 passed every Windows ARM64 product assertion, including uninstall and subsequent project MCP/hook operation, then failed in final temporary-directory removal with EBUSY on a copied project runtime's node.exe. The release gate correctly blocked publication. Re-running only the failed job on the same tagged source passed, including cleanup; the other five platforms had passed on the first attempt. A lingering process or transient Windows file lock is plausible, but the precise cause was not established. Do not classify this observed teardown failure as an installer-uninstall failure, or treat the earlier 'smoke passed' log line as a successful job exit. Proposed follow-up: inspect MCP child-process shutdown and use bounded, observable teardown handling while keeping product uninstall assertions strict. A rerun passing is evidence of intermittency, not proof that the underlying teardown race is fixed.",
+  "category": "gotcha",
+  "files": [
+    "scripts/smoke-standalone.mjs"
+  ],
+  "createdAt": "2026-09-07T10:36:31.491Z",
+  "updatedAt": "2026-09-07T10:36:31.491Z",
+  "refreshedHash": "c6d10af3a7ce5478dc9be57eeb4cff6567d9407e",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "incident",
+      "reference": "https://github.com/adrianczuczka/mason/actions/runs/34110177604/attempts/1",
+      "note": "Windows ARM64 passed product assertions but final fs.rm failed with EBUSY on the temporary project runtime."
+    },
+    {
+      "kind": "incident",
+      "reference": "https://github.com/adrianczuczka/mason/actions/runs/34110177604/attempts/2",
+      "note": "The same tagged source passed on the failed-job retry and publication completed."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-09-07T10:36:31.491Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Windows smoke teardown can encounter a runtime lock after protocol checks pass",
+        "body": "The first v0.14.0 publish attempt on 2026-09-07 passed every Windows ARM64 product assertion, including uninstall and subsequent project MCP/hook operation, then failed in final temporary-directory removal with EBUSY on a copied project runtime's node.exe. The release gate correctly blocked publication. Re-running only the failed job on the same tagged source passed, including cleanup; the other five platforms had passed on the first attempt. A lingering process or transient Windows file lock is plausible, but the precise cause was not established. Do not classify this observed teardown failure as an installer-uninstall failure, or treat the earlier 'smoke passed' log line as a successful job exit. Proposed follow-up: inspect MCP child-process shutdown and use bounded, observable teardown handling while keeping product uninstall assertions strict. A rerun passing is evidence of intermittency, not proof that the underlying teardown race is fixed.",
+        "category": "gotcha",
+        "files": [
+          "scripts/smoke-standalone.mjs"
+        ],
+        "sources": [
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34110177604/attempts/1",
+            "note": "Windows ARM64 passed product assertions but final fs.rm failed with EBUSY on the temporary project runtime."
+          },
+          {
+            "kind": "incident",
+            "reference": "https://github.com/adrianczuczka/mason/actions/runs/34110177604/attempts/2",
+            "note": "The same tagged source passed on the failed-job retry and publication completed."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "c6d10af3a7ce5478dc9be57eeb4cff6567d9407e"
+    }
+  ]
+}
