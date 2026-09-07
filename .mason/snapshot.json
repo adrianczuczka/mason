@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-07T09:51:12.655Z",
-  "gitHash": "2484d92c1acbcdc601ace58dcc9d74718593a575",
+  "updatedAt": "2026-09-07T09:55:59.360Z",
+  "gitHash": "9f1b4d7ce33f223b1802f9363dc80b28fd1ada46",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including explicit unified project setup and automation status/checks. Configured get_context calls record local activation observations without storing prompts.",
@@ -404,7 +404,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "5bb29ca9132e4a16da7e2c8dbbaf0e9cf36fce4a"
+      "refreshedHash": "9f1b4d7ce33f223b1802f9363dc80b28fd1ada46"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -475,7 +475,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "59071a7606e78d4537b03868006a2b619a936839"
+      "refreshedHash": "9f1b4d7ce33f223b1802f9363dc80b28fd1ada46"
     },
     "standalone distribution": {
       "description": "Builds platform archives with pinned Node and production dependencies, verifies every shipped file, and installs owned user launchers with resumable upgrades. Project bundles stay pinned independently; native CI exercises installers, MCP, hooks, repair evidence, clone recovery and uninstall without system Node/npm.",
@@ -495,7 +495,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "2484d92c1acbcdc601ace58dcc9d74718593a575"
+      "refreshedHash": "9f1b4d7ce33f223b1802f9363dc80b28fd1ada46"
     }
   },
   "flows": {
