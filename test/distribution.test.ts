@@ -72,7 +72,9 @@ exit $Code
     await fs.copyFile(path.join(directory, 'mason-launcher.ps1'), path.join(directory, 'mason.ps1'));
     const shadowed = await restrictedCommand('mason 0; exit $LASTEXITCODE');
     expect(shadowed.code).not.toBe(0);
-    expect(shadowed.stderr).toContain('PSSecurityException');
+    expect(shadowed.stderr).toContain('mason.ps1');
+    expect(shadowed.stderr).toContain('SecurityError');
+    expect(shadowed.stderr).toContain('UnauthorizedAccess');
     await fs.rm(path.join(directory, 'mason.ps1'));
     const restricted = await restrictedCommand('mason 2; exit $LASTEXITCODE');
     expect(restricted).toEqual({ code: 2, stderr: '' });
