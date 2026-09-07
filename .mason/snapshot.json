@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-06T21:46:18.559Z",
-  "gitHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe",
+  "updatedAt": "2026-09-07T08:43:29.021Z",
+  "gitHash": "5bb29ca9132e4a16da7e2c8dbbaf0e9cf36fce4a",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including explicit unified project setup and automation status/checks. Configured get_context calls record local activation observations without storing prompts.",
@@ -26,14 +26,6 @@
       ],
       "type": "capability",
       "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
-    },
-    "legacy CLI migration shim": {
-      "description": "Prints a migration message for users who still invoke the removed standalone mason CLI",
-      "files": [
-        "bin/mason.ts"
-      ],
-      "type": "infrastructure",
-      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "git history analysis": {
       "description": "Analyzer that mines git history for commit conventions, hot files, and stale directories",
@@ -392,7 +384,7 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "project onboarding": {
-      "description": "Defaults to read-only audit/review findings. Explicit CLI/MCP setup preserves the initial audit before edits, installs a private pinned runtime, and merges MCP, hooks, native instruction entry points and ignore rules with resumable writes. Status distinguishes configuration from observed MCP and full hook lifecycles per setup revision and worktree/branch.",
+      "description": "Defaults to read-only audit/review findings. Explicit setup retains the initial audit, installs a pinned npm runtime or verified standalone copy, and merges MCP, hooks, instructions and ignore rules with resumable writes. Standalone project launchers use bundled Node. Status distinguishes configuration from observed activation and checks runtime integrity per host and worktree.",
       "files": [
         "src/mcp/init.ts",
         "src/mcp/onboarding.ts",
@@ -408,10 +400,11 @@
       "tests": [
         "test/adoption.test.ts",
         "test/tools.test.ts",
-        "test/setup.test.ts"
+        "test/setup.test.ts",
+        "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "5bb29ca9132e4a16da7e2c8dbbaf0e9cf36fce4a"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -472,6 +465,37 @@
       ],
       "type": "infrastructure",
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+    },
+    "unified Mason CLI": {
+      "description": "Routes setup, status, checks, audit, review, drift, hooks and MCP through the mason command, with standalone installation, upgrade and uninstall commands while retaining dedicated binaries.",
+      "files": [
+        "bin/mason.ts"
+      ],
+      "tests": [
+        "test/distribution.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "5bb29ca9132e4a16da7e2c8dbbaf0e9cf36fce4a"
+    },
+    "standalone distribution": {
+      "description": "Builds platform archives with pinned Node and production dependencies, verifies every shipped file, and installs owned user launchers with resumable upgrades. Project bundles stay pinned independently; native CI exercises installers, MCP, hooks, repair evidence, clone recovery and uninstall without system Node/npm.",
+      "files": [
+        "src/distribution/bundle.ts",
+        "src/distribution/install.ts",
+        "scripts/build-standalone.mjs",
+        "scripts/publish-standalone.mjs",
+        "scripts/smoke-standalone.mjs",
+        "scripts/standalone-node.json",
+        "install.sh",
+        "install.ps1",
+        ".github/workflows/standalone.yml",
+        ".github/workflows/publish.yml"
+      ],
+      "tests": [
+        "test/distribution.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "5bb29ca9132e4a16da7e2c8dbbaf0e9cf36fce4a"
     }
   },
   "flows": {
@@ -579,20 +603,22 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "project setup and activation flow": {
-      "description": "CLI or explicit MCP setup captures pre-edit audit evidence, installs a pinned distribution, and merges host configuration and instructions. Native host trust enables later MCP and hook use; local observations determine activation separately from verification.",
+      "description": "CLI or explicit MCP setup retains pre-edit audit evidence, installs a pinned npm runtime or verified standalone copy, then merges configuration and instructions. Native host trust enables later MCP and hooks; local observations determine activation independently of verification. Explicit setup upgrades one host while global upgrades leave project pins intact.",
       "chain": [
+        "bin/mason.ts",
         "src/automation/cli.ts",
         "src/mcp/tools.ts",
         "src/setup/setup.ts",
         "src/automation/runtime.ts",
         "src/setup/runtime.ts",
+        "src/distribution/bundle.ts",
         "src/setup/config.ts",
         "src/setup/files.ts",
         "src/setup/launcher.ts",
         "src/setup/observations.ts",
         "src/setup/status.ts"
       ],
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "5bb29ca9132e4a16da7e2c8dbbaf0e9cf36fce4a"
     }
   }
 }
