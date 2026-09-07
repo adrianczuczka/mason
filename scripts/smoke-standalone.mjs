@@ -80,7 +80,9 @@ async function hook(host, event, directory = repo) {
   const config = JSON.parse(await fs.readFile(path.join(directory, host === 'codex' ? '.codex/hooks.json' : '.claude/settings.json'), 'utf8'));
   const command = config.hooks[event][0].hooks[0].command;
   const input = JSON.stringify({ cwd: directory, session_id: 'ordinary-' + host, hook_event_name: event, tool_name: 'Edit', tool_use_id: event });
-  const output = await run(windows ? 'cmd.exe' : 'sh', windows ? ['/d', '/s', '/c', command] : ['-c', command], { cwd: path.join(directory, 'src'), input });
+  // Match Node's shell launch: cmd.exe needs the whole command quoted verbatim,
+  // otherwise argument escaping inserts literal backslashes into PowerShell.
+  const output = await run(windows ? 'cmd.exe' : 'sh', windows ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command], { cwd: path.join(directory, 'src'), input, windowsVerbatimArguments: windows });
   if (output.stdout.trim()) assert.doesNotThrow(() => JSON.parse(output.stdout));
   return output.stdout.trim() ? JSON.parse(output.stdout) : null;
 }
