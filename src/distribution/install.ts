@@ -18,7 +18,8 @@ const psQuote = (s: string) => "'" + s.replace(/'/g, "''") + "'";
 // Leave batch context before invoking PowerShell, as npm's cmd-shim does. A
 // continuing batch can lose the child exit code or reopen its deleted launcher.
 // https://github.com/npm/cmd-shim/blob/main/lib/index.js
-export const WINDOWS_BATCH_LAUNCHER = '@echo off\r\ngoto #_mason_handoff_# 2>NUL || title %COMSPEC% & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0mason.ps1" %*\r\n';
+export const WINDOWS_BATCH_LAUNCHER = '@echo off\r\ngoto #_mason_handoff_# 2>NUL || title %COMSPEC% & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0mason-launcher.ps1" %*\r\n';
+const launcherNames = ["mason", "mason.cmd", "mason.ps1", "mason-launcher.ps1"];
 export const defaultHome = () => process.env.MASON_HOME ?? (process.platform === "win32"
   ? path.join(process.env.LOCALAPPDATA ?? os.homedir(), "Mason") : path.join(os.homedir(), ".local/share/mason"));
 
@@ -54,7 +55,7 @@ export async function installStandalone(source: string) {
     const destination = await storePath(home, "versions/" + id);
     const launchers: Record<string, string> = process.platform === "win32" ? {
       "mason.cmd": WINDOWS_BATCH_LAUNCHER,
-      "mason.ps1": `$ErrorActionPreference = 'Stop'
+      "mason-launcher.ps1": `$ErrorActionPreference = 'Stop'
 $previousToken = $env:MASON_UNINSTALL_TOKEN
 $token = [Guid]::NewGuid().ToString()
 $env:MASON_UNINSTALL_TOKEN = $token
@@ -76,6 +77,16 @@ finally { $env:MASON_UNINSTALL_TOKEN = $previousToken }
       const old = await fs.readFile(file, "utf8").catch(error => { if (error.code === "ENOENT") return null; throw error; });
       if (old !== null && old !== previous?.launchers[name] && old !== previous?.previousLaunchers?.[name] && old !== content) throw new Error("Refusing to replace an unrelated or edited launcher: " + file);
     }
+    // The 0.14.0 mason.ps1 shadows mason.cmd in PowerShell, where default script
+    // policy can block it. Keep the helper under a different command name and
+    // remove the old one only when its recorded ownership still matches.
+    const retired = Object.entries({ ...previous?.previousLaunchers, ...previous?.launchers }).filter(([name]) => !(name in launchers));
+    const checkRetired = async (name: string, expected: string) => {
+      if (!launcherNames.includes(name)) throw new Error("Invalid owned launcher name.");
+      const actual = await fs.readFile(await storePath(bin, name), "utf8").catch(error => { if (error.code === "ENOENT") return null; throw error; });
+      if (actual !== null && actual !== expected) throw new Error("Retired launcher was edited; retained: " + name);
+    };
+    for (const [name, expected] of retired) await checkRetired(name, expected);
     const receipt = { format: 1, home, bin, current: id, version: bundle.manifest.version, launchers, pathChanges: previous?.pathChanges ?? [] };
     // Claim only the preflighted installation, retaining old launchers for interrupted upgrades.
     await writeStoreJson(home, "install.json", { ...receipt, previousLaunchers: previous?.previousLaunchers ?? previous?.launchers });
@@ -92,6 +103,7 @@ finally { $env:MASON_UNINSTALL_TOKEN = $previousToken }
       if (exists) await verifyBundle(destination, bundle.manifestHash);
       else await fs.rename(stage, destination);
       for (const [name, content] of Object.entries(launchers)) await replace(await storePath(bin, name, true), content, 0o755);
+      for (const [name, expected] of retired) { await checkRetired(name, expected); await fs.rm(await storePath(bin, name), { force: true }); }
       await writeStoreJson(home, "install.json", receipt);
     } finally { await fs.rm(stage, { recursive: true, force: true }); }
     const pathResult = await configurePath(bin, receipt.pathChanges, async changes => {
@@ -134,7 +146,7 @@ export async function uninstallStandalone() {
   }
   await withLock(home, ".install-lock", async () => {
     for (const [name, expected] of Object.entries(record.launchers)) {
-      if (!["mason", "mason.cmd", "mason.ps1"].includes(name)) throw new Error("Invalid owned launcher name.");
+      if (!launcherNames.includes(name)) throw new Error("Invalid owned launcher name.");
       const file = await storePath(record.bin, name);
       const actual = await fs.readFile(file, "utf8").catch(error => { if (error.code === "ENOENT") return null; throw error; });
       if (actual !== null && actual !== expected) throw new Error("Launcher was edited; retained: " + file);

@@ -43,7 +43,7 @@ describe("standalone distribution integrity and ownership", () => {
     const directory = path.join(root, "batch's $files");
     await fs.mkdir(directory);
     const launcher = path.join(directory, "mason.cmd");
-    await fs.writeFile(path.join(directory, "mason.ps1"), `param([int]$Code, [switch]$Remove)
+    await fs.writeFile(path.join(directory, "mason-launcher.ps1"), `param([int]$Code, [switch]$Remove)
 if ($Remove) { Remove-Item -LiteralPath (Join-Path $PSScriptRoot 'mason.cmd') -Force }
 exit $Code
 `);
@@ -59,6 +59,23 @@ exit $Code
       expect(result, `code=${code}, remove=${remove}`).toEqual({ code, stderr: "" });
       expect(await fs.access(launcher).then(() => true, () => false)).toBe(!remove);
     }
+    await fs.writeFile(launcher, WINDOWS_BATCH_LAUNCHER);
+    const restrictedCommand = (command: string) => new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
+      const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Restricted', '-Command', "$ErrorActionPreference = 'Stop'; " + command],
+        { env: { ...process.env, PATH: directory + path.delimiter + process.env.PATH }, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+      let stderr = '';
+      child.stderr.on('data', bytes => { stderr += bytes; });
+      child.on('error', reject); child.on('close', code => resolve({ code, stderr }));
+    });
+    // Reproduce the old same-name helper shadowing the command before checking
+    // the new layout. The normal user command must work under default policy.
+    await fs.copyFile(path.join(directory, 'mason-launcher.ps1'), path.join(directory, 'mason.ps1'));
+    const shadowed = await restrictedCommand('mason 0; exit $LASTEXITCODE');
+    expect(shadowed.code).not.toBe(0);
+    expect(shadowed.stderr).toContain('PSSecurityException');
+    await fs.rm(path.join(directory, 'mason.ps1'));
+    const restricted = await restrictedCommand('mason 2; exit $LASTEXITCODE');
+    expect(restricted).toEqual({ code: 2, stderr: '' });
   }, 30000);
   it("rejects a changed dependency before creating an installation", async () => {
     await fs.writeFile(path.join(source, "app/node_modules/example/index.js"), "changed dependency");
@@ -109,6 +126,20 @@ exit $Code
     expect(JSON.parse(await fs.readFile(path.join(home, "install.json"), "utf8")).version).toBe("1.0.0");
     vi.mocked(fs.copyFile).mockImplementation(copy);
     await expect(installStandalone(source)).resolves.toMatchObject({ version: "1.0.0" });
+  });
+  it("removes a retired launcher only when its ownership bytes still match", async () => {
+    await installStandalone(source);
+    const recordFile = path.join(home, 'install.json'), legacy = path.join(bin, 'mason.ps1');
+    const record = JSON.parse(await fs.readFile(recordFile, 'utf8'));
+    record.launchers['mason.ps1'] = '# owned legacy helper';
+    await fs.writeFile(recordFile, JSON.stringify(record));
+    await fs.writeFile(legacy, '# user edited helper');
+    await expect(installStandalone(source)).rejects.toThrow('Retired launcher was edited');
+    expect(await fs.readFile(legacy, 'utf8')).toBe('# user edited helper');
+    await fs.writeFile(legacy, record.launchers['mason.ps1']);
+    await installStandalone(source);
+    await expect(fs.stat(legacy)).rejects.toThrow();
+    expect(JSON.parse(await fs.readFile(recordFile, 'utf8')).launchers['mason.ps1']).toBeUndefined();
   });
   it("resumes an interrupted upgrade without treating the previous launcher as foreign", async () => {
     await installStandalone(source);

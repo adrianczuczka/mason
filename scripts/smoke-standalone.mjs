@@ -53,7 +53,7 @@ function run(command, args = [], options = {}) {
     child.stdin.end(options.input);
   });
 }
-const mason = (...args) => windows ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(bin, 'mason.ps1'), ...args]) : run(path.join(bin, 'mason'), args);
+const mason = (...args) => windows ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(bin, 'mason-launcher.ps1'), ...args]) : run(path.join(bin, 'mason'), args);
 const git = (...args) => run('git', args, { cwd: repo });
 const commit = async message => { await git('add', '-A'); await git('commit', '-m', message); };
 let corrupt = false;
@@ -73,7 +73,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 env.MASON_RELEASE_BASE = `http://127.0.0.1:${server.address().port}`;
 const install = () => windows ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'install.ps1')]) : run('sh', [path.join(root, 'install.sh')]);
 const freshTerminal = () => windows
-  ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$env:Path = [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path; mason --version; exit $LASTEXITCODE"])
+  ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Restricted', '-Command', "$ErrorActionPreference = 'Stop'; $env:Path = [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path; mason --version; exit $LASTEXITCODE"])
   : process.platform === 'darwin' ? run('/bin/zsh', ['-ic', 'mason --version'])
   : run('/bin/bash', ['--noprofile', '--rcfile', profile, '-ic', 'mason --version']);
 const userPathEntries = async () => JSON.parse((await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "ConvertTo-Json -Compress -InputObject @(([Environment]::GetEnvironmentVariable('Path','User') -split ';') | Where-Object { $_ -ceq $env:MASON_BIN_DIR })"])).stdout);
@@ -112,8 +112,18 @@ try {
     assert.equal(rejected.code, 2, 'The batch launcher must preserve a failing CLI exit status: ' + JSON.stringify(rejected));
   }
   const installedProfile = await fs.readFile(profile, 'utf8');
+  if (windows) {
+    const receiptFile = path.join(home, 'install.json');
+    const receipt = JSON.parse(await fs.readFile(receiptFile, 'utf8'));
+    receipt.launchers['mason.ps1'] = '# Owned helper from the legacy command layout';
+    await fs.writeFile(path.join(bin, 'mason.ps1'), receipt.launchers['mason.ps1']);
+    await fs.writeFile(receiptFile, JSON.stringify(receipt));
+  }
   await install(); // Idempotent download/install, including persistent PATH.
-  if (windows) assert.equal((await userPathEntries()).length, 1);
+  if (windows) {
+    assert.equal((await userPathEntries()).length, 1);
+    await assert.rejects(fs.stat(path.join(bin, 'mason.ps1')), { code: 'ENOENT' });
+  }
   else assert.equal(await fs.readFile(profile, 'utf8'), installedProfile);
   assert.equal((await freshTerminal()).stdout.trim(), original.version);
   await fs.appendFile(profile, '# User settings added after installation\n');
@@ -200,7 +210,7 @@ try {
   assert.equal((await mason('--version')).stdout.trim(), nextVersion);
   corrupt = false;
   const record = JSON.parse(await fs.readFile(path.join(home, 'install.json'), 'utf8'));
-  const launcher = path.join(bin, windows ? 'mason.ps1' : 'mason');
+  const launcher = path.join(bin, windows ? 'mason-launcher.ps1' : 'mason');
   await fs.appendFile(launcher, '\n# user edit\n');
   const refused = await install().then(() => null, error => error);
   assert(refused && refused.message.includes('unrelated or edited launcher'));
