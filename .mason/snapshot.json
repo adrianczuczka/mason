@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-07T08:43:29.021Z",
-  "gitHash": "5bb29ca9132e4a16da7e2c8dbbaf0e9cf36fce4a",
+  "updatedAt": "2026-09-07T08:46:33.024Z",
+  "gitHash": "f2d18ddefb1e91a4289cd9a73473d17f2e32b7c6",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including explicit unified project setup and automation status/checks. Configured get_context calls record local activation observations without storing prompts.",
@@ -495,7 +495,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "5bb29ca9132e4a16da7e2c8dbbaf0e9cf36fce4a"
+      "refreshedHash": "f2d18ddefb1e91a4289cd9a73473d17f2e32b7c6"
     }
   },
   "flows": {
