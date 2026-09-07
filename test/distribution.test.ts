@@ -36,7 +36,9 @@ beforeEach(async () => {
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await fs.rm(root, { recursive: true, force: true }); });
 
 describe("standalone distribution integrity and ownership", () => {
-  it.skipIf(process.platform !== "win32")("preserves batch launcher exit codes when the running launcher is removed", async () => {
+  // This platform-specific case is required in both native Windows CI jobs;
+  // it is outside the portable suite's execution scope on other platforms.
+  if (process.platform === "win32") it("preserves batch launcher exit codes when the running launcher is removed", async () => {
     const directory = path.join(root, "batch's $files");
     await fs.mkdir(directory);
     const launcher = path.join(directory, "mason.cmd");
