@@ -43,7 +43,7 @@ Check that Mason is being used:
 mason status
 ```
 
-Status distinguishes installed configuration from observed use. [Setup and upgrades](docs/setup.md#unified-project-setup) · [Other MCP clients](docs/setup.md#other-clients)
+Setup uses your installed `mason` command—no project launch scripts or runtime copies. Status distinguishes configuration from observed use. [Setup and upgrades](docs/setup.md#unified-project-setup) · [Other MCP clients](docs/setup.md#other-clients)
 
 ### Try a check without setup
 

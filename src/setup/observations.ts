@@ -4,24 +4,25 @@ import { hash, workspace } from "../automation/evidence.js";
 import { withLock, events, type Host } from "../automation/store.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { loadSetup } from "./model.js";
+import { executingVersion } from "./launcher.js";
 
-const observationSchema = z.object({ version: z.literal(1), root: z.string(), revision: z.string(), host: z.enum(["codex", "claude"]),
+const observationSchema = z.object({ version: z.literal(1), masonVersion: z.string(), root: z.string(), revision: z.string(), host: z.enum(["codex", "claude"]),
   contextCalls: z.number().int().nonnegative(), lastContextAt: z.string().optional(),
   sessions: z.record(z.object({ events: z.array(z.enum(events)), at: z.string(),
     verificationStatus: z.string().optional(), reportPath: z.string().optional() })),
 });
 export type Observation = z.infer<typeof observationSchema>;
-export function observationPath(directory: string, host: Host, revision: string) { return `${directory}/activation/${host}-${revision}.json`; }
+export function observationPath(directory: string, host: Host, revision: string, version = executingVersion()) { return `${directory}/activation/${host}-${revision}-${hash(version).slice(0, 12)}.json`; }
 
-export async function readObservation(root: string, directory: string, host: Host, revision: string): Promise<Observation | null> {
-  const raw = await readStoreJson(root, observationPath(directory, host, revision));
+export async function readObservation(root: string, directory: string, host: Host, revision: string, version = executingVersion()): Promise<Observation | null> {
+  const raw = await readStoreJson(root, observationPath(directory, host, revision, version));
   if (raw === null) return null;
   const record = observationSchema.parse(raw);
-  if (record.root !== root || record.host !== host || record.revision !== revision) throw new Error("Activation receipt belongs to another installation.");
+  if (record.root !== root || record.host !== host || record.revision !== revision || record.masonVersion !== version) throw new Error("Activation receipt belongs to another installation.");
   return record;
 }
 
-/** Only the configured launcher supplies these values. Never persist task text or tool arguments. */
+/** Only the configured Mason invocation supplies these values. Never persist task text or tool arguments. */
 export async function observeActivation(dir: string, event: "context" | typeof events[number], options: {
   sessionId?: string; verificationStatus?: string; reportPath?: string;
 } = {}): Promise<string | null> {
@@ -37,7 +38,7 @@ export async function observeActivation(dir: string, event: "context" | typeof e
     await withLock(ws.root, directory, async () => {
       const now = new Date().toISOString();
       const record = await readObservation(ws.root, ws.directory, host, revision) ?? {
-        version: 1, root: ws.root, revision, host, contextCalls: 0, sessions: {},
+        version: 1, masonVersion: executingVersion(), root: ws.root, revision, host, contextCalls: 0, sessions: {},
       } satisfies Observation;
       if (event === "context") { record.contextCalls++; record.lastContextAt = now; }
       else if (options.sessionId) {

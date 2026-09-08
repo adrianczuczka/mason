@@ -39,22 +39,21 @@ Setup configures project MCP, hooks and instructions using the same evidence-pre
 
 ```sh
 mason upgrade           # Latest stable release
-mason upgrade 0.14.0    # A particular published version
-mason setup --host codex
+mason upgrade 0.15.0    # A particular published version
 mason uninstall
 ```
 
-A global upgrade changes the user CLI. Existing project integrations keep their copied, pinned runtime until you explicitly rerun setup in that project for each host. Setup retains original repair evidence and resets activation when the configuration changes. Re-review changed hooks through native host controls. A fresh clone must run setup to install its own runtime; it does not inherit another checkout's activation.
+A global upgrade updates the command used by all configured projects. Restart running assistants to load it. Activation is measured separately for each Mason version; old observations remain local evidence of the previous version. Setup retains original repair evidence and only needs repeating for a fresh clone or configuration changes. A clone does not inherit another checkout's activation. Re-review changed hooks through native host controls.
 
-Uninstall removes the standalone user installation, its owned launchers, and unchanged PATH additions recorded by Mason. Preexisting PATH entries and other shell settings remain; edited Mason blocks are retained with a message. It retains project instructions, MCP/hook configuration, copied runtimes, decisions, and repair evidence. Project integrations continue to use their pinned copies. It refuses to delete an edited launcher. Previous global bundle versions are retained until uninstall.
+Uninstall removes the standalone user installation, its owned launchers, and unchanged PATH additions recorded by Mason. Preexisting PATH entries and other shell settings remain; edited Mason blocks are retained with a message. It retains project instructions, MCP/hook configuration, decisions, and repair evidence. Project integrations require Mason to be reinstalled before they can run again. It refuses to delete an edited launcher. Previous global bundle versions are retained until uninstall.
 
-The npm distribution and existing dedicated commands remain supported. npm setup still requires Node 20+ and npm, and hooks installed through that path use system Node. Run setup from a standalone installation to switch a host to bundled execution.
+The npm distribution and existing dedicated commands remain supported. Install globally with `npm install -g mason-context`; this requires Node 20+ and npm. The same project configuration calls `mason` whether it comes from npm or the standalone installer.
 
 ## Runtime and platform support
 
 Each archive contains the official Node runtime, its license, Mason, locked production dependencies, the installers, and a manifest of file checksums. The build pins Node 24.20.0 and the upstream archive hashes in [standalone-node.json](../scripts/standalone-node.json). Updating that file is a release maintenance task; a bundled runtime does not update itself independently of Mason. See [Node's release policy](https://nodejs.org/en/about/previous-releases).
 
-Targets are macOS, Linux with glibc, and Windows, on x64 and arm64. Alpine/musl is not included in this initial matrix. Bundles have no project-specific paths. Shared shell and PowerShell launchers find the Git worktree and its local pinned runtime, so MCP and hooks can run from subdirectories without system Node or a global Mason command on PATH. Setup reconciles platform-specific host commands when a checkout changes operating systems.
+Targets are macOS, Linux with glibc, and Windows, on x64 and arm64. Alpine/musl is not included in this initial matrix. Bundles have no project-specific paths. Project MCP and hooks invoke `mason` on PATH and resolve the Git worktree from their working directory, including subdirectories. No `run.sh`, `run.ps1`, or `run.cjs` is generated in a project. Windows MCP configuration invokes the installed command through `cmd.exe`. Setup reconciles that platform-specific command when a checkout changes operating systems.
 
 Checksums detect corrupted or changed artifacts; they do not provide an independent signature. Archives are not currently code-signed or notarized. Native trust requirements still apply.
 
@@ -80,7 +79,7 @@ For a local installation on an Apple Silicon Mac:
 
 Use the corresponding target directory and `node.exe` for Windows. This installs only the user CLI; project setup remains explicit.
 
-The smoke harness serves release archives locally and runs the actual installers in isolated directories. Child processes start with no Node/npm on PATH; a fresh shell checks discovery through the installed PATH configuration. It exercises both generated MCP configurations, every lifecycle hook, original repair evidence through the final documentation commit, pinned versions during upgrade, clone recovery, corrupted downloads, edited launchers, and uninstall, including owned PATH cleanup. Temporary-file cleanup retries transient Windows locks within a fixed bound and remains part of the job result. The driver itself uses Node. This is packaged protocol validation, not a native host UI or agent-performance evaluation.
+The smoke harness serves release archives locally and runs the actual installers in isolated directories. Child processes start with no Node/npm on PATH; a fresh shell checks discovery through the installed PATH configuration. It exercises both generated MCP configurations, every lifecycle hook, original repair evidence through the final documentation commit, global upgrades across both hosts, clone setup without Git changes, corrupted downloads, edited launchers, and uninstall, including owned PATH cleanup. Temporary-file cleanup retries transient Windows locks within a fixed bound and remains part of the job result. The driver itself uses Node. This is packaged protocol validation, not a native host UI or agent-performance evaluation.
 
 [The standalone workflow](../.github/workflows/standalone.yml) runs that harness on six native runners. Tag publishing waits for all six, then uploads the checked archives, `SHA256SUMS`, and both installers to the GitHub release. Existing release assets are never overwritten. [GitHub runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) lists the runner labels.
 

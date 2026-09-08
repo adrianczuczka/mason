@@ -42,7 +42,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "mason_init",
-    "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart and map modes are read-only and deterministic. Explicit mode: setup installs a pinned project runtime, MCP configuration, instructions and lifecycle hooks while retaining original audit evidence; use it only when the user requests setup. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. mode: map returns the full Map-Reduce build workflow. Repeat calls refresh findings even after setup.",
+    "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart and map modes are read-only and deterministic. Explicit mode: setup configures MCP, instructions and lifecycle hooks to use mason on PATH while retaining original audit evidence; use it only when the user requests setup. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. mode: map returns the full Map-Reduce build workflow. Repeat calls refresh findings even after setup.",
     {
       dir: z
         .string()
@@ -87,7 +87,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "mason_complete_init",
-    "Record completion of assistant instruction setup in .mason/project.json. Other tools work without this marker. Repeated calls preserve the original setup time and existing settings; pass confluenceConfigured only to change that setting.",
+    "Record assistant instruction setup locally in ignored .mason/local/project.json, with feature settings in shared .mason/config.json. Other tools work without this marker. Repeated calls preserve the original setup time and existing settings; pass confluenceConfigured only to change that setting.",
     {
       dir: z
         .string()

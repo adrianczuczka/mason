@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { readStoreJson, writeStoreJson } from "../utils/storage.js";
+import { readStoreJson } from "../utils/storage.js";
+import { applyEdit, readText, type FileEdit } from "../setup/files.js";
 
 export interface ProjectMarker {
   version: 1;
@@ -11,16 +12,37 @@ export interface ProjectMarker {
 
 const markerSchema = z.object({
   version: z.literal(1), initializedAt: z.string(),
-  features: z.object({ confluence: z.boolean().optional() }).optional(),
+  features: z.object({ confluence: z.boolean().optional() }).passthrough().optional(),
 }).passthrough();
 
 export async function loadProjectMarker(rootDir: string): Promise<ProjectMarker | null> {
-  const raw = await readStoreJson(rootDir, ".mason/project.json");
-  return raw === null ? null : markerSchema.parse(raw);
+  const raw = await readStoreJson(rootDir, ".mason/local/project.json");
+  if (raw === null) return null;
+  const marker = markerSchema.parse(raw);
+  return { ...marker, features: await loadProjectFeatures(rootDir) };
+}
+
+export async function loadProjectFeatures(rootDir: string) {
+  const config = z.record(z.unknown()).parse(await readStoreJson(rootDir, ".mason/config.json") ?? {});
+  return z.object({ confluence: z.boolean().optional() }).passthrough().parse(config.features ?? {});
 }
 
 export async function saveProjectMarker(rootDir: string, marker: ProjectMarker): Promise<void> {
-  await writeStoreJson(rootDir, ".mason/project.json", markerSchema.parse(marker));
+  const { ancillaryEdits } = await import("../setup/config.js");
+  for (const edit of [...await ancillaryEdits(rootDir), ...await projectMarkerEdits(rootDir, marker)]) await applyEdit(rootDir, edit);
+}
+
+async function projectMarkerEdits(rootDir: string, marker: ProjectMarker): Promise<FileEdit[]> {
+  const { features, ...local } = markerSchema.parse(marker);
+  const file = ".mason/local/project.json";
+  const edits = [{ path: file, before: await readText(rootDir, file), after: JSON.stringify(local, null, 2) + "\n" }];
+  if (features && Object.keys(features).length) {
+    const configPath = ".mason/config.json", before = await readText(rootDir, configPath);
+    const config = z.record(z.unknown()).parse(JSON.parse(before ?? "{}"));
+    config.features = { ...z.record(z.unknown()).parse(config.features ?? {}), ...features };
+    edits.push({ path: configPath, before, after: JSON.stringify(config, null, 2) + "\n" });
+  }
+  return edits;
 }
 
 /** Marker-delimited project instructions make the tools useful in later sessions. */
@@ -47,7 +69,7 @@ Inspect source for what the retrieved context does not answer.
 export type InitMode = "quickstart" | "map" | "setup";
 
 const ASSISTANT_SETUP = `UNIFIED SETUP
-When the user requests Mason setup, call mason_init again with mode: "setup" and host: "codex" or "claude" for the assistant being configured. This uses the same engine as mason-auto setup: retain the initial audit before instruction edits, install a pinned private runtime, merge project MCP configuration and hooks, update marker-delimited instructions and Git ignore rules, and record setup. A concept map is optional.
+When the user requests Mason setup, call mason_init again with mode: "setup" and host: "codex" or "claude" for the assistant being configured. This uses the same engine as mason-auto setup: retain the initial audit before instruction edits, use the installed mason command on PATH, merge project MCP configuration and hooks, update marker-delimited instructions and Git ignore rules, and record setup. A concept map is optional.
 If the user only requested inspection or review, report findings without running setup. The setup result distinguishes configured from observed activation. Explain the host's native trust step and request a new session; never trust hooks on the user's behalf or claim activation from generated configuration alone. After a normal task finishes, mason_automation(action: "status") or mason-auto status reports observed context use and hook events. Existing findings remain reviewable; setup does not approve advisories or manufacture decisions.
 
 The managed project guidance is:
@@ -56,7 +78,7 @@ ${CLAUDE_MD_SECTION}`;
 const QUICKSTART_PLAYBOOK = `Start with the audit and review results included in this response. No concept map is required.
 
 1. Explain the actionable findings with their source evidence. Separate audit issues, advisories, and skipped checks. The review covers committed changes from the merge base to HEAD; workingTree paths are not included in that review. An unavailable or empty check is not proof that the project is correct. Use the CLI for full output if a summary is truncated.
-2. Address findings within the user's requested scope. Setup alone authorizes the Mason runtime, host configuration, hooks, instructions, and ignore rules; rewriting existing project claims requires repair scope. If repair is authorized, call \`mason_repair(dir, action: "prepare")\` before editing; it saves the full original findings even when this summary is truncated. Inspect relevant source, make grounded edits, then call \`mason_repair(dir, action: "verify", baselinePath)\` with that same baseline, including after any final doc commit. Report resolved, unresolved, review-required, unverified, and new findings. Keep suppressed advisories visible even when setup has already dirtied a doc. Do not invent a decision just to populate the store.
+2. Address findings within the user's requested scope. Setup alone authorizes Mason host configuration, hooks, instructions, and ignore rules; rewriting existing project claims requires repair scope. If repair is authorized, call \`mason_repair(dir, action: "prepare")\` before editing; it saves the full original findings even when this summary is truncated. Inspect relevant source, make grounded edits, then call \`mason_repair(dir, action: "verify", baselinePath)\` with that same baseline, including after any final doc commit. Report resolved, unresolved, review-required, unverified, and new findings. Keep suppressed advisories visible even when setup has already dirtied a doc. Do not invent a decision just to populate the store.
 3. When the task reveals a real lesson or constraint, call \`save_decision\` with title, body, category, anchors, and known owner/source/actor information. Missing attribution can be added later. The tool writes a local proposal; editing it preserves revision history and requires a new acceptance, while any earlier accepted revision remains operative. An unchanged save never refreshes its evidence. When decision review is requested, \`review_decision\` prepares the record and code evidence before any authorized verdict. Review and commit records through the normal workflow. Retrieve it on the next relevant task with \`get_context(dir, task, files)\`.
 
 ${ASSISTANT_SETUP}

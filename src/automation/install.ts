@@ -7,6 +7,10 @@ import { withLock, type Host } from "./store.js";
 const groupSchema = z.object({ hooks: z.array(z.object({ type: z.string(), command: z.string().optional() }).passthrough()) }).passthrough();
 export const automationConfigSchema = z.object({ hooks: z.record(z.array(groupSchema)).optional() }).passthrough();
 const recordSchema = z.object({ version: z.literal(1), hosts: z.record(z.object({ command: z.string() })) });
+export const AUTOMATION_PATH = ".mason/local/automation.json";
+async function installationRecord(root: string) {
+  return recordSchema.parse(await readStoreJson(root, AUTOMATION_PATH) ?? { version: 1, hosts: {} });
+}
 export const configPath = (host: Host) => host === "claude" ? ".claude/settings.json" : ".codex/hooks.json";
 
 /** Explicit install preserves other settings and hooks, replacing only Mason's recorded handlers. */
@@ -18,15 +22,17 @@ export async function installAutomation(dir: string, host: Host, command?: strin
 export async function planAutomationInstall(root: string, host: Host, command?: string) {
   const file = configPath(host);
   const existing = automationConfigSchema.parse(await readStoreJson(root, file) ?? {});
-  const record = recordSchema.parse(await readStoreJson(root, ".mason/automation.json") ?? { version: 1, hosts: {} });
+  const record = await installationRecord(root);
   const desired = hookConfig(host, command);
   const newCommand = desired.hooks.SessionStart[0].hooks[0].command;
   const previous = record.hosts[host]?.command;
+  // A clone has shared hooks but no local ownership receipt.
+  const owned = new Set([previous, newCommand]);
   const hooks = existing.hooks ?? {};
   for (const event of HOOK_EVENTS) {
     hooks[event] = (hooks[event] ?? []).map(group => ({ ...group,
       hooks: group.hooks.filter(handler => !(handler.type === "command" && typeof handler.command === "string" &&
-        (handler.command === previous || handler.command === newCommand))),
+        owned.has(handler.command))),
     })).filter(group => group.hooks.length);
     hooks[event].push(...desired.hooks[event]);
   }
@@ -36,8 +42,11 @@ export async function planAutomationInstall(root: string, host: Host, command?: 
 
 async function installLocked(root: string, host: Host, command?: string) {
   const { file, config, record, newCommand } = await planAutomationInstall(root, host, command);
+  const { ancillaryEdits } = await import("../setup/config.js");
+  const { applyEdit } = await import("../setup/files.js");
+  for (const edit of await ancillaryEdits(root)) await applyEdit(root, edit);
   await writeStoreJson(root, file, config);
-  await writeStoreJson(root, ".mason/automation.json", record);
+  await writeStoreJson(root, AUTOMATION_PATH, record);
   return { version: 1, host, configPath: file, status: "configured", command: newCommand,
     events: HOOK_EVENTS,
     next: host === "codex"
@@ -48,9 +57,7 @@ async function installLocked(root: string, host: Host, command?: string) {
 
 export async function installedAutomation(dir: string) {
   const ws = await workspace(dir);
-  const raw = await readStoreJson(ws.root, ".mason/automation.json");
-  if (raw === null) return {};
-  const record = recordSchema.parse(raw);
+  const record = await installationRecord(ws.root);
   const result: Record<string, unknown> = {};
   for (const host of ["claude", "codex"] as const) {
     const expected = record.hosts[host];

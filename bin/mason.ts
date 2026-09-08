@@ -2,7 +2,10 @@ import { fileURLToPath } from "node:url";
 import { runAutomationCli, isHookCommand } from "../src/automation/cli.js";
 
 declare const PKG_VERSION: string;
-const [command, ...args] = process.argv.slice(2);
+const inputArgs = process.argv.slice(2);
+const managedLaunch = inputArgs[0] === "--setup-host";
+const setupHost = managedLaunch ? inputArgs.splice(0, 2)[1] : undefined;
+const [command, ...args] = inputArgs;
 const usage = `Mason ${PKG_VERSION}
 
 Usage: mason <command> [options]
@@ -21,23 +24,27 @@ Use mason <command> --help for options. npm users can keep using mason-auto,
 mason-audit, mason-review, mason-drift, mason-hook and mason-mcp.`;
 
 try {
-  if (!command || ["--help", "-h", "help"].includes(command)) console.log(usage);
+  if (managedLaunch) {
+    if (!setupHost || !["codex", "claude"].includes(setupHost) || !["mcp", "auto"].includes(command)) throw new Error("Invalid setup invocation.");
+    const { prepareLaunch } = await import("../src/setup/launcher.js");
+    await prepareLaunch(setupHost as "codex" | "claude");
+  }
+  if (command === "internal-integration-version") console.log(JSON.stringify({ protocol: 1, version: PKG_VERSION }));
+  else if (!command || ["--help", "-h", "help"].includes(command)) console.log(usage);
   else if (["--version", "-v"].includes(command)) console.log(PKG_VERSION);
   else if (command === "internal-install") {
     if (args.length) throw new Error("internal-install takes no arguments.");
-    const { sourceRuntime } = await import("../src/setup/runtime.js");
-    const selected = await sourceRuntime();
-    if (!selected.bundleRoot) throw new Error("This command requires a standalone bundle.");
     const { installStandalone } = await import("../src/distribution/install.js");
-    const installed = await installStandalone(selected.bundleRoot);
+    const bundleRoot = fileURLToPath(new URL("../..", import.meta.url));
+    const installed = await installStandalone(bundleRoot);
     console.log(`Installed Mason ${installed.version} in ${installed.home}.\n${installed.path.message}`);
   } else if (command === "upgrade" || command === "uninstall") {
-    if (args.includes("--help")) console.log(command === "upgrade" ? "Usage: mason upgrade [version]. Project versions change only when you rerun setup." : "Usage: mason uninstall. Removes the standalone user installation; project runtimes, configuration and knowledge are retained.");
+    if (args.includes("--help")) console.log(command === "upgrade" ? "Usage: mason upgrade [version]. Configured projects use the upgraded command on their next launch. Restart running assistants." : "Usage: mason uninstall. Removes the standalone user installation; project configuration and knowledge are retained; integrations need Mason reinstalled.");
     else {
       const { upgradeStandalone, uninstallStandalone } = await import("../src/distribution/install.js");
       if (args.length > (command === "upgrade" ? 1 : 0)) throw new Error("Unexpected arguments.");
       if (command === "upgrade") process.exitCode = await upgradeStandalone(args[0]);
-      else console.log((process.platform === "win32" ? "Finishing installation cleanup after runtime exit: " : "Removed standalone installation: ") + await uninstallStandalone() + ". Project configurations and pinned runtimes were retained.");
+      else console.log((process.platform === "win32" ? "Finishing installation cleanup after runtime exit: " : "Removed standalone installation: ") + await uninstallStandalone() + ". Project configuration and knowledge were retained. Reinstall Mason to use its integrations.");
     }
   } else if (["setup", "status", "check", "auto"].includes(command)) {
     const forwarded = command === "auto" ? args : [command, ...args];
@@ -52,6 +59,9 @@ try {
     await import(binary.href);
   } else throw new Error("Unknown command: " + command + ". Run mason --help.");
 } catch (error) {
-  console.error("Mason: " + (error instanceof Error ? error.message : String(error)));
-  process.exitCode = 2;
+  const message = "Mason: " + (error instanceof Error ? error.message : String(error));
+  if (command === "auto" && isHookCommand(args)) {
+    console.log(JSON.stringify({ systemMessage: message + " Verification was not established." }));
+    process.exitCode = 0;
+  } else { console.error(message); process.exitCode = 2; }
 }

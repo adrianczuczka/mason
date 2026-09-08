@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { initGitRepo, commitAll } from "./helpers.js";
+import { initGitRepo, commitAll, git } from "./helpers.js";
 import { getContext, getImpact, getSnapshot, masonInit, masonCompleteInit, saveDecision, saveSnapshotData, checkDrift, verifySnapshot, saveVerification } from "../src/mcp/tools.js";
 
 describe("Mason without a concept map", () => {
@@ -198,9 +198,17 @@ describe("Mason without a concept map", () => {
   });
 
   it("preserves prior settings and initialization time on repeated setup", async () => {
+    await fs.mkdir(path.join(repo, ".mason"), { recursive: true });
+    const config = { patterns: { service: ["**/*Service.kt"] }, ignore: ["generated/**"], features: { confluence: true, extra: "keep" } };
+    await fs.writeFile(path.join(repo, ".mason/config.json"), JSON.stringify(config));
+    // Shared options work in a clone before a local initialization receipt exists.
+    expect(JSON.parse(await masonInit(repo)).confluenceConfigured).toBe(true);
     const first = JSON.parse(await masonCompleteInit(repo, { confluenceConfigured: true }));
     const second = JSON.parse(await masonCompleteInit(repo));
     expect(second.marker.initializedAt).toBe(first.marker.initializedAt);
     expect(second.marker.features.confluence).toBe(true);
+    expect(JSON.parse(await fs.readFile(path.join(repo, ".mason/config.json"), "utf8"))).toEqual(config);
+    await expect(fs.access(path.join(repo, ".mason/project.json"))).rejects.toThrow();
+    expect(await git(["check-ignore", ".mason/local/project.json"], repo)).toBe(".mason/local/project.json");
   });
 });

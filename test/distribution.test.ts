@@ -5,7 +5,6 @@ import { spawn } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { verifyBundle, sha256 } from "../src/distribution/bundle.js";
 import { installStandalone, WINDOWS_BATCH_LAUNCHER } from "../src/distribution/install.js";
-import { installRuntime, verifyRuntime } from "../src/setup/runtime.js";
 
 let root: string, source: string, home: string, bin: string;
 async function fixture(version = "1.0.0") {
@@ -100,16 +99,6 @@ exit $Code
     manifest.target = process.platform === "win32" ? "darwin-arm64" : "win32-x64";
     await fs.writeFile(path.join(source, "bundle.json"), JSON.stringify(manifest));
     await expect(installStandalone(source)).rejects.toThrow();
-  });
-  it("reports an installed project runtime invalid when a dependency changes", async () => {
-    const { manifest, manifestHash } = await verifyBundle(source);
-    const runtime = { id: manifestHash.slice(0, 24), version: manifest.version,
-      hashes: Object.fromEntries(["dist/mason-auto.js", "dist/mason-mcp.js"].map(file => [file, manifest.files["app/" + file]])),
-      bundle: { target: manifest.target, manifestHash } };
-    await installRuntime(root, { source: path.join(source, "app"), bundleRoot: source, runtime });
-    expect(await verifyRuntime(root, runtime)).toBe(true);
-    await fs.writeFile(path.join(root, ".mason/runtime", runtime.id, "app/node_modules/example/index.js"), "broken dependency");
-    expect(await verifyRuntime(root, runtime)).toBe(false);
   });
   it("retains an unrelated launcher instead of taking ownership", async () => {
     await fs.mkdir(bin);

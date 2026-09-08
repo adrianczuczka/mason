@@ -65,10 +65,10 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 
 | Tool | Purpose |
 |---|---|
-| `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence`, and `mode: "map"`. `mode: "setup", host: "codex"` (or `"claude"`) installs runtime, MCP, instructions, and hooks using the shared setup engine. |
+| `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence`, and `mode: "map"`. `mode: "setup", host: "codex"` (or `"claude"`) configures MCP, instructions, and hooks using `mason` on PATH using the shared setup engine. |
 | `mason_repair` | Prepare an audit repair baseline; verify the same original findings after edits. Reports unresolved advisories and unavailable checks. |
 | `mason_automation` | Inspect configured hooks and observed events, or capture/resume and verify retained repair evidence across sessions. |
-| `mason_complete_init` | Records assistant instruction setup; preserves prior settings on repeated calls. |
+| `mason_complete_init` | Records assistant instruction setup in ignored local state, with feature settings in shared configuration; preserves prior settings on repeated calls. |
 | `generate_snapshot_batch` | Map step — returns one batch of files for the assistant to summarize. |
 | `save_partial_snapshot` | Persists the partial map for one batch. |
 | `reduce_snapshot` | Reduce step — returns every partial + instructions to merge into a unified map. |

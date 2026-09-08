@@ -7,7 +7,7 @@ import { hostSchema } from "./store.js";
 
 const USAGE = `Usage: mason-auto <setup|install|config|status|check|hook> [options]
 
-  setup [--host claude|codex]  Install a pinned runtime, MCP, instructions and hooks; retain the initial audit
+  setup [--host claude|codex]  Connect MCP, instructions and hooks to mason on PATH; retain the initial audit
   install --host claude|codex  Merge lifecycle hooks into this project's host config
   config --host claude|codex   Print the host config without writing
   status                      Read configured hooks and observed runtime events

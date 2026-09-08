@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.0 — 2026-09-08
+
+- Simplify project setup to use the installed `mason` command on PATH. Remove generated project launchers, copied runtimes, and per-project version pins. Global upgrades apply on the next launch; restart running assistants.
+- Keep setup and hook ownership records in ignored `.mason/local/`, with shared options in `.mason/config.json`. Decisions and optional maps remain shareable; original repair evidence stays local and durable.
+- Check command availability before configuration, retain evidence across interrupted writes, and require fresh activation observations after a Mason upgrade. Earlier generated setup layouts have no automatic migration; use a fresh project setup.
+
 ## 0.14.2 — 2026-09-07
 
 - Remove the repository-wide automation inventory that blocked setup above 100,000 files and directories. Discover module source through Git and Mason exclusions, and search workspace command manifests only when needed.

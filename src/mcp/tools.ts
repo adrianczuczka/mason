@@ -49,7 +49,7 @@ import {
 import type { Snapshot, FeatureEntry, FlowEntry } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
 import {
-  loadProjectMarker,
+  loadProjectMarker, loadProjectFeatures,
   saveProjectMarker,
   setupPlaybook,
   type ProjectMarker,
@@ -1070,13 +1070,15 @@ export async function masonInit(dir: string, options: { mode?: InitMode; host?: 
   if (options.host) throw new Error("host applies only to mode: setup.");
   const rootDir = path.resolve(dir);
   const marker = await loadProjectMarker(rootDir);
+  const { loadSetup } = await import("../setup/model.js");
+  const setup = await loadSetup(rootDir);
   const mode = options.mode ?? "quickstart";
   const findings = await inspectOnboarding(rootDir, options.base, options.evidence);
   return JSON.stringify(
     {
-      initialized: marker !== null,
+      initialized: marker !== null || setup !== null,
       ...(marker ? { initializedAt: marker.initializedAt } : {}),
-      confluenceConfigured: marker?.features?.confluence === true,
+      confluenceConfigured: (await loadProjectFeatures(rootDir)).confluence === true,
       mode,
       ...findings,
       playbook: setupPlaybook(mode),
@@ -1092,12 +1094,13 @@ export async function masonCompleteInit(
 ): Promise<string> {
   const rootDir = path.resolve(dir);
   const existing = await loadProjectMarker(rootDir);
+  const features = await loadProjectFeatures(rootDir);
   const marker: ProjectMarker = {
     version: 1,
     initializedAt: existing?.initializedAt ?? new Date().toISOString(),
     features: {
-      ...existing?.features,
-      confluence: options.confluenceConfigured ?? existing?.features?.confluence ?? false,
+      ...features,
+      ...(options.confluenceConfigured === undefined ? {} : { confluence: options.confluenceConfigured }),
     },
   };
   await saveProjectMarker(rootDir, marker);

@@ -126,6 +126,7 @@ try {
   }
   else assert.equal(await fs.readFile(profile, 'utf8'), installedProfile);
   assert.equal((await freshTerminal()).stdout.trim(), original.version);
+  env.PATH = bin + path.delimiter + nativePath; // A restarted terminal/host inherits the installed command.
   await fs.appendFile(profile, '# User settings added after installation\n');
   console.log('Fresh terminal finds Mason automatically; repeat installation preserves PATH settings.');
   await fs.mkdir(path.join(repo, 'src'), { recursive: true });
@@ -136,10 +137,15 @@ try {
   for (const host of ['codex', 'claude']) {
     const result = JSON.parse((await mason('setup', '--dir', repo, '--host', host, '--json')).stdout);
     assert.equal(result.activation.status, 'pending');
-    assert.equal(result.runtime.bundle.target, target);
+    assert.equal(result.runtime.kind, "global");
+    assert.equal(result.runtime.version, original.version);
+  }
+  for (const file of ['run.cjs', 'run.sh', 'run.ps1', 'runtime', 'setup.json', 'automation.json', 'project.json']) {
+    await assert.rejects(fs.access(path.join(repo, '.mason', file)), { code: 'ENOENT' });
   }
   await commit('configure Mason');
-  const before = JSON.parse(await fs.readFile(path.join(repo, '.mason/setup.json'), 'utf8'));
+  assert.equal((await git('ls-files', '.mason')).stdout.trim(), '');
+  const before = JSON.parse(await fs.readFile(path.join(repo, '.mason/local/setup.json'), 'utf8'));
   console.log('Setup installed both hosts in a non-npm repo. Exercising MCP and retained repair evidence…');
   await context('codex');
   for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse']) await hook('codex', event);
@@ -167,7 +173,7 @@ try {
   assert.equal((await mason('review', '--dir', repo, '--base', 'HEAD')).code, 0);
   console.log('Both packaged MCP servers and all five hooks passed; original findings survived the final commit.');
 
-  // A local next-release fixture exercises the real upgrade installer and version pinning.
+  // A local next-release fixture exercises the real upgrade installer and global project upgrades.
   const next = original.version.split('-')[0].split('.').map(Number); next[2]++;
   const nextVersion = next.join('.') + '-smoke';
   const nextOut = path.join(temp, 'next'); await fs.mkdir(nextOut);
@@ -187,22 +193,37 @@ try {
   await mason('upgrade', nextVersion);
   assert.equal((await mason('--version')).stdout.trim(), nextVersion);
   assert.equal((await freshTerminal()).stdout.trim(), nextVersion);
-  assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, '.mason/setup.json'), 'utf8')), before);
-  await context('codex'); await hook('codex', 'Stop');
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, '.mason/local/setup.json'), 'utf8')), before);
+  const afterUpgrade = JSON.parse((await mason('status', '--dir', repo, '--json')).stdout);
+  assert.equal(afterUpgrade.setup.hosts.codex.status, 'pending');
+  assert.equal(afterUpgrade.setup.hosts.codex.contextCalls, 0);
+  for (const host of ['codex', 'claude']) {
+    await context(host);
+    for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']) await hook(host, event);
+  }
+  assert.equal(JSON.parse((await mason('status', '--dir', repo, '--json')).stdout).setup.status, 'active');
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, '.mason/local/setup.json'), 'utf8')), before);
   const cloned = path.join(temp, 'fresh clone');
   await git('clone', repo, cloned);
   const pending = JSON.parse((await mason('status', '--dir', cloned, '--json')).stdout);
   assert.notEqual(pending.setup.status, 'active');
   const missingRuntime = await hook('codex', 'Stop', cloned);
-  assert(missingRuntime.systemMessage.includes('runtime unavailable'));
-  await mason('setup', '--dir', cloned, '--host', 'codex');
-  await context('codex', cloned);
+  assert(missingRuntime.systemMessage.includes('not configured locally'));
+  for (const host of ['codex', 'claude']) {
+    await mason('setup', '--dir', cloned, '--host', host);
+    await context(host, cloned);
+    const config = JSON.parse(await fs.readFile(path.join(cloned, host === 'codex' ? '.codex/hooks.json' : '.claude/settings.json'), 'utf8'));
+    assert.equal(config.hooks.Stop.length, 1);
+  }
+  assert.equal((await run('git', ['status', '--porcelain'], { cwd: cloned })).stdout.trim(), '');
   const upgraded = JSON.parse((await mason('setup', '--dir', repo, '--host', 'codex', '--json')).stdout);
   assert.equal(upgraded.runtime.version, nextVersion);
-  assert.notEqual(upgraded.runtime.id, before.hosts.codex.runtime.id);
-  assert.equal(upgraded.activation.hosts.codex.status, 'pending');
+  assert.equal(upgraded.runtime.kind, "global");
+  // Explicit setup also records the Claude instruction file added by the other host.
+  assert.equal(upgraded.activation.hosts.codex.status, 'pending', JSON.stringify(upgraded));
+  assert(upgraded.changedFiles.every(file => file.startsWith('.mason/local/')));
   for (const [name, bytes] of Object.entries(baselines)) assert.equal((await baselineBytes())[name], bytes);
-  console.log('Global upgrade retained project pins; explicit setup upgraded one host; fresh clone recovered without inherited activation.');
+  console.log('Global upgrade reached both project hosts with fresh activation evidence; clone setup was clean and idempotent.');
 
   corrupt = true;
   const failure = await mason('upgrade', nextVersion).then(() => null, error => error);
@@ -223,8 +244,13 @@ try {
   assert(remaining === null, `Uninstall returned with ${remaining?.length} entries remaining: ${remaining?.slice(0, 20).join(', ')}`);
   if (windows) assert.equal((await userPathEntries()).length, 0);
   else assert.equal(await fs.readFile(profile, 'utf8'), originalProfile + '# User settings added after installation\n');
+  await assert.rejects(context('codex'));
+  for (const [name, bytes] of Object.entries(baselines)) assert.equal((await baselineBytes())[name], bytes);
+  env.MASON_VERSION = nextVersion;
+  await install();
   await context('codex'); await hook('codex', 'Stop');
-  console.log('Corrupt upgrade and edited launcher rejected; uninstall retained working project runtimes.');
+  await mason('uninstall');
+  console.log('Corrupt upgrade and edited launcher rejected; uninstall kept project evidence; reinstall restored integrations.');
 } finally {
   server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
   if (windows) {

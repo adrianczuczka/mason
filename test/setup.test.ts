@@ -11,7 +11,8 @@ import { observeActivation, observationPath } from "../src/setup/observations.js
 import { loadSetup } from "../src/setup/model.js";
 import { applyEdit, managedBlock } from "../src/setup/files.js";
 import { mcpEdit } from "../src/setup/config.js";
-import * as runtime from "../src/setup/runtime.js";
+import * as launcher from "../src/setup/launcher.js";
+import * as setupFiles from "../src/setup/files.js";
 import { runAutomationHook } from "../src/automation/adapters.js";
 import { automate } from "../src/automation/runtime.js";
 import { workspace } from "../src/automation/evidence.js";
@@ -41,17 +42,8 @@ beforeEach(async () => {
   await write("src/main.kt", "fun main() = println(\"hello\")\n");
   await write("AGENTS.md", "The `src/main.kt` entry point.\n");
   await commitAll(root, "initial Kotlin project");
-  // Unit cases exercise configuration/evidence using actual built binaries but
-  // never fetch dependencies. A separate packaged smoke run covers npm + stdio.
-  vi.spyOn(runtime, "installRuntime").mockImplementation(async (dir, selected) => {
-    const base = path.join(dir, ".mason/runtime", selected.runtime.id);
-    const pkg = path.join(base, "node_modules/mason-context");
-    await fs.mkdir(path.join(pkg, "dist"), { recursive: true });
-    for (const file of Object.keys(selected.runtime.hashes)) await fs.copyFile(path.join(selected.source, file), path.join(pkg, file));
-    await fs.writeFile(path.join(pkg, "package.json"), JSON.stringify({ name: "mason-context", version: selected.runtime.version }));
-    await fs.writeFile(path.join(base, "receipt.json"), JSON.stringify(selected.runtime));
-    return selected.runtime;
-  });
+  vi.stubGlobal("PKG_VERSION", "test");
+  vi.spyOn(launcher, "installedCommand").mockResolvedValue({ available: true, version: "test", message: null });
 });
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); await fs.rm(root, { recursive: true, force: true }); }, 120000);
 
@@ -107,7 +99,15 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(baseline.report.docs[0].dirty).toBe(false);
     expect((await git(["status", "--porcelain"], root))).not.toContain("runtime/");
     expect(await git(["check-ignore", ".mason/reports/example.json"], root)).toBe(".mason/reports/example.json");
-    expect(await git(["check-ignore", ".mason/runtime/example"], root)).toBe(".mason/runtime/example");
+    expect(result.runtime).toMatchObject({ kind: "global", command: "mason" });
+    for (const file of ["runtime", "run.cjs", "run.sh", "run.ps1", "setup.json", "automation.json", "project.json"]) {
+      await expect(fs.access(path.join(root, ".mason", file))).rejects.toThrow();
+    }
+    expect(await git(["check-ignore", ".mason/local/setup.json", ".mason/local/automation.json"], root))
+      .toBe(".mason/local/setup.json\n.mason/local/automation.json");
+    await commitAll(root, "configure Mason");
+    expect((await git(["ls-files", ".mason"], root)).trim()).toBe("");
+    expect(JSON.parse(await masonInit(root)).initialized).toBe(true);
   });
 
   it("repeats setup without duplicate instructions, hooks, baseline replacement, or activation reset", async () => {
@@ -166,7 +166,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     const parsed = parse(edit.after);
     expect(parsed.model).toBe("test");
     expect(parsed.mcp_servers.other.command).toBe("keep");
-    expect(parsed.mcp_servers.mason.command).toBe("node");
+    expect(parsed.mcp_servers.mason.command).toBe(process.platform === "win32" ? "cmd.exe" : "mason");
     expect(parsed.mcp_servers.mason.enabled).toBe(false);
     expect(parsed.mcp_servers.mason.tool_timeout_sec).toBe(80);
     expect(parsed.mcp_servers.mason.env).toEqual({ PROJECT_OPTION: "keep" });
@@ -214,26 +214,28 @@ describe("unified setup", { timeout: 20000 }, () => {
     [".codex/config.toml", "[broken"],
     [".codex/hooks.json", "{broken"],
     ["AGENTS.md", "original\n<!-- mason:start -->unfinished"],
-  ])("rejects malformed %s before runtime installation or shared file edits", async (file, value) => {
+  ])("rejects malformed %s before shared file edits", async (file, value) => {
     await write(file, value);
     const docs = await fs.readFile(path.join(root, "AGENTS.md"), "utf8");
     await expect(setupProject(root, { host: "codex" })).rejects.toThrow();
-    expect(runtime.installRuntime).not.toHaveBeenCalled();
     expect(await fs.readFile(path.join(root, file), "utf8")).toBe(value);
     expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toBe(docs);
   });
 
-  it("resumes a failed runtime install with the original pre-edit audit intact", async () => {
-    const install = vi.mocked(runtime.installRuntime).getMockImplementation()!;
-    vi.mocked(runtime.installRuntime).mockRejectedValueOnce(new Error("network unavailable"));
-    const before = await fs.readFile(path.join(root, "AGENTS.md"), "utf8");
-    await expect(setupProject(root, { host: "codex" })).rejects.toThrow("network unavailable");
-    expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toBe(before);
+  it("resumes an interrupted configuration write with the original pre-edit audit intact", async () => {
+    const apply = setupFiles.applyEdit;
+    vi.spyOn(setupFiles, "applyEdit").mockImplementation(async (dir, edit) => {
+      if (edit.path === ".codex/config.toml") throw new Error("disk full");
+      return apply(dir, edit);
+    });
+    await expect(setupProject(root, { host: "codex" })).rejects.toThrow("disk full");
     expect((await setupStatus(root)).status).toBe("incomplete");
-    vi.mocked(runtime.installRuntime).mockImplementation(install);
+    vi.mocked(setupFiles.applyEdit).mockImplementation(apply);
     const done = await setupProject(root, { host: "codex" });
     const original = JSON.parse(await fs.readFile(path.join(root, done.initialReportPath), "utf8"));
     expect(original.baselinePaths).toHaveLength(1);
+    const baseline = JSON.parse(await fs.readFile(path.join(root, original.baselinePaths[0]), "utf8"));
+    expect(baseline.report.docs[0].dirty).toBe(false);
     expect(done.activation.status).toBe("pending");
   });
 
@@ -253,6 +255,8 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(await git(["check-ignore", ".mason/reports/test.json"], root)).toBe(".mason/reports/test.json");
     const visible = await git(["check-ignore", "--verbose", ".mason/decisions/test.json"], root);
     expect(visible).toContain("!/.mason/decisions/**");
+    expect(await git(["check-ignore", "--verbose", ".mason/config.json"], root)).toContain("!/.mason/config.json");
+    expect(await git(["check-ignore", "--verbose", ".mason/snapshot.json"], root)).toContain("!/.mason/snapshot.json");
     expect((await setupProject(root, { host: "codex" })).changedFiles).toEqual([]);
   });
 
@@ -308,31 +312,34 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect((await setupStatus(root)).hosts.codex.status).not.toBe("active");
   }, 60000);
 
-  it("reports a failed latest attempt instead of an older passing verification", async () => {
+  it("detects a missing global command without treating earlier activation as healthy", async () => {
     await setupProject(root, { host: "codex" });
-    await commitAll(root, "configure Mason");
-    await automate(root, { event: "task_end" });
-    expect((await setupStatus(root)).hosts.codex.verificationStatus).toBe("verified");
-    const ws = await workspace(root);
-    await expect(recordExecution(root, ws.directory, "task_end", async () => { throw new Error("capture failed"); })).rejects.toThrow("capture failed");
-    expect((await setupStatus(root)).hosts.codex).toMatchObject({ status: "attention", verificationStatus: "unavailable" });
-    await automate(root, { event: "task_end" });
-    expect((await setupStatus(root)).hosts.codex).toMatchObject({ status: "pending", verificationStatus: "verified" });
+    vi.mocked(launcher.installedCommand).mockResolvedValue({ available: false, version: null, message: "Restart the assistant to pick up PATH." });
+    expect((await setupStatus(root)).hosts.codex).toMatchObject({ status: "attention", runtime: "unavailable-on-path" });
+    const before = await git(["diff"], root);
+    await expect(setupProject(root, { host: "codex" })).rejects.toThrow("PATH");
+    expect(await git(["diff"], root)).toBe(before);
   });
 
-  it("reports missing or changed runtimes and changed inputs without reusing a passing verification", async () => {
-    const result = await setupProject(root, { host: "codex" });
-    await commitAll(root, "configure Mason");
-    await automate(root, { event: "task_end" });
-    expect((await setupStatus(root)).hosts.codex.verificationStatus).toBe("verified");
-    await write("AGENTS.md", (await fs.readFile(path.join(root, "AGENTS.md"), "utf8")) + "Extra project instructions.\n");
-    expect((await setupStatus(root)).hosts.codex.verificationStatus).toBe("unavailable");
-    await write(`.mason/runtime/${result.runtime.id}/node_modules/mason-context/dist/mason-mcp.js`, "changed binary");
-    expect((await setupStatus(root)).hosts.codex).toMatchObject({ status: "attention", runtime: "missing-or-changed" });
-    await fs.rm(path.join(root, `.mason/runtime/${result.runtime.id}`), { recursive: true });
-    expect((await setupStatus(root)).hosts.codex.runtime).toBe("missing-or-changed");
+  it("keeps version-specific activation evidence after a global upgrade without changing project configuration", async () => {
     await setupProject(root, { host: "codex" });
-    expect((await setupStatus(root)).hosts.codex.runtime).toBe("installed");
+    await activateEnvironment("codex");
+    await commitAll(root, "configure Mason");
+    await observeActivation(root, "context");
+    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]) await hook(event);
+    expect((await setupStatus(root)).hosts.codex.status).toBe("active");
+    const ws = await workspace(root), setup = (await loadSetup(root))!;
+    const oldPath = path.join(root, observationPath(ws.directory, "codex", setup.hosts.codex!.revision));
+    const before = await fs.readFile(oldPath);
+    vi.stubGlobal("PKG_VERSION", "next");
+    vi.mocked(launcher.installedCommand).mockResolvedValue({ available: true, version: "next", message: null });
+    expect((await setupStatus(root)).hosts.codex).toMatchObject({ status: "pending", contextCalls: 0, observedEvents: [] });
+    await observeActivation(root, "context");
+    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]) await hook(event);
+    expect((await setupStatus(root)).hosts.codex.status).toBe("active");
+    expect(await fs.readFile(oldPath)).toEqual(before);
+    expect(await loadSetup(root)).toEqual(setup);
+    expect(await git(["status", "--porcelain"], root)).toBe("");
   });
 
   it("does not read hook stdin for a directory called hook or a help request", () => {

@@ -1,0 +1,55 @@
+{
+  "version": 2,
+  "id": "prefer-a-global-mason-command-over-per-project-runtime-wrapp",
+  "title": "Prefer a global Mason command over per-project runtime wrappers",
+  "body": "In the maintainer discussion on 2026-09-08, project-generated run.sh/run.ps1/run.cjs and setup metadata were called out as unnecessary onboarding clutter. Hiding those scripts in a local directory would not address the underlying complexity. The maintainer preferred the ordinary install-on-PATH model and explicitly said not to spend effort on backward compatibility because adoption is still minimal. Prior project runtime copies had been chosen for per-host version isolation and independence from the global installation; those guarantees are intentionally dropped in favor of simple global upgrades. Keep shared knowledge and meaningful configuration in Git, and keep install bookkeeping and evidence local. Desktop PATH discovery must be verified through actual host activation; a successful terminal probe alone does not establish it. Do not reintroduce runtime copies or legacy migration machinery solely to preserve the earlier design without a demonstrated user need.",
+  "category": "decision",
+  "files": [
+    "src/setup",
+    "bin/mason.ts",
+    "docs/setup.md",
+    "scripts/smoke-standalone.mjs"
+  ],
+  "createdAt": "2026-09-08T12:44:05.747Z",
+  "updatedAt": "2026-09-08T12:44:05.747Z",
+  "refreshedHash": "2204f447da836c6adf1823f605289f592a060475",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "discussion",
+      "reference": "Maintainer conversation, 2026-09-08: simplify setup to use mason on PATH",
+      "note": "The user questioned why Mason needs project run scripts and explicitly waived backward compatibility: 'No one is using this tool yet.'"
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-09-08T12:44:05.747Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Prefer a global Mason command over per-project runtime wrappers",
+        "body": "In the maintainer discussion on 2026-09-08, project-generated run.sh/run.ps1/run.cjs and setup metadata were called out as unnecessary onboarding clutter. Hiding those scripts in a local directory would not address the underlying complexity. The maintainer preferred the ordinary install-on-PATH model and explicitly said not to spend effort on backward compatibility because adoption is still minimal. Prior project runtime copies had been chosen for per-host version isolation and independence from the global installation; those guarantees are intentionally dropped in favor of simple global upgrades. Keep shared knowledge and meaningful configuration in Git, and keep install bookkeeping and evidence local. Desktop PATH discovery must be verified through actual host activation; a successful terminal probe alone does not establish it. Do not reintroduce runtime copies or legacy migration machinery solely to preserve the earlier design without a demonstrated user need.",
+        "category": "decision",
+        "files": [
+          "src/setup",
+          "bin/mason.ts",
+          "docs/setup.md",
+          "scripts/smoke-standalone.mjs"
+        ],
+        "sources": [
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-09-08: simplify setup to use mason on PATH",
+            "note": "The user questioned why Mason needs project run scripts and explicitly waived backward compatibility: 'No one is using this tool yet.'"
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "2204f447da836c6adf1823f605289f592a060475"
+    }
+  ]
+}
