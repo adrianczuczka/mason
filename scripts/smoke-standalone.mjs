@@ -225,6 +225,26 @@ try {
   for (const [name, bytes] of Object.entries(baselines)) assert.equal((await baselineBytes())[name], bytes);
   console.log('Global upgrade reached both project hosts with fresh activation evidence; clone setup was clean and idempotent.');
 
+  const retainedInstructions = await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8');
+  const preview = JSON.parse((await mason('teardown', '--dir', repo, '--host', 'codex', '--dry-run', '--json')).stdout);
+  assert.equal(preview.status, 'complete');
+  assert(preview.changes.some(change => change.path === '.codex/config.toml' && change.action === 'delete'));
+  assert.equal(await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8'), retainedInstructions);
+  await context('codex'); // Preview left the integration usable.
+  await mason('teardown', '--dir', path.join(repo, 'src'), '--host', 'codex');
+  await assert.rejects(fs.access(path.join(repo, '.codex/config.toml')), { code: 'ENOENT' });
+  assert.equal(await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8'), retainedInstructions);
+  await context('claude'); await hook('claude', 'Stop');
+  await mason('teardown', '--dir', repo);
+  assert.equal(JSON.parse((await mason('status', '--dir', repo, '--json')).stdout).setup.status, 'not-configured');
+  assert(!(await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8')).includes('<!-- mason:start -->'));
+  assert.equal((await mason('--version')).stdout.trim(), nextVersion);
+  assert.deepEqual(JSON.parse((await mason('teardown', '--dir', repo, '--json')).stdout).changes, []);
+  for (const [name, bytes] of Object.entries(baselines)) assert.equal((await baselineBytes())[name], bytes);
+  await mason('setup', '--dir', repo, '--host', 'codex');
+  await context('codex'); await hook('codex', 'Stop');
+  console.log('Project teardown preserved the other host and evidence; repeat teardown and reconnection passed.');
+
   corrupt = true;
   const failure = await mason('upgrade', nextVersion).then(() => null, error => error);
   assert(failure && failure.message.includes('checksum mismatch'));

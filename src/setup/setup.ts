@@ -10,6 +10,7 @@ import { hookCommand, installedCommand } from "./launcher.js";
 import { hookConfig } from "../automation/adapters.js";
 import { loadSetup, loadSetupReceipt, SETUP_PATH, type SetupConfig } from "./model.js";
 import { setupStatus } from "./status.js";
+import { ownershipEdit, completedHookOwnership } from "./ownership.js";
 
 export async function selectHost(root: string, explicit?: Host): Promise<Host> {
   if (explicit) return explicit;
@@ -38,6 +39,8 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
     const setupBefore = await readText(ws.root, SETUP_PATH);
     const mcpFingerprint = hash((await inspectHostConfig(ws.root, host, mcp.after)).mcp);
     const desiredHooks = hookConfig(host, hookCommand(host)).hooks;
+    const configuredHook = desiredHooks.SessionStart[0].hooks[0].command;
+    const ownership = await ownershipEdit(ws.root, [...instructions, mcp, hooks[0]], { [hooks[0].path]: configuredHook });
     const fingerprint = hash({ command: "mason",
       mcp: mcpFingerprint, hooks: desiredHooks,
       instructions: instructions.map(edit => edit.path) });
@@ -57,8 +60,10 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
     await writeStoreJson(ws.root, receiptPath, { version: 1, host, status: "installing", initialReportPath,
       initialBaselinePaths, root: ws.root, revision });
     const changedFiles: string[] = [];
+    if (await applyEdit(ws.root, ownership)) changedFiles.push(ownership.path);
     for (const edit of edits) if (await applyEdit(ws.root, edit)) changedFiles.push(edit.path);
     if (await applyEdit(ws.root, { path: SETUP_PATH, before: setupBefore, after: JSON.stringify(setup, null, 2) + "\n" })) changedFiles.push(SETUP_PATH);
+    if (await applyEdit(ws.root, await completedHookOwnership(ws.root, hooks[0].path, configuredHook)) && !changedFiles.includes(ownership.path)) changedFiles.push(ownership.path);
     // Ensure a repo that initially had no instructions now has a baseline too.
     const checked = await automate(ws.root, { event: "turn_start" });
     const configured = await inspectHostConfig(ws.root, host, undefined);

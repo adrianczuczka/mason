@@ -11,6 +11,7 @@ const usage = `Mason ${PKG_VERSION}
 Usage: mason <command> [options]
 
   setup --host codex|claude   Connect this project to your assistant
+  teardown [--host codex|claude] Disconnect project integrations; retain knowledge
   status                     Show configuration, observed use and verification
   check                      Resume and verify retained documentation findings
   audit                      Audit project instructions
@@ -39,14 +40,14 @@ try {
     const installed = await installStandalone(bundleRoot);
     console.log(`Installed Mason ${installed.version} in ${installed.home}.\n${installed.path.message}`);
   } else if (command === "upgrade" || command === "uninstall") {
-    if (args.includes("--help")) console.log(command === "upgrade" ? "Usage: mason upgrade [version]. Configured projects use the upgraded command on their next launch. Restart running assistants." : "Usage: mason uninstall. Removes the standalone user installation; project configuration and knowledge are retained; integrations need Mason reinstalled.");
+    if (args.includes("--help")) console.log(command === "upgrade" ? "Usage: mason upgrade [version]. Configured projects use the upgraded command on their next launch. Restart running assistants." : "Usage: mason uninstall. Removes the standalone user installation; project configuration and knowledge are retained. Run mason teardown in each project first to disconnect its integrations.");
     else {
       const { upgradeStandalone, uninstallStandalone } = await import("../src/distribution/install.js");
       if (args.length > (command === "upgrade" ? 1 : 0)) throw new Error("Unexpected arguments.");
       if (command === "upgrade") process.exitCode = await upgradeStandalone(args[0]);
       else console.log((process.platform === "win32" ? "Finishing installation cleanup after runtime exit: " : "Removed standalone installation: ") + await uninstallStandalone() + ". Project configuration and knowledge were retained. Reinstall Mason to use its integrations.");
     }
-  } else if (["setup", "status", "check", "auto"].includes(command)) {
+  } else if (["setup", "teardown", "status", "check", "auto"].includes(command)) {
     const forwarded = command === "auto" ? args : [command, ...args];
     let input = "";
     if (isHookCommand(forwarded) && !process.stdin.isTTY) for await (const chunk of process.stdin) {

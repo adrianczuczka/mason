@@ -19,7 +19,7 @@ Mason exposes an MCP server and standalone deterministic CLIs. Entry points:
 - **mason-auto** (`bin/mason-auto.ts` → `src/automation/cli.ts`) — shared documentation automation with Claude Code and Codex lifecycle adapters. Retains baselines per worktree/branch, resumes repairs, caches checks by dependencies, and reports configured hooks separately from observed events. `setup --host codex|claude` invokes shared onboarding under `src/setup/`: the installed mason command, MCP, hooks, instructions, and pre-edit audit evidence. `status` is read-only and reports configured versus observed activation; `check` writes local evidence and exits 0 verified / 1 issues / 2 incomplete.
 - **mason-hook** (`bin/mason-hook.ts` → `src/hook/cli.ts`) — Claude Code PostToolUse hook: injects decision records anchored to the file a session just read or edited; deterministic, per-session deduped, silent on no match (this repo dogfoods it via `.claude/settings.json`)
 - **mason-review** (`bin/mason-review.ts` → `src/review/cli.ts`) — diff review vs a base ref: flags absent historical co-change partners and touched decisions. Optional CI evidence imports preserve outcomes and provenance. Exit 0 no missing partners / 1 missing partners / 2 error; `--require-evidence` additionally gates on current, complete passing checks.
-- **mason** (`bin/mason.ts`) — unified setup/status/check/audit/review/drift/MCP CLI, plus standalone upgrade/uninstall; dedicated binaries remain supported
+- **mason** (`bin/mason.ts`) — unified setup/teardown/status/check/audit/review/drift/MCP CLI, plus standalone upgrade/uninstall; dedicated binaries remain supported. Project teardown supports host selection and read-only dry runs, preserves knowledge/evidence, and reports ambiguous ownership with exit 2.
 
 ### Core Modules
 
@@ -68,7 +68,7 @@ src/
 │   ├── evidence.ts     # Read-only CI imports, freshness, file/decision associations
 │   ├── evidence/       # Vitest JSON and SARIF parsers, report path normalization
 │   └── cli.ts          # mason-review CLI (summary, --json, exit codes)
-├── setup/              # Global command/config/instruction setup and observed activation
+├── setup/              # Global command/config/instruction setup, ownership, teardown and observed activation
 ├── snapshot/
 │   ├── snapshot.ts     # Snapshot load/save, batch preparation
 │   ├── partials.ts     # Map-Reduce partials + scoped-refresh scope marker

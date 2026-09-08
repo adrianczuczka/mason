@@ -5,6 +5,7 @@
 Install the [standalone CLI](distribution.md) to use Mason without system Node or npm. npm installation remains supported below.
 
 - [Unified project setup](#unified-project-setup)
+- [Disconnect a project](#disconnect-a-project)
 - [Automatic documentation checks (mason-auto)](#automatic-documentation-checks-mason-auto)
 - [Decision injection (mason-hook)](#decision-injection-mason-hook)
 - [Other clients](#other-clients)
@@ -51,6 +52,26 @@ Finish activation in the host:
 
 For an assistant already connected to this build, `mason_init` with `mode: "setup"` and `host: "codex"` or `"claude"` invokes the same engine. Its default quickstart remains read-only. Setup does not build a concept map, approve advisories, or create decision records; decisions should capture actual lessons from subsequent work.
 
+## Disconnect a project
+
+Available from **0.16.0**:
+
+```bash
+mason teardown --dry-run       # Preview without changing files
+mason teardown --host codex    # Disconnect one assistant
+mason teardown                 # Disconnect all project assistants
+```
+
+Run from the Git repository or a subdirectory, or pass `--dir /path/to/project`. Teardown removes identifiable Mason MCP entries, lifecycle hooks, and local setup records. Shared Mason instruction blocks stay while another configured host needs them. After the last host is disconnected, unchanged Mason blocks are removed too. Restart running assistants to unload their existing sessions, then review and commit the configuration changes normally.
+
+User settings, unrelated hooks and instruction text are preserved. Setup records file ownership in ignored `.mason/local/integration.json` before changing shared files, so teardown can remove files Mason created when no user content remains. With missing receipts, only recognizable entries and blocks are removed; empty files remain because their creation cannot be attributed to Mason. Edited or ambiguous entries are retained with diagnostics. Fix or remove those entries manually and rerun teardown to finish. Repeating a completed teardown is harmless.
+
+Decisions, shared configuration, optional maps, repair baselines and reports remain, along with their Git ignore rules. Teardown removes setup receipts across this checkout's local branch records; it does not erase verification history or disconnect other checkouts. It never uninstalls Mason or changes global host settings. There is no purge option.
+
+Use `--json` for a structured list of planned or applied `changes` and retained-entry `diagnostics`. Exit code **0** means cleanup is complete or there was nothing to remove; **2** means cleanup needs attention, including in a dry run. `--dry-run` creates no files or locks.
+
+To reconnect, run `mason setup --host codex` or `--host claude`. To remove the standalone application as well, run `mason uninstall` after tearing down the projects you want to disconnect. For an npm installation, use `npm uninstall -g mason-context` instead.
+
 ## Automatic documentation checks (mason-auto)
 
 Mason can preserve documentation audit evidence and resume unfinished repairs through Claude Code or Codex lifecycle hooks. A shared engine owns the evidence, verification, and cache; each host adapter handles its event format. No concept map or model call is required for the checks.
@@ -58,7 +79,7 @@ Mason can preserve documentation audit evidence and resume unfinished repairs th
 Unified setup already installs these hooks. For manual npm hook installation (available from 0.12.0), install or upgrade the package in each project:
 
 ```bash
-npm install -D mason-context@0.15.0
+npm install -D mason-context@0.16.0
 npx mason-auto install --host claude   # Claude Code
 npx mason-auto install --host codex    # Codex; review/trust the hooks using /hooks
 npx mason-auto status
@@ -66,7 +87,7 @@ npx mason-auto status
 
 Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in ignored `.mason/local/automation.json`. Repeating installation updates only those handlers. Commit the host configuration. Installation adds ignore rules for `.mason/local/` and `.mason/reports/`; shared configuration and decision records remain available to Git. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
 
-When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.15.0`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
+When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.16.0`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
 
 `status` distinguishes configuration from observed events. Host versions, project trust, policy, and specialized tool paths can prevent hooks from running. Configuration alone is not evidence of automatic use. Codex requires review/trust of new or changed non-managed hooks. See the [Claude Code hook reference](https://code.claude.com/docs/en/hooks) and [Codex hook reference](https://learn.chatgpt.com/docs/hooks).
 

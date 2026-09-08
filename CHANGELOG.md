@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.0 — 2026-09-08
+
+- Add `mason teardown` to disconnect all project hosts, or one with `--host codex|claude`. Support `--dir`, `--dry-run` and `--json`; retain decisions, configuration, maps, repair evidence and ignore rules. Global uninstall remains separate.
+- Record integration ownership before setup writes. Remove only identifiable Mason entries and unchanged instruction blocks, preserve unrelated user content and remaining hosts, and retain ambiguous edits with an incomplete result. Repeated teardown and interrupted-operation recovery preserve original evidence.
+- Exercise setup/teardown/reconnection, missing receipts, user edits, branch receipts and the packaged CLI lifecycle.
+
 ## 0.15.0 — 2026-09-08
 
 - Simplify project setup to use the installed `mason` command on PATH. Remove generated project launchers, copied runtimes, and per-project version pins. Global upgrades apply on the next launch; restart running assistants.

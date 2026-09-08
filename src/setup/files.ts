@@ -5,6 +5,7 @@ import { readBoundedFile } from "../utils/files.js";
 import { storePath } from "../utils/storage.js";
 
 export interface FileEdit { path: string; before: string | null; after: string }
+export interface RemovalEdit { path: string; before: string | null; after: null }
 export async function readText(root: string, file: string): Promise<string | null> {
   try {
     const text = await readBoundedFile(await storePath(root, file), 2 * 1024 * 1024);
@@ -28,11 +29,17 @@ export function managedBlock(text: string, start: string, end: string, body: str
   return text + (text.length && !text.endsWith("\n") ? eol : "") + (text.length ? eol : "") + block + eol;
 }
 
-/** Compare before replacing: a resumed setup cannot overwrite a user's concurrent edit. */
-export async function applyEdit(root: string, edit: FileEdit): Promise<boolean> {
+/** Compare before replacing or removing: retain a user's concurrent edit. */
+export async function applyEdit(root: string, edit: FileEdit | RemovalEdit): Promise<boolean> {
   const current = await readText(root, edit.path);
   if (current === edit.after) return false;
-  if (current !== edit.before) throw new Error("Setup input changed during installation: " + edit.path + ". Rerun setup to resume.");
+  if (current !== edit.before) throw new Error("Integration input changed during update: " + edit.path + ". Rerun the requested command to resume.");
+  if (edit.after === null) {
+    const file = await storePath(root, edit.path);
+    if (await readText(root, edit.path) !== edit.before) throw new Error("Input changed during removal: " + edit.path);
+    await fs.unlink(file);
+    return true;
+  }
   const file = await storePath(root, edit.path, true);
   const temporary = path.join(path.dirname(file), ".mason-setup-" + randomUUID() + ".tmp");
   try {
@@ -40,7 +47,7 @@ export async function applyEdit(root: string, edit: FileEdit): Promise<boolean> 
     const handle = await fs.open(temporary, "wx", mode);
     try { await handle.writeFile(edit.after, "utf8"); await handle.sync(); }
     finally { await handle.close(); }
-    if (await readText(root, edit.path) !== edit.before) throw new Error("Setup input changed during installation: " + edit.path);
+    if (await readText(root, edit.path) !== edit.before) throw new Error("Integration input changed during update: " + edit.path);
     await fs.rename(temporary, file);
     return true;
   } finally { await fs.rm(temporary, { force: true }); }

@@ -39,13 +39,14 @@ Setup configures project MCP, hooks and instructions using the same evidence-pre
 
 ```sh
 mason upgrade           # Latest stable release
-mason upgrade 0.15.0    # A particular published version
+mason upgrade 0.16.0    # A particular published version
+mason teardown         # Disconnect the current project; keep its knowledge
 mason uninstall
 ```
 
 A global upgrade updates the command used by all configured projects. Restart running assistants to load it. Activation is measured separately for each Mason version; old observations remain local evidence of the previous version. Setup retains original repair evidence and only needs repeating for a fresh clone or configuration changes. A clone does not inherit another checkout's activation. Re-review changed hooks through native host controls.
 
-Uninstall removes the standalone user installation, its owned launchers, and unchanged PATH additions recorded by Mason. Preexisting PATH entries and other shell settings remain; edited Mason blocks are retained with a message. It retains project instructions, MCP/hook configuration, decisions, and repair evidence. Project integrations require Mason to be reinstalled before they can run again. It refuses to delete an edited launcher. Previous global bundle versions are retained until uninstall.
+Uninstall removes the standalone user installation, its owned launchers, and unchanged PATH additions recorded by Mason. Preexisting PATH entries and other shell settings remain; edited Mason blocks are retained with a message. It retains project instructions, MCP/hook configuration, decisions, and repair evidence. Run [mason teardown](setup.md#disconnect-a-project) in each project you want to disconnect before uninstalling. Remaining integrations require Mason to be reinstalled before they can run again. It refuses to delete an edited launcher. Previous global bundle versions are retained until uninstall.
 
 The npm distribution and existing dedicated commands remain supported. Install globally with `npm install -g mason-context`; this requires Node 20+ and npm. The same project configuration calls `mason` whether it comes from npm or the standalone installer.
 
