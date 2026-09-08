@@ -1,17 +1,17 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-07T15:46:06.399Z",
-  "gitHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6",
+  "updatedAt": "2026-09-08T12:54:46.886Z",
+  "gitHash": "e15c2b9b8bec2774539a335d8acaba9368982887",
   "features": {
     "MCP server entry point": {
-      "description": "Registers 21 MCP tools, including explicit unified project setup and automation status/checks. Configured get_context calls record local activation observations without storing prompts.",
+      "description": "Registers 21 MCP tools, including setup through the installed Mason command and local instruction-completion state. Configured get_context calls record activation observations without storing prompts.",
       "files": [
         "bin/mason-mcp.ts",
         "src/mcp/server.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "drift detection CLI": {
       "description": "Checks relevant committed map changes and source coverage, reporting local edits and verification failures separately; map-only and unrelated commits stay current.",
@@ -68,7 +68,7 @@
         "test/adoption.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "team decisions log": {
       "description": "Captures version 2 proposals and derives operative accepted revisions from validated history until explicit replacement or retirement. Preserves legacy uncertainty, serializes writes, and prevents proposal supersession from hiding an accepted constraint.",
@@ -116,7 +116,7 @@
       "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
     },
     "MCP tool implementations": {
-      "description": "Implements map-independent decisions, context and impact, read-only quickstart/map playbooks, explicit unified setup, audit repair verification, automation activation/status, and optional map correctness review.",
+      "description": "Implements map-independent decisions, context and impact, audit/review playbooks, global-command setup, repair verification and automation status. Initialization receipts are local; shared feature settings remain usable in fresh clones.",
       "files": [
         "src/mcp/tools.ts"
       ],
@@ -125,7 +125,7 @@
         "test/verify.test.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "concept-map snapshot storage": {
       "description": "Validates and atomically stores concept maps and Map-Reduce partials; supports scoped refreshes while retaining failed verdicts for unchanged entries.",
@@ -343,7 +343,7 @@
         "test/setup.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "decision injection hook": {
       "description": "Injects operative accepted decisions with separately labeled pending proposals and their freshness. Deduplicates per repository/session/revision and updates previously seen decisions after acceptance or retirement even when their anchors move.",
@@ -387,7 +387,7 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "project onboarding": {
-      "description": "Defaults to read-only audit/review findings. Explicit setup retains the initial audit, installs a pinned runtime, and merges MCP, hooks, instructions and ignore rules with resumable writes. Check-scoped evidence permits setup amid ignored generated files. Status separates configuration from observed activation and checks runtime integrity per host and worktree.",
+      "description": "Read-only audit/review by default. Explicit setup verifies mason on PATH, retains pre-edit evidence and merges MCP, hooks, instructions and ignore rules with resumable writes. Generated state stays in .mason/local; no project launchers or runtime copies. Status separates configuration from version-specific observed activation.",
       "files": [
         "src/mcp/init.ts",
         "src/mcp/onboarding.ts",
@@ -396,7 +396,6 @@
         "src/setup/launcher.ts",
         "src/setup/model.ts",
         "src/setup/observations.ts",
-        "src/setup/runtime.ts",
         "src/setup/setup.ts",
         "src/setup/status.ts"
       ],
@@ -407,7 +406,7 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -438,7 +437,7 @@
       "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "documentation automation": {
-      "description": "Retains documentation evidence across sessions and final commits in worktree/branch state. Cache keys use each check's dependencies instead of a repository-wide inventory; workspace commands are discovered only when needed. Execution receipts preserve failed or unfinished attempts, and adapters bound notifications and continuations.",
+      "description": "Retains documentation evidence across sessions and final commits in worktree/branch state. Checks cache their scoped dependencies; receipts preserve failed or unfinished attempts. Adapters bound notifications and continuations, and installation records hook ownership in ignored local state.",
       "files": [
         "bin/mason-auto.ts",
         "src/automation/adapters.ts",
@@ -456,7 +455,7 @@
         "test/setup.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "automatic-use evaluations": {
       "description": "Evaluates ordinary module-renaming and unrelated control tasks with baseline, instructions and hooks arms for Claude Code and Codex. Separates offline lifecycle replay from real host sessions, records activation and preserved evidence, and grades behavior, protected configuration and verification after the final commit.",
@@ -472,7 +471,7 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "unified Mason CLI": {
-      "description": "Routes setup, status, checks, audit, review, drift, hooks and MCP through the mason command, with standalone installation, upgrade and uninstall commands while retaining dedicated binaries.",
+      "description": "Routes setup, status, checks, audit, review, drift, hooks and MCP through mason on PATH. Managed invocations establish host activation context; global upgrade and uninstall affect project integrations without project runtime copies.",
       "files": [
         "bin/mason.ts"
       ],
@@ -480,10 +479,10 @@
         "test/distribution.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "70ebce56a1f8f0aad8b0332b9ae557eb3790a225"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "standalone distribution": {
-      "description": "Builds verified bundles with pinned Node and dependencies, installs owned user launchers, and configures user PATH with tracked shell/registry additions. Setup instructions use the inherited PATH to request a new terminal only when needed. Upgrades retain project pins; uninstall preserves other settings and edited PATH blocks. Native CI checks fresh-terminal discovery, MCP/hooks, repair evidence, upgrades, clones and cleanup.",
+      "description": "Builds verified bundles with pinned Node and dependencies, installs owned user launchers and configures PATH. Global upgrades apply to project integrations on their next launch; uninstall retains project data but removes their command. Native smoke checks cover both hosts, fresh version activation, clones, repair evidence and reinstall.",
       "files": [
         "src/distribution/bundle.ts",
         "src/distribution/install.ts",
@@ -502,7 +501,7 @@
         "test/distribution-path.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "506b8332b0f22f4fb2efe25d006ca11ea52a48ff"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     }
   },
   "flows": {
@@ -534,7 +533,7 @@
         "src/mcp/server.ts",
         "src/mcp/tools.ts"
       ],
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "Confluence sync flow": {
       "description": "Loads the snapshot, diffs against sync state, and pushes rendered pages to Confluence",
@@ -568,7 +567,7 @@
         "src/decisions/decisions.ts",
         "src/utils/storage.ts"
       ],
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "CI evidence review flow": {
       "description": "Loads recorded test and analysis artifacts, preserves their outcome and freshness, links findings only to operative accepted decision anchors, and renders CLI/MCP review results with optional CI gating.",
@@ -592,10 +591,10 @@
         "src/audit/audit.ts",
         "src/utils/storage.ts"
       ],
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "documentation automation flow": {
-      "description": "Host events drive check-scoped evidence capture and final-commit verification under a serialized runtime. Validated discovery avoids a full filesystem inventory; bounded receipts preserve failures and uncertainty, and launchers record activation observations.",
+      "description": "Host events invoke mason on PATH and drive scoped evidence capture and final-commit verification under a serialized runtime. Bounded receipts preserve failures and uncertainty; local observations separate activation by Mason version, host, setup revision and worktree/branch.",
       "chain": [
         "src/automation/adapters.ts",
         "src/automation/runtime.ts",
@@ -608,25 +607,23 @@
         "src/automation/execution.ts",
         "src/setup/observations.ts"
       ],
-      "refreshedHash": "23f2dbff87cf1ea7c7f86a202b603078baa278c6"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "project setup and activation flow": {
-      "description": "CLI or explicit MCP setup retains pre-edit audit evidence, installs a pinned npm runtime or verified standalone copy, then merges configuration and instructions. Native host trust enables later MCP and hooks; local observations determine activation independently of verification. Explicit setup upgrades one host while global upgrades leave project pins intact.",
+      "description": "CLI or explicit MCP setup probes the global command, retains pre-edit evidence and merges project configuration. Generated bookkeeping stays local. Trusted host invocations call mason on PATH; version-specific observations establish activation independently of verification. Global upgrades need new launches, without project runtime installation.",
       "chain": [
         "bin/mason.ts",
         "src/automation/cli.ts",
         "src/mcp/tools.ts",
         "src/setup/setup.ts",
         "src/automation/runtime.ts",
-        "src/setup/runtime.ts",
-        "src/distribution/bundle.ts",
         "src/setup/config.ts",
         "src/setup/files.ts",
         "src/setup/launcher.ts",
         "src/setup/observations.ts",
         "src/setup/status.ts"
       ],
-      "refreshedHash": "00cf8adab7305a04e23ce83a4acc701302f9e467"
+      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     }
   }
 }
