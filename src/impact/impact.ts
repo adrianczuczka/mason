@@ -3,6 +3,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createFileAccess, SOURCE_GLOB } from "../utils/files.js";
 import { normalizeRepoPath } from "../utils/paths.js";
+import { createReferenceMatcher, sortReferences, type ReferenceEntry } from "./references.js";
+export type { ReferenceEntry } from "./references.js";
 
 const exec = promisify(execFile);
 
@@ -10,19 +12,6 @@ export interface CochangeEntry {
   file: string;
   cochangeRate: number;
   sharedCommits: number;
-}
-
-export interface ReferenceEntry {
-  file: string;
-  matches: string[];
-  /**
-   * "import" when the name appears on an import/include/use line — a
-   * structural dependency; "mention" for any other textual hit (comments,
-   * strings, same-name-different-concept collisions). Imports sort first:
-   * a mention of "context" in a doc comment is not the same signal as
-   * `import { Context }`.
-   */
-  kind: "import" | "mention";
 }
 
 export interface TestEntry {
@@ -157,72 +146,21 @@ async function getReferences(
   rootDir: string,
   targetFiles: string[]
 ): Promise<ReferenceEntry[]> {
-  // Extract searchable names from target files
-  const searchNames = new Set<string>();
-  for (const target of targetFiles) {
-    const basename = path.basename(target).replace(/\.[^.]+$/, "");
-    searchNames.add(basename);
-  }
-
   const access = await createFileAccess(rootDir);
   const allSourceFiles = await access.list(SOURCE_GLOB);
-
-  // Exclude target files from search
-  const targetSet = new Set(targetFiles);
-  const filesToSearch = allSourceFiles.filter((f) => !targetSet.has(f));
-
-  const results = new Map<string, { matches: Set<string>; isImport: boolean }>();
-
-  // Language-agnostic import-line heuristic: covers JS/TS import/require,
-  // Python import/from, Go/Rust/Swift/Kotlin/Java import/use, C include.
-  const importLine = /^\s*(import\b|from\b.*\bimport\b|const\b.*=\s*require\(|use\b|#include\b|require\s*\()/;
-
-  // Read files in batches to avoid too many open handles
-  const batchSize = 50;
-  for (let i = 0; i < filesToSearch.length; i += batchSize) {
-    const batch = filesToSearch.slice(i, i + batchSize);
-
-    await Promise.all(
-      batch.map(async (file) => {
-        try {
-          const full = await access.read(file);
-          if (!full) return;
-          const content = full.content;
-          const lines = content.split("\n");
-
-          for (const name of searchNames) {
-            // Match the name as a word boundary (not part of another word)
-            const regex = new RegExp(`\\b${escapeRegex(name)}\\b`);
-            if (!regex.test(content)) continue;
-            if (!results.has(file)) {
-              results.set(file, { matches: new Set(), isImport: false });
-            }
-            const entry = results.get(file)!;
-            entry.matches.add(name);
-            if (
-              !entry.isImport &&
-              lines.some((l) => regex.test(l) && importLine.test(l))
-            ) {
-              entry.isImport = true;
-            }
-          }
-        } catch {
-          // Skip unreadable files
-        }
-      })
-    );
+  const available = new Set(allSourceFiles);
+  const targetContents = new Map<string, string>();
+  for (const target of targetFiles) {
+    const source = await access.read(target);
+    if (source) { available.add(target); targetContents.set(target, source.content); }
   }
-
-  return [...results.entries()]
-    .map(([file, { matches, isImport }]) => ({
-      file,
-      matches: [...matches],
-      kind: (isImport ? "import" : "mention") as "import" | "mention",
-    }))
-    .sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === "import" ? -1 : 1;
-      return b.matches.length - a.matches.length;
-    });
+  const match = createReferenceMatcher(targetFiles, available, targetContents);
+  const references: ReferenceEntry[] = [];
+  for (let i = 0; i < allSourceFiles.length; i += 50) {
+    const batch = await Promise.all(allSourceFiles.slice(i, i + 50).map(file => access.read(file)));
+    for (const source of batch) if (source) references.push(...match(source));
+  }
+  return sortReferences(references);
 }
 
 async function getRelatedTests(
@@ -272,8 +210,4 @@ async function getRelatedTests(
   }
 
   return results;
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

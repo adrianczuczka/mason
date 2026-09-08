@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.1 — 2026-09-08
+
+- Resolve references using literal import paths and declared Kotlin/Java package symbols. Separate explicit path mentions and uncertain name candidates; suppress config/document-name collisions and keep weak candidates out of compact task context with an omission count.
+- Include investigations in project-context guidance and route reusable project lessons into sourced proposals, preserving uncertainty and unknown attribution.
+- Add a two-session knowledge evaluation with ordinary prompts, independent digest-bound review, fresh-checkout reuse, negative controls, and current-guidance/file-notes comparisons. Mechanism validation and live agent outcomes are reported separately.
+
 ## 0.16.0 — 2026-09-08
 
 - Add `mason teardown` to disconnect all project hosts, or one with `--host codex|claude`. Support `--dir`, `--dry-run` and `--json`; retain decisions, configuration, maps, repair evidence and ignore rules. Global uninstall remains separate.

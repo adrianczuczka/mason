@@ -79,7 +79,7 @@ Mason can preserve documentation audit evidence and resume unfinished repairs th
 Unified setup already installs these hooks. For manual npm hook installation (available from 0.12.0), install or upgrade the package in each project:
 
 ```bash
-npm install -D mason-context@0.16.0
+npm install -D mason-context@0.16.1
 npx mason-auto install --host claude   # Claude Code
 npx mason-auto install --host codex    # Codex; review/trust the hooks using /hooks
 npx mason-auto status
@@ -87,7 +87,7 @@ npx mason-auto status
 
 Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in ignored `.mason/local/automation.json`. Repeating installation updates only those handlers. Commit the host configuration. Installation adds ignore rules for `.mason/local/` and `.mason/reports/`; shared configuration and decision records remain available to Git. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
 
-When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.16.0`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
+When upgrading an existing MCP setup, update any separately pinned server command to `mason-context@0.16.1`, restart the server, and refresh the Mason instruction block through `mason_init`. Existing decisions and repair baselines need no migration. Upgrading the package alone does not install hooks.
 
 `status` distinguishes configuration from observed events. Host versions, project trust, policy, and specialized tool paths can prevent hooks from running. Configuration alone is not evidence of automatic use. Codex requires review/trust of new or changed non-managed hooks. See the [Claude Code hook reference](https://code.claude.com/docs/en/hooks) and [Codex hook reference](https://learn.chatgpt.com/docs/hooks).
 

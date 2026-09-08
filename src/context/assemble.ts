@@ -67,6 +67,8 @@ export interface ContextBundle {
     targets: string[];
     cochange: CochangeEntry[];
     references: ReferenceEntry[];
+    /** Weak name-only candidates omitted from compact context; available via get_impact. */
+    referenceCandidatesOmitted?: number;
   } | null;
   freshness: {
     stale: boolean;
@@ -123,8 +125,10 @@ async function collectImpact(root: string, candidates: string[]): Promise<{
   }
   if (!targets.size) return { impact: null, relatedTests: [] };
   const result = await analyzeImpact(root, [...targets]);
+  const referenceCandidatesOmitted = result.references.filter(r => r.evidence === "name-candidate").length;
   return {
-    impact: { targets: result.targetFiles, cochange: result.cochange, references: result.references.slice(0, 10) },
+    impact: { targets: result.targetFiles, cochange: result.cochange, references: result.references.filter(r => r.evidence !== "name-candidate").slice(0, 10),
+      ...(referenceCandidatesOmitted ? { referenceCandidatesOmitted } : {}) },
     relatedTests: [...new Set(result.tests.map(t => t.file))],
   };
 }

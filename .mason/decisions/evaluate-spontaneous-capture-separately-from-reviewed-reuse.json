@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "id": "evaluate-spontaneous-capture-separately-from-reviewed-reuse",
+  "title": "Evaluate spontaneous capture separately from reviewed reuse",
+  "body": "Knowledge evaluations need a separate semantic review of the actual captured proposal before reuse. During the 2026-09-08 development trial, a structurally eligible proposal invented a standing owner-approval requirement from a temporary task restriction, so review rejected it. Other runs chose the right directory but could not create a worktree because of fixture permissions; they were failures, not successful reuse. Never seed a missed capture or rewrite a bad record to rescue an agent result. Preserve rejected proposals, failed tool/session outcomes and harness limitations separately from product behavior. Existing guidance and ordinary file notes also captured the lesson in a prototype comparison, so a completed candidate smoke test alone does not establish a Mason advantage. Keep a no-capture control and distinguish synthetic development evidence from held-out or real-project performance.",
+  "category": "gotcha",
+  "files": [
+    "bench/harness/run-knowledge.mjs",
+    "bench/harness/knowledge"
+  ],
+  "createdAt": "2026-09-08T16:25:13.783Z",
+  "updatedAt": "2026-09-08T16:25:13.783Z",
+  "refreshedHash": "a290f4e73590269031813dbd8b31c107e46ce7be",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "document",
+      "reference": "bench/harness/knowledge/SMOKE_RESULTS.md",
+      "note": "Development outcomes and explicit limitations, 2026-09-08."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-09-08T16:25:13.783Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Evaluate spontaneous capture separately from reviewed reuse",
+        "body": "Knowledge evaluations need a separate semantic review of the actual captured proposal before reuse. During the 2026-09-08 development trial, a structurally eligible proposal invented a standing owner-approval requirement from a temporary task restriction, so review rejected it. Other runs chose the right directory but could not create a worktree because of fixture permissions; they were failures, not successful reuse. Never seed a missed capture or rewrite a bad record to rescue an agent result. Preserve rejected proposals, failed tool/session outcomes and harness limitations separately from product behavior. Existing guidance and ordinary file notes also captured the lesson in a prototype comparison, so a completed candidate smoke test alone does not establish a Mason advantage. Keep a no-capture control and distinguish synthetic development evidence from held-out or real-project performance.",
+        "category": "gotcha",
+        "files": [
+          "bench/harness/run-knowledge.mjs",
+          "bench/harness/knowledge"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": "bench/harness/knowledge/SMOKE_RESULTS.md",
+            "note": "Development outcomes and explicit limitations, 2026-09-08."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "a290f4e73590269031813dbd8b31c107e46ce7be"
+    }
+  ]
+}

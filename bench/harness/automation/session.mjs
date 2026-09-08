@@ -1,9 +1,21 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 
 // Pass the map as one TOML value: dotted override keys can split dots inside paths.
 const trustedProject = cwd => `projects={${JSON.stringify(cwd)}={trust_level="trusted"}}`;
+export const knowledgePermissions = 'permissions.knowledge_eval={extends=":workspace",filesystem={":workspace_roots"={".git"="write"}}}';
+
+function inspectKnowledgePermissions(cwd) {
+  const ref = 'refs/mason-evaluation-permission-probe';
+  try {
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+    execFileSync('codex', ['sandbox', '-P', 'knowledge_eval', '-C', cwd, '-c', knowledgePermissions,
+      '--', 'git', '-c', 'core.hooksPath=/dev/null', 'update-ref', ref, head], { cwd, encoding: 'utf8', timeout: 15000, stdio: 'pipe' });
+    return { ok: true, scope: 'workspace plus fixture .git writes' };
+  } catch (error) { return { ok: false, reason: 'Fixture Git-write preflight failed: ' + String(error.stderr ?? error.message).slice(-1500) }; }
+  finally { try { execFileSync('git', ['update-ref', '-d', ref], { cwd, stdio: 'pipe' }); } catch { /* preflight reports failure */ } }
+}
 
 /** Inspect all effective hook sources before bypassing trust in a disposable fixture. */
 export function inspectCodexHooks(cwd) {
@@ -45,17 +57,31 @@ export function inspectCodexHooks(cwd) {
   });
 }
 
-export async function runHost({ host, arm, cwd, prompt, transcript, timeoutMs = 180000, model, budgetUsd = 1 }) {
-  const preflight = host === "codex" && arm === "hooks" ? await inspectCodexHooks(cwd) : null;
-  if (preflight && !preflight.ok) return { ok: false, exitCode: null, costUsd: 0, preflight, result: preflight.reason };
+export function hostArguments({ host, arm, cwd, prompt, model, budgetUsd = 1, mcpConfig = { mcpServers: {} }, isolated = false }) {
   const args = host === "claude" ? ["-p", prompt, "--output-format", "stream-json", "--verbose", "--max-turns", "25",
-    "--max-budget-usd", String(budgetUsd), "--setting-sources", "project", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+    "--max-budget-usd", String(budgetUsd), "--setting-sources", "project", "--strict-mcp-config", "--mcp-config", JSON.stringify(mcpConfig),
     "--dangerously-skip-permissions", "--tools", "Read,Write,Edit,Glob,Grep,Bash"] :
-    ["exec", "--json", "--ignore-rules", "--sandbox", "workspace-write",
+    ["exec", "--json", "--ignore-rules", ...(isolated ? [] : ["--sandbox", "workspace-write"]),
       ...(arm === "hooks" ? ["--dangerously-bypass-hook-trust"] : ["--disable", "hooks"]),
       "-c", trustedProject(cwd), "--color", "never", prompt];
-  if (host === "claude" && arm !== "hooks") args.push("--settings", '{"disableAllHooks":true}');
+  if (host === "claude" && arm !== "hooks" && !isolated) args.push("--settings", '{"disableAllHooks":true}');
+  if (isolated && host === "claude") args.push("--no-session-persistence", "--settings", '{"disableAllHooks":true,"autoMemoryEnabled":false}', "--disallowedTools", "Agent,Task");
+  if (isolated && host === "codex") {
+    const inline = value => Array.isArray(value) ? '[' + value.map(inline).join(',') + ']' :
+      value && typeof value === 'object' ? '{' + Object.entries(value).map(([k, v]) => JSON.stringify(k) + '=' + inline(v)).join(',') + '}' : JSON.stringify(value);
+    args.push("--ephemeral", "--ignore-user-config", "--disable", "memories", "--disable", "multi_agent", "--disable", "apps", "--disable", "plugins",
+      "--enable", "skip_host_skill_discovery", "-c", "mcp_servers=" + inline(mcpConfig.mcpServers), "-c", 'web_search="disabled"',
+      "-c", 'default_permissions="knowledge_eval"', "-c", knowledgePermissions);
+  }
   if (model) args.push("--model", model);
+  return args;
+}
+
+export async function runHost(options) {
+  const { host, arm, cwd, transcript, timeoutMs = 180000 } = options;
+  const preflight = host === "codex" ? options.isolated ? inspectKnowledgePermissions(cwd) : arm === "hooks" ? await inspectCodexHooks(cwd) : null : null;
+  if (preflight && !preflight.ok) return { ok: false, exitCode: null, costUsd: 0, preflight, result: preflight.reason };
+  const args = hostArguments(options);
   // Hook trust bypass is confined to fixtures whose exact integration config the harness created.
   return new Promise(resolve => {
     const start = Date.now();
@@ -80,6 +106,9 @@ export async function runHost({ host, arm, cwd, prompt, transcript, timeoutMs = 
       const failed = host === "claude" ? result?.is_error || result?.subtype !== "success" : events.some(e => e.type === "turn.failed" || e.type === "error");
       output.end(() => resolve({ ok: code === 0 && !!result && !failed && !timedOut && !outputLimited,
         exitCode: code, timedOut, outputLimited, elapsedMs: Date.now() - start, costUsd: result?.total_cost_usd ?? null,
+        models: [...new Set(events.flatMap(e => [e.model, e.message?.model, ...Object.keys(e.modelUsage ?? {})]).filter(Boolean))],
+        sessionId: host === 'claude' ? events.find(e => e.session_id)?.session_id ?? null : events.find(e => e.type === 'thread.started')?.thread_id ?? null,
+        mcpFailures: events.filter(e => e.type === 'item.completed' && e.item?.type === 'mcp_tool_call' && e.item.status === 'failed').map(e => ({ server: e.item.server, tool: e.item.tool, error: e.item.error })),
         usage: result?.usage ?? null, stderr, eventCount: events.length, preflight,
         result: host === "claude" ? result?.result : events.filter(e => e.item?.type === "agent_message").at(-1)?.item?.text ?? null,
       }));

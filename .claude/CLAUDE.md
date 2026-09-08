@@ -52,7 +52,8 @@ src/
 │   ├── hook.ts         # Decision injection on file touch (PostToolUse)
 │   └── cli.ts          # mason-hook CLI (stdin JSON → hook output JSON)
 ├── impact/
-│   └── impact.ts       # Change impact: co-change, references, related tests
+│   ├── impact.ts       # Change impact: co-change, references, related tests
+│   └── references.ts   # Static import/path evidence and uncertain name candidates
 ├── llm/
 │   ├── config.ts       # Provider config (~/.mason/config.json)
 │   └── providers.ts    # Multi-provider LLM calls (used by Confluence rewrite)
@@ -111,6 +112,7 @@ npm run test:standalone # Packaged installer/MCP/hooks smoke test without system
 - Benchmarks live in `bench/` — `bench/harness/` drives real headless claude sessions in baseline-vs-mason arms (superseded older deepeval harness sits in `bench/tests/`)
 - `bench/harness/run-patches.mjs` evaluates actual patches using the built-in Claude driver or a custom JSON agent adapter. `bench/harness/patches/` owns controlled tasks, fixtures, held-out grading, and reports. `npm run bench:validate` is offline; live runs use model calls. Never describe reference-patch validation as agent-performance evidence.
 - `bench/harness/run-automation.mjs` evaluates ordinary rename and control requests across Claude Code and Codex; `bench/harness/automation/` owns fixtures, real host sessions, and grading. `npm run bench:automation -- --validate` replays lifecycle events offline; `--live` uses actual hosts, preserving transcripts and configuration/activation evidence. The original patch harness still disables hooks for its controlled comparison.
+- `bench/harness/run-knowledge.mjs` evaluates investigation capture and reuse in a fresh session after independent review, plus a no-capture control. `bench/harness/knowledge/` holds synthetic evidence, MCP observation, grading, and the frozen 0.16.0 guidance. `npm run bench:knowledge -- --validate` tests mechanisms without models; live captures require a digest-bound review before `--resume`. Missing captures are never seeded by the grader. Hooks and native auto-memory are disabled for this comparison.
 - Repository scripts live in `scripts/`; `scripts/pack-mcpb.mjs` builds the MCP bundle. `scripts/build-standalone.mjs` packages locked production dependencies and the Node runtime pinned in `scripts/standalone-node.json`; `scripts/smoke-standalone.mjs` validates the actual installers, MCP/hooks, global upgrades, clone setup and uninstall. Projects invoke mason from PATH; global upgrades apply on their next launch. Generated setup and hook ownership records are ignored under .mason/local/. `scripts/test-evidence.mjs` records Vitest's actual exit status, original commit, and checkout cleanliness before/after execution. Reports under `.mason/reports/` are ignored.
 - CI evidence uses a version 1 manifest with named expected checks and Vitest JSON or SARIF artifacts. Imports never execute commands or fetch URLs. Missing/invalid reports stay unavailable; stale or dirty/unknown runs never satisfy the optional gate. Imported provenance is an assertion, not authenticated execution. File matches and test pairs associate accepted decisions without asserting a violation. Review JSON stays version 1 with optional additive `evidence`; default exit codes stay unchanged.
 
@@ -134,9 +136,9 @@ LLM calls happen only in the Confluence sync rewrite (`src/confluence/rewrite.ts
 
 Mason provides recorded decisions and file impact over MCP. A concept map is optional.
 
-- Task, bug, or change request → `get_context` with the task text and known files: matching decisions, related tests, impact, and any available map entries.
+- Task, bug, change request, or investigation of why the project works this way → `get_context` with the task text and known files: matching decisions, related tests, impact, and any available map entries.
 - Before editing a file → `get_impact` to check references, tests, and historical change partners.
-- Learned something the code cannot explain (a failed approach, an incident's cause, a workaround's reason, a review-settled convention) → `save_decision` with rationale, anchors, and any known owner, sources, and recorder. It creates a proposal immediately without setup or a map. Never invent attribution or record code-derivable facts, session trivia, or secrets.
+- Investigation or correction reveals a reusable project lesson → `save_decision` before finishing. Capture only the lasting constraint and reason, with anchors and known sources, owner, and recorder. This creates a proposal; never infer approval. Preserve uncertain causes and unknown attribution. Route project lessons here; keep personal preferences in agent memory. Skip code summaries, current checkout status, temporary task permissions, session trivia, and secrets. No qualifying lesson means no record.
 - Consult trust metadata before relying on entries: unknown or changed freshness requires inspection, and failed verification means the description must be corrected. Check approval too: proposals are suggestions, legacy records are unreviewed, and accepted decisions are recorded constraints subject to freshness checks. An accepted revision remains operative while a pending proposal is reviewed; keep both versions and their freshness distinct.
 - Asked to review or re-verify a decision → `review_decision` first to inspect content, sources, history, and code changes. Record acceptance, reaffirmation, or retirement only when authorized by the user or a cited team review, with the actual reviewer and reason. Never infer approval from unchanged code. Review and commit the local record through the normal project workflow.
 - For an architectural overview, use `get_snapshot` if a map is available. If `map.status` is missing or invalid, use available decisions and source evidence; do not start building a map unless requested.

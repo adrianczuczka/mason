@@ -39,7 +39,7 @@ Setup configures project MCP, hooks and instructions using the same evidence-pre
 
 ```sh
 mason upgrade           # Latest stable release
-mason upgrade 0.16.0    # A particular published version
+mason upgrade 0.16.1    # A particular published version
 mason teardown         # Disconnect the current project; keep its knowledge
 mason uninstall
 ```

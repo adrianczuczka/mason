@@ -130,6 +130,10 @@ Before editing a file, Mason tells you what else might be affected. Three signal
 
 Ask your assistant *"what would be affected if I changed WeatherRepository?"* and it'll call `get_impact` for you.
 
+References include their evidence: `resolved-import` connects a literal relative JavaScript/TypeScript import to a file, or a named Kotlin/Java import to a declared package symbol; `explicit-path` is a textual mention of the target path; `name-candidate` is an uncertain source-name match. This is static evidence, not compiler verification. Package aliases, dynamic expressions and unsupported language resolution remain uncertain. Generic names, duplicate basenames, and bare config/document names do not establish references. A file may have separate entries for different evidence classes.
+
+Compact `get_context` results omit name-only candidates and report `referenceCandidatesOmitted` when present. Use `get_impact` for those candidates. An empty reference list does not establish that a file has no dependents.
+
 ## Drift detection
 
 A concept map that silently goes stale is worse than no map — your assistant confidently jumps to files that no longer do what the map says. `mason_check_drift` compares the map against HEAD (pure git + filesystem, no LLM call) and reports drift at the **feature level**: which features are stale and which files changed under them, new source files not yet mapped, ghost files the map still references, and renames. It ends with a recommendation — `up-to-date`, `incremental` (re-map just the stale entries), or `full-rebuild` (re-run the Map-Reduce playbook).

@@ -508,7 +508,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_impact",
-    "Trace the impact of changing files: historical co-change partners, references, and related tests. Deterministic, read-only, and usable without initialization, saved decisions, or a concept map.",
+    "Trace historical co-change partners, related tests, and references with evidence: resolved imports, explicit paths, or uncertain name candidates. Candidates are not proven dependencies. Deterministic and read-only; no initialization or concept map required.",
     {
       dir: z
         .string()
