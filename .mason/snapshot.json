@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-08T15:04:03.694Z",
-  "gitHash": "7224f237f4b0a546874d93318d49ec8e92d42b78",
+  "updatedAt": "2026-09-08T16:44:28.802Z",
+  "gitHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including setup through the installed Mason command and local instruction-completion state. Configured get_context calls record activation observations without storing prompts.",
@@ -11,7 +11,7 @@
         "src/mcp/server.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     },
     "drift detection CLI": {
       "description": "Checks relevant committed map changes and source coverage, reporting local edits and verification failures separately; map-only and unrelated commits stay current.",
@@ -57,7 +57,7 @@
       "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
     },
     "task context assembly": {
-      "description": "Retrieves operative accepted decisions alongside pending proposals, matching either revision while keeping content, attribution, and anchor freshness distinct. Works without a concept map and adds bounded impact and tests with explicit trust diagnostics.",
+      "description": "Retrieves operative accepted decisions alongside pending proposals with distinct attribution and freshness. Works without a map; compact impact omits weak name candidates with an omission count and retains related tests and trust diagnostics.",
       "files": [
         "src/context/assemble.ts",
         "src/context/lexical.ts",
@@ -68,7 +68,7 @@
         "test/adoption.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     },
     "team decisions log": {
       "description": "Captures version 2 proposals and derives operative accepted revisions from validated history until explicit replacement or retirement. Preserves legacy uncertainty, serializes writes, and prevents proposal supersession from hiding an accepted constraint.",
@@ -85,15 +85,16 @@
       "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "change impact analysis": {
-      "description": "get_impact: co-change history, references, and related tests for a file before editing it",
+      "description": "Combines co-change history and related tests with explicit reference evidence: literal relative JS/TS imports, named Kotlin/Java package symbols, exact path mentions, and uncertain source-name candidates. Config/document-name collisions are suppressed; static matches do not prove compiler resolution.",
       "files": [
-        "src/impact/impact.ts"
+        "src/impact/impact.ts",
+        "src/impact/references.ts"
       ],
       "tests": [
         "test/impact.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "ebd62ca69482b958e2574f56755cc6289bb4eac3"
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     },
     "LLM provider config": {
       "description": "Multi-provider LLM call plumbing (claude, openai, ollama, gemini) and config stored at ~/.mason/config.json",
@@ -387,7 +388,7 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "project onboarding": {
-      "description": "Read-only audit/review by default. Explicit setup verifies mason on PATH, retains pre-edit evidence and records ownership before merging MCP, hooks, instructions and ignore rules. Resumable bookkeeping stays in .mason/local; status separates configuration from version-specific observed activation.",
+      "description": "Read-only audit/review by default. Explicit setup verifies mason on PATH, retains pre-edit evidence and records ownership before merging MCP, hooks, instructions and ignore rules. Guidance routes investigations and lasting sourced lessons to proposal capture. Local bookkeeping and observed activation remain separate.",
       "files": [
         "src/mcp/init.ts",
         "src/mcp/onboarding.ts",
@@ -408,7 +409,7 @@
         "test/teardown.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -461,7 +462,7 @@
       "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
     },
     "automatic-use evaluations": {
-      "description": "Evaluates ordinary module-renaming and unrelated control tasks with baseline, instructions and hooks arms for Claude Code and Codex. Separates offline lifecycle replay from real host sessions, records activation and preserved evidence, and grades behavior, protected configuration and verification after the final commit.",
+      "description": "Evaluates ordinary module-renaming and unrelated control tasks with baseline, instructions and hooks arms for Claude Code and Codex. Separates offline lifecycle replay from real host sessions, records activation and preserved evidence, and grades behavior, protected configuration and verification after the final commit. Its shared session runner also supports explicit MCP configuration, isolated knowledge sessions, tool failures, session identity and usage recording.",
       "files": [
         "bench/harness/automation/fixture.mjs",
         "bench/harness/automation/session.mjs",
@@ -471,7 +472,7 @@
         "test/automation-benchmark.test.ts"
       ],
       "type": "infrastructure",
-      "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     },
     "unified Mason CLI": {
       "description": "Routes setup, teardown, status, checks, audit, review, drift, hooks and MCP through mason on PATH. Project teardown supports host selection and dry runs independently of global upgrade/uninstall; managed launches establish host activation context.",
@@ -518,6 +519,22 @@
       ],
       "type": "capability",
       "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+    },
+    "knowledge capture and reuse evaluation": {
+      "description": "Evaluates ordinary investigation capture, digest-bound separate semantic review, and retrieval before worktree creation in a fresh session/clone, plus no-capture controls. Compares frozen guidance, candidate guidance and portable notes; preserves missed captures, rejected proposals, tool failures and unknown cost. Deterministic validation is separate from live performance evidence.",
+      "files": [
+        "bench/harness/run-knowledge.mjs",
+        "bench/harness/knowledge/fixture.mjs",
+        "bench/harness/knowledge/mcp.mjs",
+        "bench/harness/knowledge/observe-mcp.mjs",
+        "bench/harness/knowledge/report.mjs",
+        "bench/harness/automation/session.mjs"
+      ],
+      "tests": [
+        "test/knowledge-benchmark.test.ts"
+      ],
+      "type": "infrastructure",
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     }
   },
   "flows": {
@@ -540,7 +557,7 @@
         "src/context/assemble.ts",
         "src/hook/hook.ts"
       ],
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     },
     "MCP server startup flow": {
       "description": "Binary boots the MCP stdio server which registers all tool implementations",
@@ -549,7 +566,7 @@
         "src/mcp/server.ts",
         "src/mcp/tools.ts"
       ],
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     },
     "Confluence sync flow": {
       "description": "Loads the snapshot, diffs against sync state, and pushes rendered pages to Confluence",
@@ -562,16 +579,17 @@
       "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
     },
     "get_context assembly flow": {
-      "description": "Loads decisions independently of the map, matches operative and pending revision text and anchors, and returns accepted constraints with separately labeled proposals, freshness, impact, and tests.",
+      "description": "Loads decisions independently of the map, matches operative and pending revision text and anchors, and returns accepted constraints with separately labeled proposals, freshness, impact, and tests. Compact references retain stronger evidence and report the number of omitted name-only candidates.",
       "chain": [
         "src/context/assemble.ts",
         "src/context/lexical.ts",
         "src/snapshot/snapshot.ts",
         "src/drift/drift.ts",
         "src/impact/impact.ts",
+        "src/impact/references.ts",
         "src/decisions/decisions.ts"
       ],
-      "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     },
     "decision review flow": {
       "description": "Prepares the raw draft and operative accepted revision with evidence for both anchor sets, validates the review token, and appends an authorized acceptance or retirement under a serialized write.",
@@ -583,7 +601,7 @@
         "src/decisions/decisions.ts",
         "src/utils/storage.ts"
       ],
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
     },
     "CI evidence review flow": {
       "description": "Loads recorded test and analysis artifacts, preserves their outcome and freshness, links findings only to operative accepted decision anchors, and renders CLI/MCP review results with optional CI gating.",
