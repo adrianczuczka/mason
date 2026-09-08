@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-08T12:54:46.886Z",
-  "gitHash": "e15c2b9b8bec2774539a335d8acaba9368982887",
+  "updatedAt": "2026-09-08T15:04:03.694Z",
+  "gitHash": "7224f237f4b0a546874d93318d49ec8e92d42b78",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including setup through the installed Mason command and local instruction-completion state. Configured get_context calls record activation observations without storing prompts.",
@@ -387,7 +387,7 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "project onboarding": {
-      "description": "Read-only audit/review by default. Explicit setup verifies mason on PATH, retains pre-edit evidence and merges MCP, hooks, instructions and ignore rules with resumable writes. Generated state stays in .mason/local; no project launchers or runtime copies. Status separates configuration from version-specific observed activation.",
+      "description": "Read-only audit/review by default. Explicit setup verifies mason on PATH, retains pre-edit evidence and records ownership before merging MCP, hooks, instructions and ignore rules. Resumable bookkeeping stays in .mason/local; status separates configuration from version-specific observed activation.",
       "files": [
         "src/mcp/init.ts",
         "src/mcp/onboarding.ts",
@@ -397,16 +397,18 @@
         "src/setup/model.ts",
         "src/setup/observations.ts",
         "src/setup/setup.ts",
-        "src/setup/status.ts"
+        "src/setup/status.ts",
+        "src/setup/ownership.ts"
       ],
       "tests": [
         "test/adoption.test.ts",
         "test/tools.test.ts",
         "test/setup.test.ts",
-        "test/distribution.test.ts"
+        "test/distribution.test.ts",
+        "test/teardown.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -437,7 +439,7 @@
       "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "documentation automation": {
-      "description": "Retains documentation evidence across sessions and final commits in worktree/branch state. Checks cache their scoped dependencies; receipts preserve failed or unfinished attempts. Adapters bound notifications and continuations, and installation records hook ownership in ignored local state.",
+      "description": "Retains documentation evidence across sessions and commits with change-scoped caches. Hook installation shares the setup/teardown lock and records previous and pending commands until replacement succeeds, preserving recovery across interrupted custom-command changes.",
       "files": [
         "bin/mason-auto.ts",
         "src/automation/adapters.ts",
@@ -452,10 +454,11 @@
       "tests": [
         "test/automation.test.ts",
         "test/automation-reliability.test.ts",
-        "test/setup.test.ts"
+        "test/setup.test.ts",
+        "test/teardown.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
     },
     "automatic-use evaluations": {
       "description": "Evaluates ordinary module-renaming and unrelated control tasks with baseline, instructions and hooks arms for Claude Code and Codex. Separates offline lifecycle replay from real host sessions, records activation and preserved evidence, and grades behavior, protected configuration and verification after the final commit.",
@@ -471,18 +474,19 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "unified Mason CLI": {
-      "description": "Routes setup, status, checks, audit, review, drift, hooks and MCP through mason on PATH. Managed invocations establish host activation context; global upgrade and uninstall affect project integrations without project runtime copies.",
+      "description": "Routes setup, teardown, status, checks, audit, review, drift, hooks and MCP through mason on PATH. Project teardown supports host selection and dry runs independently of global upgrade/uninstall; managed launches establish host activation context.",
       "files": [
         "bin/mason.ts"
       ],
       "tests": [
-        "test/distribution.test.ts"
+        "test/distribution.test.ts",
+        "test/teardown.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
     },
     "standalone distribution": {
-      "description": "Builds verified bundles with pinned Node and dependencies, installs owned user launchers and configures PATH. Global upgrades apply to project integrations on their next launch; uninstall retains project data but removes their command. Native smoke checks cover both hosts, fresh version activation, clones, repair evidence and reinstall.",
+      "description": "Builds verified bundles with pinned Node, installs owned user launchers and configures PATH. Global upgrades reach projects on the next launch. Native smoke checks cover both hosts, activation, clones, retained repair evidence, project teardown/reconnection and global uninstall/reinstall.",
       "files": [
         "src/distribution/bundle.ts",
         "src/distribution/install.ts",
@@ -501,7 +505,19 @@
         "test/distribution-path.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+    },
+    "project teardown": {
+      "description": "Disconnects selected or all project hosts using a read-only plan and ownership checks. Removes identifiable MCP/hooks and unchanged shared instruction blocks, preserves user content and knowledge/evidence, retains ambiguous edits, and resumes interrupted cleanup.",
+      "files": [
+        "src/setup/teardown.ts",
+        "src/setup/ownership.ts"
+      ],
+      "tests": [
+        "test/teardown.test.ts"
+      ],
+      "type": "capability",
+      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
     }
   },
   "flows": {
@@ -610,7 +626,7 @@
       "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "project setup and activation flow": {
-      "description": "CLI or explicit MCP setup probes the global command, retains pre-edit evidence and merges project configuration. Generated bookkeeping stays local. Trusted host invocations call mason on PATH; version-specific observations establish activation independently of verification. Global upgrades need new launches, without project runtime installation.",
+      "description": "CLI or explicit MCP setup probes the global command, retains original audit evidence, records ownership and merges project configuration. Resumable local records distinguish configured integrations from version-specific observed activation.",
       "chain": [
         "bin/mason.ts",
         "src/automation/cli.ts",
@@ -619,11 +635,23 @@
         "src/automation/runtime.ts",
         "src/setup/config.ts",
         "src/setup/files.ts",
+        "src/setup/ownership.ts",
         "src/setup/launcher.ts",
         "src/setup/observations.ts",
         "src/setup/status.ts"
       ],
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+    },
+    "project teardown flow": {
+      "description": "The CLI resolves the Git project, previews removals without writes, or replans under the setup lock. It checks owned MCP/hooks and shared instructions, retains ambiguous entries and original repair evidence, then removes relevant local setup records last.",
+      "chain": [
+        "bin/mason.ts",
+        "src/automation/cli.ts",
+        "src/setup/teardown.ts",
+        "src/setup/ownership.ts",
+        "src/setup/files.ts"
+      ],
+      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
     }
   }
 }
