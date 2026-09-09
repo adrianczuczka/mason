@@ -1,18 +1,22 @@
+<div align="center">
+
 # Mason
 
-[![npm version](https://img.shields.io/npm/v/mason-context)](https://www.npmjs.com/package/mason-context)
-[![CI](https://img.shields.io/github/actions/workflow/status/adrianczuczka/mason/ci.yml?branch=main)](https://github.com/adrianczuczka/mason/actions/workflows/ci.yml)
-[![npm downloads](https://img.shields.io/npm/dm/mason-context)](https://www.npmjs.com/package/mason-context)
-[![license](https://img.shields.io/github/license/adrianczuczka/mason)](https://github.com/adrianczuczka/mason/blob/main/LICENSE)
-[![issues](https://img.shields.io/github/issues/adrianczuczka/mason)](https://github.com/adrianczuczka/mason/issues)
+### Your agents are creating tech debt. Mason helps you prevent it.
 
-## Your AI agent is creating tech debt.
+**Remember why decisions were made · Catch outdated guidance · Find what else needs updating**
 
-**Mason helps your coding agent catch what a patch leaves behind:** stale instructions, missed companion updates, and engineering decisions that need another look.
+[![npm version](https://shieldcn.dev/npm/mason-context.svg?variant=outline&size=sm)](https://www.npmjs.com/package/mason-context)
+[![CI](https://shieldcn.dev/github/ci/adrianczuczka/mason.svg?workflow=ci.yml&branch=main&variant=outline&size=sm)](https://github.com/adrianczuczka/mason/actions/workflows/ci.yml)
+[![Monthly downloads](https://shieldcn.dev/npm/dm/mason-context.svg?variant=outline&size=sm)](https://www.npmjs.com/package/mason-context)
+[![License](https://shieldcn.dev/npm/license/mason-context.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/LICENSE)
 
-Works through MCP, with automatic documentation checks for **Codex** and **Claude Code**. No concept map required.
+[![Works with Codex](https://shieldcn.dev/badge/agent-Codex-64748b.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/docs/setup.md)
+[![Works with Claude Code](https://shieldcn.dev/badge/agent-Claude%20Code-64748b.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/docs/setup.md)
+[![MCP compatible](https://shieldcn.dev/badge/protocol-MCP-64748b.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/docs/setup.md#other-clients)
+[![Supported platforms](https://shieldcn.dev/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-64748b.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/docs/distribution.md)
 
-Core checks run locally with no model calls or telemetry. Results become context for your existing assistant. [Data, network access, and team installation](docs/data-and-network.md) covers storage, optional networked features, and internal mirrors.
+</div>
 
 ## Get started
 
