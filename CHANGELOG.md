@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.3 — 2026-09-09
+
+- Coordinate overlapping hooks without holding the shared state lock during audit analysis. Reuse analysis for identical inputs, let changed inputs proceed independently, and revalidate before publishing results so older work cannot overwrite newer evidence.
+- Retain independent execution receipts during parallel calls. Report repeated, durably recorded failures once per session until recovery; keep failures without receipts visible and preserve pre-edit evidence for shell and unknown tools.
+- Accept decision bodies up to 2,500 characters, with a warning above the recommended 1,500. Preserve the full body, report precise validation limits, and shorten generated IDs at word boundaries where possible.
+- Cover slow checks, overlapping CLI processes, failure recovery, and changing inputs with concurrency regressions. Simplify README badges for consistent rendering.
+
+Run `mason upgrade` for standalone installations, then restart running assistants. Existing PATH-based project integrations do not need setup again for this release.
+
 ## 0.16.2 — 2026-09-09
 
 - Guard generated hooks when Mason is absent, and keep a checkout without local host setup quiet. Preserve active failure diagnostics and strict MCP startup; setup/status/teardown recognize the generated guard variants without project wrapper scripts.

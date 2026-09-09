@@ -6,12 +6,12 @@
     "url": "https://github.com/adrianczuczka/mason",
     "source": "github"
   },
-  "version": "0.16.2",
+  "version": "0.16.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mason-context",
-      "version": "0.16.2",
+      "version": "0.16.3",
       "runtimeHint": "npx",
       "runtimeArguments": [
         {
