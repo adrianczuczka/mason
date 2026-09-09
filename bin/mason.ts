@@ -28,7 +28,8 @@ try {
   if (managedLaunch) {
     if (!setupHost || !["codex", "claude"].includes(setupHost) || !["mcp", "auto"].includes(command)) throw new Error("Invalid setup invocation.");
     const { prepareLaunch } = await import("../src/setup/launcher.js");
-    await prepareLaunch(setupHost as "codex" | "claude");
+    const active = await prepareLaunch(setupHost as "codex" | "claude", { allowInactive: command === "auto" && isHookCommand(args) });
+    if (!active) process.exit(0);
   }
   if (command === "internal-integration-version") console.log(JSON.stringify({ protocol: 1, version: PKG_VERSION }));
   else if (!command || ["--help", "-h", "help"].includes(command)) console.log(usage);

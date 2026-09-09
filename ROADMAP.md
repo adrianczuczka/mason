@@ -1,6 +1,6 @@
 # Mason: becoming the definitive context engineer
 
-Captured by Codex on 2026-09-05, against release 0.11.0.
+Originally captured by Codex on 2026-09-05, against release 0.11.0. Combined priorities updated on 2026-09-09, against release 0.16.1.
 
 Linked Mason memory: [direction and growth roadmap](.mason/decisions/mason-s-definitive-context-engineer-direction-and-growth-roa.json), recorded as a sourced proposal.
 
@@ -8,7 +8,57 @@ The maintainer's ambition is for Mason to become the definitive context engineer
 
 The earlier question was: "how close is this to becoming the definitive context engineer that we talked about? think about what usually happens as projects grow". This document preserves the direction recoverable from the conversation and the subsequent implementation. The earlier assistant assessment is not available verbatim. The growth requirements below are explicitly a synthesis, not a recovered quotation or a claim that every proposed solution was approved.
 
-The maintainer requested that this direction be recorded. That authorizes preserving the memory; proposed milestones below still need prioritization. No roadmap owner or formal acceptance has been recorded.
+The maintainer requested that this direction be recorded and later asked to combine the ranked knowledge-debt ideas with the maintenance workflow below. This authorizes updating the roadmap and linked memory; the delivery sequence is a recommendation, not a claim that its implementation or every milestone has been approved. No roadmap owner or formal acceptance has been recorded.
+
+## Combined priorities: capture, maintain, and enforce
+
+Context engineering supplies relevant information for the current task. Managing knowledge debt keeps the project's reasoning useful and trustworthy as its code, dependencies, and team change. Mason's proposed product loop is **capture useful rationale → review → retrieve during work → reconsider when evidence changes → reaffirm, revise, or retire**. Constraints that can be tested should also gain executable checks.
+
+The earlier ranking described likely everyday usefulness at Mason's current stage. The maintenance proposal supplies the lifecycle those ideas need. Preserve the ranking while distinguishing it from implementation order:
+
+| Earlier rank | Idea | Place in the combined roadmap |
+|---|---|---|
+| 1 | Capture knowledge from review corrections | First product outcome to prove: preserve a useful, sourced correction during ordinary work and prevent the mistake in a fresh session. Deliver alongside the maintenance foundation below. |
+| 2 | Turn constraints into executable checks | Next major capability after that loop: link accepted, testable constraints to reviewed tests or established analysis rules and current execution evidence. |
+| 3 | Detect contradictory guidance | Surface conflicting claims with their sources, scope, approval, and freshness for review; do not silently select or rewrite the winner. |
+| 4 | Context debugger | Explain why knowledge was included, omitted, or treated as uncertain. Include basic diagnostics in each milestone; a dedicated debugging workflow follows contradiction review. |
+| 5 | Conditions for reconsidering decisions | Begin now with existing anchor changes and durable review outcomes. Add explicit dependency, assumption, and retirement conditions after the basic lifecycle works. |
+| 6 | Track changes across repositories | Expand when real multi-service users justify the added identity, access, ownership, and revision handling. Could move into the top two for those users. |
+| 7 | Measure individual context contributions | Run evaluation throughout, including comparisons with ordinary project notes and removal of individual context sources. Low customer-facing rank does not make this last in the build order. |
+
+### First milestone: a useful lesson survives change
+
+**Slice A — close the maintenance gap first.** Basic proposal capture, decision review, hooks, and retained repair evidence already exist in 0.16.1. However, retained audit advisories remain `review-required` without a persisted assessment that verification can consume. Build on the existing CLI/MCP and decision history:
+
+- Record an advisory's assessment, reviewer, reason, and exact evidence inspected. Distinguish addressed, inapplicable, and deferred outcomes; deferral remains outstanding. Reuse decision acceptance, reaffirmation, revision, and retirement for decision findings. Closing an advisory must not implicitly approve a decision.
+- Bind the assessment to the finding, relevant code/document evidence, and decision revision. Reject a stale prepared review. Preserve closure across sessions, unrelated commits, and the final metadata commit; reopen it when relevant evidence changes. Unavailable evidence remains unknown.
+- Keep original findings and review history. Deduplicate equivalent findings across retained baselines and keep completed work out of the active queue without deleting its evidence. Version review outcomes needed by other clones; keep execution receipts and caches local. No GitHub/GitLab connection is required for this first milestone.
+
+Acceptance: a recorded review closes only its inspected scope; a fresh session and the final commit retain it; a relevant change reopens it; unrelated changes do not. Deferred findings, missing evidence, conflicting edits, and unapproved decisions never become a clean result merely to reduce the backlog.
+
+**Slice B — prove selective correction capture and maintained reuse.** Extend the existing investigation/capture evaluation to ordinary review corrections. An assistant should propose only a reusable project constraint or explanation that could change a future engineering choice. Keep the reason, narrow scope, and known source; preserve unknown attribution. Skip code summaries, temporary instructions, duplicates, and speculative conclusions. Capture starts from the current conversation or local review evidence; hosting-service ingestion can follow demonstrated demand.
+
+Bring a small number of relevant open reviews into the current task, with the full backlog accessible separately. The assistant prepares the original rationale, relevant diff, available test evidence, and a proposed outcome. Record approval only through the authorized project review workflow. Preserve prior accepted guidance while its replacement is still proposed, and preserve history after retirement.
+
+Acceptance: an ordinary correction yields a useful sourced proposal without mentioning Mason; after semantic review, a fresh session avoids the mistake. Change the underlying assumption, review the revision or retirement, and verify that another fresh session uses the updated guidance. An unrelated task creates no record and causes no unnecessary review.
+
+### Subsequent delivery
+
+1. **Enforce testable constraints.** Link a specific accepted revision to a reviewed regression test or existing check. Demonstrate that a deliberate violation fails and a valid alternative passes. Execution evidence must stay current; passing one check does not prove an entire decision, and revised or retired constraints require reviewing their checks too.
+2. **Review contradictions.** Begin with overlapping scope and explicit incompatible claims. Present both sources and a proposed resolution; distinguish an actual conflict from historical, superseded, or differently scoped guidance. Measure false alarms before broadening detection.
+3. **Make context explainable.** Build the dedicated context debugger around retrieval reasons, exclusions, freshness, and missing evidence. Validate that it helps diagnose a missed lesson or irrelevant result. Basic diagnostics and evaluation traces remain part of earlier work.
+4. **Express reconsideration conditions.** Extend file-anchor triggers with reviewable conditions such as a dependency upgrade or a workaround's removal criterion. A trigger requests investigation; it does not prove the decision obsolete. Avoid recurring review based solely on age.
+5. **Coordinate repositories when needed.** Start with a concrete shared-contract change across known repositories, preserving each revision and owner. Require evidence of missed cross-repository updates before expanding scope. Confluence remains lower priority until customer demand justifies it.
+
+### Evaluation throughout
+
+Extend the [knowledge evaluation](bench/harness/knowledge/README.md) through capture, reviewed reuse, changed assumptions, reviewed revision/retirement, and subsequent reuse. Include unrelated-change, no-capture, missing-evidence, and valid-alternative controls. Compare Mason with ordinary notes given the same task evidence; retain missed captures, rejected proposals, and failed sessions. Separate deterministic mechanism checks from live agent outcomes and real-project evidence.
+
+Measure repeated mistakes and missed updates, capture usefulness, unnecessary reviews, incorrect closures, repeated warnings, irrelevant context, review effort, latency, and token cost. Use context-source ablations to investigate contributions; retrieval or injection alone is not proof of usefulness. Define thresholds and representative tasks before live evaluations. A smaller backlog counts as progress only when knowledge remains trustworthy.
+
+The immediate implementation recommendation is **Slice A with its verification cases**, then Slice B on the same lifecycle. This keeps correction capture as the highest-value outcome while giving new knowledge a way to stay maintained. The original five priorities below remain the product's broader commitments.
+
+## Original direction and shipped evidence
 
 The original five priorities were:
 
@@ -35,7 +85,7 @@ The broader growth requirements below are a synthesis of that goal and those pri
 
 The product is not yet proven to fulfill that ambition. The [release history](CHANGELOG.md) records substantial implementation progress. The initial patch comparison does not demonstrate better patches, and passing software tests do not establish spontaneous assistant use, long-term team adoption, or large-repository performance. [Patch evaluation documentation](bench/harness/patches/README.md) describes the current evaluation mechanism.
 
-The most recent discussion proposed **dependable automatic use** as the next milestone within this broader roadmap:
+An earlier discussion proposed **dependable automatic use** as the next milestone within this broader roadmap:
 
 1. Trigger relevant checks through host integrations and preserve original evidence before documentation edits, within standing project authorization.
 2. Resume an active repair across sessions and verify it after edits and the final documentation commit.
@@ -56,8 +106,10 @@ Version **0.16.1** adds reference evidence that separates resolved imports from 
 
 Remaining gaps include broader ordinary-task evaluations, native verification on additional host versions and environments, instruction-file discovery beyond `AGENTS.md`, `CLAUDE.md`, and `.claude/CLAUDE.md`, a persisted advisory review disposition, and cost/latency as relevant inputs and retained evidence grow. Evidence is local to the worktree; CI cannot reconstruct uncaptured pre-edit state. The implementation bounds scoped discovery and retention and reports unsupported evidence rather than evicting unresolved findings. Keep this milestone within the broader growth roadmap.
 
+Version **0.16.2** addresses team-adoption feedback before the next knowledge-lifecycle milestone: generated hooks are quiet for missing executables and locally unconfigured checkouts, while active failures stay visible. Read-only observations avoid repository rescans without refreshing verification; potentially mutating tools retain original evidence capture. [Data/network documentation](docs/data-and-network.md), internal-mirror version requirements, and [hook measurements](docs/hook-performance.md) make the operating costs and boundaries reviewable. Local regression and benchmark evidence does not establish company approval, universal hook coverage, or large-repository performance. The advisory review-to-resolution milestone remains outstanding.
+
 Judge future progress by outcomes: appropriate activation without reminders; fewer repeated mistakes and missed updates; false-positive and irrelevant-context rates; latency and token cost as repository size, history, and knowledge grow; and whether another session can recover the right intent and unfinished work. Agree on acceptance thresholds before claiming a milestone is met.
 
 For future strategy and prioritization tasks, read this roadmap and its linked Mason decision first. Preserve the distinction between maintainer direction, shipped capabilities, measured results, and assistant proposals. Update the relevant status when work or evidence changes. Do not replace this roadmap with the latest small feature discussion.
 
-Sources: the maintainer conversation captured here, including the growth-focused question and explicitly listed five priorities; [CHANGELOG.md](CHANGELOG.md) for released behavior and the reported evaluation result; [README.md](README.md) and the current implementation for workflow scope. No permalink or full export of the earlier assessment was provided. The existing [strategy record](.mason/decisions/mason-s-lane-is-the-executable-external-layer-distributed-vi.json) and [tool-adoption record](.mason/decisions/tool-salience-lives-in-claude-md-not-tool-descriptions.json) provide older related context, remain legacy/unreviewed, and are not substitutes for this roadmap.
+Sources: the maintainer conversation captured here, including the growth-focused question and explicitly listed five priorities; the seven-idea ranking quoted by the maintainer on 2026-09-09 and the preceding review-to-resolution proposal, combined at their request; [CHANGELOG.md](CHANGELOG.md) for released behavior and the reported evaluation result; [README.md](README.md) and the current implementation for workflow scope. The combined sequence and acceptance criteria are Codex's synthesis. No permalink or full export of the original assessment was provided. The existing [strategy record](.mason/decisions/mason-s-lane-is-the-executable-external-layer-distributed-vi.json) and [tool-adoption record](.mason/decisions/tool-salience-lives-in-claude-md-not-tool-descriptions.json) provide older related context, remain legacy/unreviewed, and are not substitutes for this roadmap.

@@ -18,7 +18,7 @@ export async function setupStatus(dir: string) {
     const pending = partial.filter(item => item.receipt !== null).map(item => item.host);
     return { version: 1, status: pending.length ? "incomplete" : "not-configured", hosts: {},
       next: pending.length ? "Setup did not finish. Rerun mason-auto setup --host " + pending[0] + " to resume using the retained original evidence."
-        : "Run mason-auto setup --host codex or --host claude." };
+        : "Project hooks are inactive until local setup. Run mason setup --host codex or --host claude." };
   }
   const hosts: Record<string, { status: string; runtime: string; mcp: string; instructions: string; hookConfiguration: string;
     observedEvents: string[]; contextCalls: number; verificationStatus: string; pending: string[] }> = {};

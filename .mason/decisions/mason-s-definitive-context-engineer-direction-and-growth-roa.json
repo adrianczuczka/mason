@@ -2,17 +2,17 @@
   "version": 2,
   "id": "mason-s-definitive-context-engineer-direction-and-growth-roa",
   "title": "Mason's definitive context engineer direction and growth roadmap",
-  "body": "The maintainer wants Mason to become the definitive context engineer as projects grow, preserving engineering intent and preventing repeated AI coding mistakes and missed updates. Consult ROADMAP.md for strategy and prioritization. The original five priorities were trust hardening, real patch evaluations, adoption without a mandatory concept map, decision provenance, and integration with established quality evidence; Confluence stays lower priority pending customer demand. Released mechanisms are progress, not proof of the goal: the initial live patch comparison tied 10/10. The growth-focused roadmap covers rationale, scoped ownership, evolving constraints, coupled changes, continuity across sessions, and manageable review/context costs. Its growth requirements are an explicitly labeled synthesis because the earlier assistant assessment is unavailable verbatim. The later automatic-use discussion is one proposed next milestone, not a replacement for the broader direction. Keep agreed direction, shipped capabilities, measured outcomes, and unapproved proposals distinct. The maintainer authorized capturing this memory; no owner or formal roadmap acceptance has been recorded.",
+  "body": "The maintainer wants Mason to preserve engineering intent and prevent repeated AI coding mistakes as projects grow. Consult ROADMAP.md for strategy. The original priorities remain trust, real evaluations, adoption without a required map, provenance, and quality-check evidence; Confluence stays lower priority. On 2026-09-09 the maintainer requested combining the seven ranked knowledge-debt ideas with the maintenance proposal. Usefulness rank and build order differ: correction capture is the highest-value outcome, but basic capture already exists. The proposed sequence starts with durable advisory assessments and evidence-scoped reopening, then selective correction capture and task-relevant review through maintained reuse. Follow with executable constraints, contradiction review, a context debugger, explicit reconsideration conditions, and cross-repository coordination when demand warrants. Basic diagnostics and outcome evaluation run throughout. Preserve reviewed history and unknown states; closure is not blanket decision approval. Measure useful capture, later mistakes, incorrect closures, review noise/effort and cost against ordinary notes. The initial patch comparison tied 10/10; capture/reuse smoke tests do not establish superiority. Roadmap recording is authorized; the sequence is a proposal, not approval to implement every milestone. No roadmap owner or formal acceptance is recorded.",
   "category": "decision",
   "files": [
     "ROADMAP.md"
   ],
   "createdAt": "2026-09-05T11:24:50.523Z",
-  "updatedAt": "2026-09-05T11:24:50.523Z",
+  "updatedAt": "2026-09-09T11:13:39.778Z",
   "refreshedHash": "6d0da83d0fbf7c07caa94369b795fd2e76d2297c",
   "status": "active",
   "approval": "proposed",
-  "revision": 1,
+  "revision": 2,
   "sources": [
     {
       "kind": "discussion",
@@ -23,6 +23,11 @@
       "kind": "document",
       "reference": "ROADMAP.md",
       "note": "Durable roadmap with source limitations, current progress, growth requirements labeled as synthesis, and proposed next work."
+    },
+    {
+      "kind": "discussion",
+      "reference": "Maintainer conversation, 2026-09-09: combine the quoted seven-idea usefulness ranking with the preceding maintenance proposal and update the roadmap",
+      "note": "The ranking was supplied verbatim by the maintainer. Delivery order and acceptance criteria are Codex synthesis; recording the roadmap does not imply implementation approval. No conversation permalink was supplied."
     }
   ],
   "history": [
@@ -48,6 +53,40 @@
             "kind": "document",
             "reference": "ROADMAP.md",
             "note": "Durable roadmap with source limitations, current progress, growth requirements labeled as synthesis, and proposed next work."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "6d0da83d0fbf7c07caa94369b795fd2e76d2297c"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-09T11:13:39.778Z",
+      "actor": "Codex",
+      "revision": 2,
+      "content": {
+        "title": "Mason's definitive context engineer direction and growth roadmap",
+        "body": "The maintainer wants Mason to preserve engineering intent and prevent repeated AI coding mistakes as projects grow. Consult ROADMAP.md for strategy. The original priorities remain trust, real evaluations, adoption without a required map, provenance, and quality-check evidence; Confluence stays lower priority. On 2026-09-09 the maintainer requested combining the seven ranked knowledge-debt ideas with the maintenance proposal. Usefulness rank and build order differ: correction capture is the highest-value outcome, but basic capture already exists. The proposed sequence starts with durable advisory assessments and evidence-scoped reopening, then selective correction capture and task-relevant review through maintained reuse. Follow with executable constraints, contradiction review, a context debugger, explicit reconsideration conditions, and cross-repository coordination when demand warrants. Basic diagnostics and outcome evaluation run throughout. Preserve reviewed history and unknown states; closure is not blanket decision approval. Measure useful capture, later mistakes, incorrect closures, review noise/effort and cost against ordinary notes. The initial patch comparison tied 10/10; capture/reuse smoke tests do not establish superiority. Roadmap recording is authorized; the sequence is a proposal, not approval to implement every milestone. No roadmap owner or formal acceptance is recorded.",
+        "category": "decision",
+        "files": [
+          "ROADMAP.md"
+        ],
+        "sources": [
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, captured 2026-09-05: what Mason needs to become the definitive context engineer as projects grow",
+            "note": "Source includes the growth-focused question, the explicit five priorities, and the request to capture project memory. No conversation permalink or verbatim earlier assessment was supplied."
+          },
+          {
+            "kind": "document",
+            "reference": "ROADMAP.md",
+            "note": "Durable roadmap with source limitations, current progress, growth requirements labeled as synthesis, and proposed next work."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-09-09: combine the quoted seven-idea usefulness ranking with the preceding maintenance proposal and update the roadmap",
+            "note": "The ranking was supplied verbatim by the maintainer. Delivery order and acceptance criteria are Codex synthesis; recording the roadmap does not imply implementation approval. No conversation permalink was supplied."
           }
         ]
       },

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { workspace } from "./evidence.js";
-import { HOOK_EVENTS, hookConfig } from "./adapters.js";
+import { HOOK_EVENTS, hookConfig, knownManagedHookCommands } from "./adapters.js";
 import { withLock, type Host } from "./store.js";
 import { readText } from "../setup/files.js";
 import { OWNERSHIP_PATH, ownershipSchema } from "../setup/ownership.js";
@@ -32,7 +32,7 @@ export async function planAutomationInstall(root: string, host: Host, command?: 
   const ownershipText = await readText(root, OWNERSHIP_PATH);
   const pending = ownershipText === null ? [] : ownershipSchema.parse(JSON.parse(ownershipText)).files[file]?.hookCommands ?? [];
   // A clone has shared hooks but no local ownership receipt.
-  const owned = new Set([previous, ...pending, newCommand]);
+  const owned = new Set([previous, ...pending, newCommand, ...knownManagedHookCommands(host)]);
   const hooks = existing.hooks ?? {};
   for (const event of HOOK_EVENTS) {
     hooks[event] = (hooks[event] ?? []).map(group => ({ ...group,

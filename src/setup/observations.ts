@@ -24,12 +24,13 @@ export async function readObservation(root: string, directory: string, host: Hos
 
 /** Only the configured Mason invocation supplies these values. Never persist task text or tool arguments. */
 export async function observeActivation(dir: string, event: "context" | typeof events[number], options: {
-  sessionId?: string; verificationStatus?: string; reportPath?: string;
+  sessionId?: string; verificationStatus?: string; reportPath?: string; directory?: string;
 } = {}): Promise<string | null> {
   const host = process.env.MASON_SETUP_HOST, revision = process.env.MASON_SETUP_REVISION;
   if ((host !== "codex" && host !== "claude") || !revision || !process.env.MASON_SETUP_ROOT) return null;
   try {
-    const capturedDirectory = options.reportPath?.match(/^(\.mason\/reports\/automation\/[a-f0-9]{24})\/checks\//)?.[1];
+    const capturedDirectory = options.directory?.match(/^\.mason\/reports\/automation\/[a-f0-9]{24}$/)?.[0]
+      ?? options.reportPath?.match(/^(\.mason\/reports\/automation\/[a-f0-9]{24})\/checks\//)?.[1];
     const ws = capturedDirectory ? { root: await fs.realpath(dir), directory: capturedDirectory } : await workspace(dir);
     if (ws.root !== await fs.realpath(process.env.MASON_SETUP_ROOT)) return null;
     const setup = await loadSetup(ws.root);

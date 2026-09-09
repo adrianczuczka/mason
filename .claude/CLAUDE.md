@@ -94,6 +94,7 @@ npm run typecheck      # Check TypeScript without emitting files
 npm run test:watch     # Run tests in watch mode
 npm run pack:standalone # Bundle the current platform with a pinned Node runtime
 npm run test:standalone # Packaged installer/MCP/hooks smoke test without system Node/npm
+npm run bench:hooks    # Local hook overhead benchmark; no model calls
 ```
 
 ## Code Conventions
@@ -115,6 +116,7 @@ npm run test:standalone # Packaged installer/MCP/hooks smoke test without system
 - `bench/harness/run-knowledge.mjs` evaluates investigation capture and reuse in a fresh session after independent review, plus a no-capture control. `bench/harness/knowledge/` holds synthetic evidence, MCP observation, grading, and the frozen 0.16.0 guidance. `npm run bench:knowledge -- --validate` tests mechanisms without models; live captures require a digest-bound review before `--resume`. Missing captures are never seeded by the grader. Hooks and native auto-memory are disabled for this comparison.
 - Repository scripts live in `scripts/`; `scripts/pack-mcpb.mjs` builds the MCP bundle. `scripts/build-standalone.mjs` packages locked production dependencies and the Node runtime pinned in `scripts/standalone-node.json`; `scripts/smoke-standalone.mjs` validates the actual installers, MCP/hooks, global upgrades, clone setup and uninstall. Projects invoke mason from PATH; global upgrades apply on their next launch. Generated setup and hook ownership records are ignored under .mason/local/. `scripts/test-evidence.mjs` records Vitest's actual exit status, original commit, and checkout cleanliness before/after execution. Reports under `.mason/reports/` are ignored.
 - CI evidence uses a version 1 manifest with named expected checks and Vitest JSON or SARIF artifacts. Imports never execute commands or fetch URLs. Missing/invalid reports stay unavailable; stale or dirty/unknown runs never satisfy the optional gate. Imported provenance is an assertion, not authenticated execution. File matches and test pairs associate accepted decisions without asserting a violation. Review JSON stays version 1 with optional additive `evidence`; default exit codes stay unchanged.
+- Shared generated hooks are quiet when Mason is missing or the checkout lacks local setup. Active failures remain visible. Known read-only tools record observations without advancing audit evidence; shell, editor, and unknown tools retain pre-edit checks. `test/adoption-hardening.test.ts` covers these boundaries and core network denial using `test/support/deny-network.mjs`. See [data and network behavior](../docs/data-and-network.md) and [hook performance](../docs/hook-performance.md); do not extend their scoped evidence into blanket privacy or performance claims.
 
 ## Concept-Map Lifecycle (key patterns)
 

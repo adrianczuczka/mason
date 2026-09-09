@@ -57,8 +57,10 @@ const mason = (...args) => windows ? run('powershell.exe', ['-NoProfile', '-NonI
 const git = (...args) => run('git', args, { cwd: repo });
 const commit = async message => { await git('add', '-A'); await git('commit', '-m', message); };
 let corrupt = false;
+let downloadRequests = 0;
 const releases = new Map([[original.version, archive]]);
 const server = http.createServer(async (request, response) => {
+  downloadRequests++;
   try {
     const parts = new URL(request.url, 'http://localhost').pathname.split('/');
     const version = parts[1]?.replace(/^v/, ''), file = releases.get(version);
@@ -104,6 +106,11 @@ try {
   const probe = await run(windows ? 'powershell.exe' : 'sh', windows ? ['-NoProfile', '-Command', 'if ((Get-Command node,npm -ErrorAction SilentlyContinue)) { exit 1 }'] : ['-c', 'if command -v node || command -v npm; then exit 1; fi']);
   assert.equal(probe.code, 0);
   console.log('Node and npm absent from child PATH. Installing through the release installer…');
+  env.MASON_VERSION = '';
+  const requestsBefore = downloadRequests;
+  await assert.rejects(install(), /Set MASON_VERSION when using MASON_RELEASE_BASE/);
+  assert.equal(downloadRequests, requestsBefore);
+  env.MASON_VERSION = original.version;
   assert((await install()).stdout.includes('Open a new terminal'));
   assert.equal((await mason('--version')).stdout.trim(), original.version);
   assert.equal((await freshTerminal()).stdout.trim(), original.version);
@@ -208,7 +215,14 @@ try {
   const pending = JSON.parse((await mason('status', '--dir', cloned, '--json')).stdout);
   assert.notEqual(pending.setup.status, 'active');
   const missingRuntime = await hook('codex', 'Stop', cloned);
-  assert(missingRuntime.systemMessage.includes('not configured locally'));
+  assert.equal(missingRuntime, null, 'A clone without local setup must remain quiet.');
+  const activePath = env.PATH;
+  env.PATH = nativePath;
+  try {
+    for (const host of ['codex', 'claude']) for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']) {
+      assert.equal(await hook(host, event, cloned), null, 'An absent command must remain quiet.');
+    }
+  } finally { env.PATH = activePath; }
   for (const host of ['codex', 'claude']) {
     await mason('setup', '--dir', cloned, '--host', host);
     await context(host, cloned);

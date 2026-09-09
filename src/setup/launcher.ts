@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import fs from "node:fs/promises";
 import type { Host } from "../automation/store.js";
-import { workspace } from "../automation/evidence.js";
+import { git } from "../automation/evidence.js";
 import { loadSetup } from "./model.js";
 
 declare const PKG_VERSION: string;
@@ -30,11 +31,15 @@ export async function installedCommand() {
 }
 
 /** Replaces the environment previously supplied by generated project launchers. */
-export async function prepareLaunch(host: Host) {
-  const ws = await workspace(process.cwd());
-  const entry = (await loadSetup(ws.root))?.hosts[host];
-  if (!entry) throw new Error(`Mason is not configured locally for ${host}. Run mason setup --host ${host} in this checkout.`);
-  process.env.MASON_SETUP_ROOT = ws.root;
+export async function prepareLaunch(host: Host, options: { allowInactive?: boolean } = {}) {
+  const root = await fs.realpath((await git(process.cwd(), "rev-parse", "--show-toplevel")).trim());
+  const entry = (await loadSetup(root))?.hosts[host];
+  if (!entry) {
+    if (options.allowInactive) return false;
+    throw new Error(`Mason is not configured locally for ${host}. Run mason setup --host ${host} in this checkout.`);
+  }
+  process.env.MASON_SETUP_ROOT = root;
   process.env.MASON_SETUP_HOST = host;
   process.env.MASON_SETUP_REVISION = entry.revision;
+  return true;
 }

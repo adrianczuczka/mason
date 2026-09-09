@@ -1,6 +1,6 @@
 {
   "name": "mason-context",
-  "version": "0.16.1",
+  "version": "0.16.2",
   "description": "MCP server for engineering decisions, task context, change impact, and documentation audits, with optional architecture maps",
   "type": "module",
   "mcpName": "com.adrianczuczka/mason",
@@ -24,6 +24,7 @@
     "bench:validate": "node bench/harness/run-patches.mjs --validate",
     "bench:automation": "node bench/harness/run-automation.mjs",
     "bench:knowledge": "node bench/harness/run-knowledge.mjs",
+    "bench:hooks": "node scripts/bench-hooks.mjs",
     "test:watch": "vitest",
     "pack:mcpb": "node scripts/pack-mcpb.mjs",
     "pack:standalone": "node scripts/build-standalone.mjs",

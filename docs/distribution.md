@@ -84,4 +84,4 @@ The smoke harness serves release archives locally and runs the actual installers
 
 [The standalone workflow](../.github/workflows/standalone.yml) runs that harness on six native runners. Tag publishing waits for all six, then uploads the checked archives, `SHA256SUMS`, and both installers to the GitHub release. Existing release assets are never overwritten. [GitHub runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) lists the runner labels.
 
-For release testing, `MASON_VERSION` selects a version and `MASON_RELEASE_BASE` overrides the archive download base. These overrides are explicit; production defaults use this repository's GitHub releases.
+`MASON_VERSION` selects a version and `MASON_RELEASE_BASE` overrides the archive download base. A custom base requires an explicit version, avoiding public latest-version discovery. Production defaults use this repository's GitHub releases. For company distribution, mirror the reviewed installer and artifacts as described in [data and network behavior](data-and-network.md#company-installation-and-mcp).

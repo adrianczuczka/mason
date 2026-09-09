@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.16.2 — 2026-09-09
+
+- Guard generated hooks when Mason is absent, and keep a checkout without local host setup quiet. Preserve active failure diagnostics and strict MCP startup; setup/status/teardown recognize the generated guard variants without project wrapper scripts.
+- Observe known read-only tools without rescanning audit inputs or advancing verification. Keep before/after capture for shell and unknown tools. Add a reproducible full-CLI hook benchmark and publish its measured scope and limits.
+- Document hook inputs, retained data, local versus optional networked features, MCP installation, and company mirrors. Require an explicit version with a custom release mirror to avoid public version discovery.
+- Exercise core CLI/MCP and hook paths with denied network operations, raw-input retention markers, inactive/invalid setup, and changed evidence before potentially mutating tools. On macOS, apply OS network denial to the tested process tree too.
+
 ## 0.16.1 — 2026-09-08
 
 - Resolve references using literal import paths and declared Kotlin/Java package symbols. Separate explicit path mentions and uncertain name candidates; suppress config/document-name collisions and keep weak candidates out of compact task context with an omission count.

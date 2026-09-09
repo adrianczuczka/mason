@@ -34,6 +34,28 @@ const SCOPE = "Documentation audit evidence only. Hook receipts show observed ev
 const priority = { resolved: 0, "review-required": 1, unresolved: 2, unverified: 3 };
 const cleanText = (text: string) => text.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").slice(0, 250);
 
+/** Read tools cannot create repair evidence. Observe their lifecycle without rescanning the checkout. */
+export async function observeReadOnlyTool(dir: string, event: AutomationEvent) {
+  const ws = await workspace(dir);
+  await withLock(ws.root, ws.directory, async () => {
+    const statePath = ws.directory + "/state.json";
+    const raw = await readStoreJson(ws.root, statePath);
+    if (raw === null) return;
+    const state = parseState(raw);
+    if (state.root !== ws.root || state.gitDir !== ws.gitDir || state.branch !== ws.branch) {
+      throw new Error("Automation state belongs to another branch or worktree; original evidence was retained.");
+    }
+    const session = event.host && event.sessionId ? state.sessions[hash([event.host, event.sessionId])] : null;
+    if (!session) return;
+    const now = new Date().toISOString();
+    session.lastUsed = now;
+    session.events[event.event] = { at: now, count: (session.events[event.event]?.count ?? 0) + 1 };
+    // Do not advance the audit fingerprint, report, or execution verdict: no check ran.
+    await writeStoreJson(ws.root, statePath, state);
+  });
+  return { root: ws.root, directory: ws.directory };
+}
+
 export function summarize(report: AutomationReport): string {
   const open = report.findings.filter(f => f.status !== "resolved");
   return [

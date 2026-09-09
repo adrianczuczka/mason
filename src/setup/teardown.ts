@@ -5,7 +5,7 @@ import { z } from "zod";
 import { hash, workspace } from "../automation/evidence.js";
 import { withLock, type Host } from "../automation/store.js";
 import { AUTOMATION_PATH, automationConfigSchema, configPath, recordSchema } from "../automation/install.js";
-import { hookConfig } from "../automation/adapters.js";
+import { hookConfig, knownManagedHookCommands } from "../automation/adapters.js";
 import { DOC_CANDIDATES } from "../audit/docs.js";
 import { CLAUDE_MD_SECTION } from "../mcp/init.js";
 import { applyEdit, managedBlock, readText, type FileEdit, type RemovalEdit } from "./files.js";
@@ -40,6 +40,7 @@ async function planTeardown(root: string, selected: readonly Host[]) {
   const commands = (host: Host) => new Set([
     automation?.hosts[host]?.command,
     ...(ownership.files[configPath(host)]?.hookCommands ?? []),
+    ...knownManagedHookCommands(host),
     hookConfig(host, hookCommand(host)).hooks.SessionStart[0].hooks[0].command,
     hookConfig(host).hooks.SessionStart[0].hooks[0].command,
   ].filter((command): command is string => !!command));

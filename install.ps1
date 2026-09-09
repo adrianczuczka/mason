@@ -5,6 +5,9 @@ $ProgressPreference = 'SilentlyContinue'
 $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 $arch = switch ($architecture) { 'ARM64' { 'arm64' } 'AMD64' { 'x64' } default { throw "Unsupported architecture: $architecture" } }
 $version = $env:MASON_VERSION
+if ($env:MASON_RELEASE_BASE -and -not $version) {
+    throw 'Set MASON_VERSION when using MASON_RELEASE_BASE; no public latest-version lookup was made.'
+}
 if (-not $version) {
     $response = Invoke-WebRequest -UseBasicParsing -Method Head -Uri 'https://github.com/adrianczuczka/mason/releases/latest'
     $url = if ($response.BaseResponse.ResponseUri) { $response.BaseResponse.ResponseUri.AbsoluteUri } else { $response.BaseResponse.RequestMessage.RequestUri.AbsoluteUri }

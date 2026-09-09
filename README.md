@@ -12,6 +12,8 @@
 
 Works through MCP, with automatic documentation checks for **Codex** and **Claude Code**. No concept map required.
 
+Core checks run locally with no model calls or telemetry. Results become context for your existing assistant. [Data, network access, and team installation](docs/data-and-network.md) covers storage, optional networked features, and internal mirrors.
+
 ## Get started
 
 Install on macOS or Linux:
@@ -74,6 +76,7 @@ Earlier read-only decision-retrieval evaluations scored **9.0/10 with Mason vs 7
 ## Documentation
 
 - [Setup, hooks, and upgrades](docs/setup.md)
+- [Data and network behavior](docs/data-and-network.md) · [Hook performance](docs/hook-performance.md)
 - [Audits, repair verification, and CI evidence](docs/checks.md)
 - [Decisions, tools, and optional architecture maps](docs/reference.md)
 - [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md) · [MIT license](LICENSE)
