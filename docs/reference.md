@@ -25,6 +25,10 @@ Audit, review, decision capture, and task context work without a concept map. Ad
 
 Capture a lesson with `save_decision`: what happened, why it matters, and the files or directories it applies to. Add `owner`, `sources`, and `actor` when known. None are required to capture a proposal, and missing attribution stays explicit.
 
+Keep titles within 80 characters and aim for bodies of 1,500 characters or fewer. Bodies up to 2,500 characters are saved in full, with a warning above the target because matching context and hooks include the whole body. Keep the rule, reason, and exceptions; put supporting references in `sources`. Over-limit errors report the actual length, maximum, and excess. Limits apply after trimming surrounding whitespace; Mason never automatically shortens the knowledge.
+
+New record IDs use a title slug shortened at a word boundary when possible (a single long word is cut to fit). Existing IDs stay unchanged when a record is read or revised, including when its title changes.
+
 | Approval | How assistants should use it |
 |---|---|
 | `proposed` | A suggestion that needs review; the default for new records. |
@@ -77,7 +81,7 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 | `export_to_confluence` | Sync the concept map to Confluence as PM-readable wiki pages. |
 | `get_snapshot` | Architecture navigation when a map is available. Loads the concept map — feature → file lookup — in one LLM-free call. |
 | `get_context` | Decisions with approval, provenance, file impact, tests, and trust for a task; adds features/flows when a map exists. No setup required. |
-| `save_decision` | Capture or revise proposals with rationale, anchors, owner, sources, and history. Prior accepted revisions remain operative while drafts are reviewed. |
+| `save_decision` | Capture or revise proposals with rationale, anchors, owner, sources, and history. Aim for 1,500 body characters; up to 2,500 is accepted with a warning above the target. Prior accepted revisions remain operative while drafts are reviewed. |
 | `review_decision` | Prepare draft and operative decision evidence, then record authorized acceptance, reaffirmation, or retirement against that revision. |
 | `mason_check_drift` | Feature-level staleness report — what changed since the snapshot, and whether to refresh incrementally or rebuild. |
 | `verify_snapshot` | Spot-check map correctness — sampled entries + file skeletons for the assistant to judge, least-recently-verified first. |

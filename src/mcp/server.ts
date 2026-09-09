@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { attributionSchema } from "../decisions/provenance.js";
+import { decisionTitleSchema, decisionBodySchema, BODY_RECOMMENDED_CHARS, BODY_MAX_CHARS, TITLE_MAX_CHARS } from "../decisions/decisions.js";
 import {
   analyzeProject,
   checkDrift,
@@ -382,14 +383,10 @@ export function createMcpServer(): McpServer {
       dir: z
         .string()
         .describe("Absolute path to the project root directory"),
-      title: z
-        .string()
-        .max(80)
-        .describe("Short, specific headline — becomes the stable record id"),
-      body: z
-        .string()
-        .max(1500)
-        .describe("The knowledge itself: what was tried/decided, why, and what to avoid. Must contain information NOT derivable by reading the code."),
+      title: decisionTitleSchema
+        .describe(`Short, specific headline (max ${TITLE_MAX_CHARS} characters). Generates a stable id on creation; revising the title keeps the existing id.`),
+      body: decisionBodySchema
+        .describe(`The knowledge itself: what was tried/decided, why, and what to avoid. Must contain information NOT derivable by reading the code. Aim for ${BODY_RECOMMENDED_CHARS} characters or fewer; up to ${BODY_MAX_CHARS} is accepted with a warning above the target. Matching context and hooks include the full body. Preserve exceptions; use sources for supporting references.`),
       category: z.enum(["decision", "gotcha", "deprecation", "convention"]),
       files: z
         .array(z.string())

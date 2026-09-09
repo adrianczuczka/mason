@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import { readStoreJson, writeStoreJson, storePath, type StoreDiagnostic } from "../utils/storage.js";
 import { sanitizeRepoPaths } from "../utils/paths.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
@@ -16,8 +17,20 @@ export type DecisionCategory =
 export type DecisionStatus = "active" | "superseded" | "retired";
 
 export const TITLE_MAX_CHARS = 80;
-export const BODY_MAX_CHARS = 1500;
+export const BODY_RECOMMENDED_CHARS = 1500;
+export const BODY_MAX_CHARS = 2500;
 export const MAX_ACTIVE_DECISIONS = 150;
+
+// Share validation with MCP so rejected tool calls include the actual length.
+const boundedText = (field: string, max: number, hint: string) => z.string({
+  errorMap: (issue, ctx) => ({ message: issue.code === "too_big"
+    ? `${field} has ${ctx.data.length} characters; maximum is ${max} (${ctx.data.length - max} over). ${hint}`
+    : ctx.defaultError }),
+}).trim().min(1, `${field} must be non-empty`).max(max);
+
+export const decisionTitleSchema = boundedText("title", TITLE_MAX_CHARS, "Tighten it to a specific headline.");
+export const decisionBodySchema = boundedText("body", BODY_MAX_CHARS,
+  `Aim for ${BODY_RECOMMENDED_CHARS} characters or fewer. Preserve the rule, reason, and exceptions; put supporting references in sources.`);
 
 const DUPLICATE_JACCARD = 0.5;
 const DUPLICATE_JACCARD_WITH_SHARED_FILE = 0.35;
@@ -53,7 +66,8 @@ export async function saveDecisionRecord(rootDir: string, record: DecisionRecord
 }
 
 /**
- * Deterministic, human-readable id: kebab slug of the title, ≤60 chars.
+ * Deterministic, human-readable id: base slug ≤60 chars, ending at a word
+ * boundary when possible. A single longer word is cut to fit.
  * A slug collision with a DIFFERENT record appends a 6-hex content suffix.
  */
 export function decisionIdFor(
@@ -61,13 +75,17 @@ export function decisionIdFor(
   body: string,
   existingIds: Set<string>
 ): string {
-  const slug = title
+  const fullSlug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60)
-    .replace(/-+$/, "");
-  if (!existingIds.has(slug)) return slug || "decision";
+    .replace(/^-+|-+$/g, "");
+  let slug = fullSlug.slice(0, 60);
+  if (fullSlug.length > 60 && fullSlug[60] !== "-") {
+    const boundary = slug.lastIndexOf("-");
+    if (boundary > 0) slug = slug.slice(0, boundary);
+  }
+  slug = slug.replace(/-+$/, "") || "decision";
+  if (!existingIds.has(slug)) return slug;
   const suffix = createHash("sha1")
     .update(title + body)
     .digest("hex")
@@ -144,10 +162,10 @@ export async function withDecisionWrite<T>(root: string, operation: () => Promis
 }
 
 export async function upsertDecision(rootDir: string, input: UpsertDecisionInput): Promise<UpsertDecisionResult> {
-  const title = input.title.trim(), body = input.body.trim();
-  if (!title || !body) return { status: "error", error: "title and body must be non-empty" };
-  if (title.length > TITLE_MAX_CHARS) return { status: "error", error: `title exceeds ${TITLE_MAX_CHARS} chars — tighten it to a specific headline` };
-  if (body.length > BODY_MAX_CHARS) return { status: "error", error: `body exceeds ${BODY_MAX_CHARS} chars — record the decision, not the transcript` };
+  const parsedTitle = decisionTitleSchema.safeParse(input.title), parsedBody = decisionBodySchema.safeParse(input.body);
+  if (!parsedTitle.success) return { status: "error", error: parsedTitle.error.issues[0].message };
+  if (!parsedBody.success) return { status: "error", error: parsedBody.error.issues[0].message };
+  const title = parsedTitle.data, body = parsedBody.data;
   const attribution = attributionSchema.safeParse(input);
   if (!attribution.success) return { status: "error", error: attribution.error.message };
   if (input.id && input.supersedes) return { status: "error", error: "Use either id to revise or supersedes to replace a record, not both." };
@@ -157,6 +175,7 @@ export async function upsertDecision(rootDir: string, input: UpsertDecisionInput
     const existing = store.records, byId = new Map(existing.map(r => [r.id, r]));
     const now = new Date().toISOString(), head = await getCurrentGitHash(rootDir);
     const warnings: string[] = [];
+    if (body.length > BODY_RECOMMENDED_CHARS) warnings.push(`body has ${body.length} characters, above the recommended ${BODY_RECOMMENDED_CHARS}; matching context and hooks include it in full. Keep the rule, reason, and exceptions concise; use sources for supporting references.`);
     const files = sanitizeRepoPaths(input.files ?? []);
     if (input.files && files.length < input.files.length) warnings.push("some anchor paths were outside the repo or duplicated and were dropped");
     for (const file of files) {

@@ -264,8 +264,8 @@
         "type": "object",
         "properties": {
           "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "title": { "type": "string", "description": "Short, specific headline — becomes the stable record id (max 80 chars)" },
-          "body": { "type": "string", "description": "The knowledge itself: what was tried/decided, why, and what to avoid (max 1500 chars)" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 80, "description": "Short, specific headline (max 80 characters). Generates a stable id on creation; revising the title keeps the existing id." },
+          "body": { "type": "string", "minLength": 1, "maxLength": 2500, "description": "The knowledge itself: what was tried/decided, why, and what to avoid. Must contain information NOT derivable by reading the code. Aim for 1500 characters or fewer; up to 2500 is accepted with a warning above the target. Matching context and hooks include the full body. Preserve exceptions; use sources for supporting references." },
           "category": { "type": "string", "enum": ["decision", "gotcha", "deprecation", "convention"] },
           "files": { "type": "array", "items": { "type": "string" }, "description": "Repo-relative files or directory prefixes; changes flag the decision for re-verification across retrieval, hooks, and review" },
           "id": { "type": "string", "description": "Existing id to revise; unchanged content does not re-verify" },

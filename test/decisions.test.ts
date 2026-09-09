@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -17,6 +19,8 @@ import { assembleContext } from "../src/context/assemble.js";
 import type { ContextBundle, NoMatchBundle } from "../src/context/assemble.js";
 import { getSnapshot } from "../src/mcp/tools.js";
 import { runDriftCli } from "../src/drift/cli.js";
+import { createMcpServer } from "../src/mcp/server.js";
+import { runHook } from "../src/hook/hook.js";
 
 const exec = promisify(execFile);
 
@@ -63,6 +67,7 @@ describe("decisions", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -95,6 +100,23 @@ describe("decisions", () => {
     it("appends a content suffix on collision", () => {
       const id = decisionIdFor("Auth rule", "different body", new Set(["auth-rule"]));
       expect(id).toMatch(/^auth-rule-[0-9a-f]{6}$/);
+    });
+
+    it("ends a shortened slug at a complete word and retains collision handling", () => {
+      const title = "Binding requirement is cacheable only; the device limit is account scoped";
+      const expected = "binding-requirement-is-cacheable-only-the-device-limit-is";
+      expect(decisionIdFor(title, "body", new Set())).toBe(expected);
+      expect(decisionIdFor(title, "other body", new Set([expected]))).toMatch(new RegExp(`^${expected}-[0-9a-f]{6}$`));
+    });
+
+    it.each([59, 60])("retains a complete %i-character word at the cutoff", length => {
+      expect(decisionIdFor(`${"a".repeat(length)} suffix`, "body", new Set())).toBe("a".repeat(length));
+    });
+
+    it("bounds a single long word and handles titles with no slug characters", () => {
+      expect(decisionIdFor("a".repeat(80), "body", new Set())).toBe("a".repeat(60));
+      expect(decisionIdFor("約束", "body", new Set())).toBe("decision");
+      expect(decisionIdFor("約束", "body", new Set(["decision"]))).toMatch(/^decision-[0-9a-f]{6}$/);
     });
   });
 
@@ -228,15 +250,49 @@ describe("decisions", () => {
       expect(old.supersededBy).toBe("cache-ttl-is-one-minute");
     });
 
-    it("rejects an oversized body with a hint", async () => {
+    it.each([
+      { field: "title", length: 81, max: 80 },
+      { field: "body", length: 2501, max: 2500 },
+    ])("rejects an oversized $field with its actual count and no writes", async ({ field, length, max }) => {
       const result = await upsertDecision(tmpDir, {
         title: "Too long",
-        body: "x".repeat(2000),
+        body: "A useful constraint.",
         category: "decision",
+        [field]: `  ${"x".repeat(length)}  `,
       });
       expect(result.status).toBe("error");
       if (result.status !== "error") throw new Error("unreachable");
-      expect(result.error).toMatch(/1500/);
+      expect(result.error).toContain(`${field} has ${length} characters; maximum is ${max} (1 over)`);
+      await expect(fs.access(path.join(tmpDir, ".mason"))).rejects.toThrow();
+    });
+
+    it("warns on long creates, revisions and unchanged saves without losing content or history", async () => {
+      const input = { title: "Auth retry exceptions", body: "x".repeat(2000), category: "gotcha" as const };
+      const created = await upsertDecision(tmpDir, input);
+      expect(created).toMatchObject({ status: "created", warnings: [expect.stringContaining("2000")] });
+      if (created.status !== "created") throw new Error("unreachable");
+      const updatedInput = { ...input, id: created.id, body: "y".repeat(2500) };
+      const updated = await upsertDecision(tmpDir, updatedInput);
+      expect(updated).toMatchObject({ status: "updated", warnings: [expect.stringContaining("2500")] });
+      const file = path.join(tmpDir, ".mason/decisions", `${created.id}.json`);
+      const before = await fs.readFile(file, "utf8");
+      expect(await upsertDecision(tmpDir, updatedInput)).toMatchObject({ status: "unchanged", warnings: [expect.stringContaining("2500")] });
+      expect(await fs.readFile(file, "utf8")).toBe(before);
+      const saved = JSON.parse(before);
+      expect(saved.body).toBe(updatedInput.body);
+      expect(saved.history.map((event: { content: { body: string } }) => event.content.body)).toEqual([input.body, updatedInput.body]);
+      expect(await upsertDecision(tmpDir, { ...updatedInput, body: "z".repeat(1500) })).toMatchObject({ status: "updated", warnings: [] });
+    });
+
+    it("keeps a previously truncated id when reading and revising its title", async () => {
+      const id = "binding-requirement-is-cacheable-only-the-device-limit-is-ac";
+      await saveDecisionRecord(tmpDir, record({ id, title: "Binding requirement is cacheable only; the device limit is account scoped" }));
+      const file = path.join(tmpDir, ".mason/decisions", `${id}.json`);
+      const before = await fs.readFile(file, "utf8");
+      expect((await loadDecisions(tmpDir))[0].id).toBe(id);
+      expect(await fs.readFile(file, "utf8")).toBe(before);
+      expect(await upsertDecision(tmpDir, { id, title: "Binding cache scope", body: "Retain account scope.", category: "decision" })).toMatchObject({ status: "updated", id });
+      expect((await loadDecisions(tmpDir)).map(r => r.id)).toEqual([id]);
     });
 
     it("warns with pruneCandidates over the soft cap, never auto-evicts", async () => {
@@ -263,6 +319,47 @@ describe("decisions", () => {
       expect((await loadDecisions(tmpDir)).length).toBe(MAX_ACTIVE_DECISIONS + 2);
     });
   });
+
+  it("exposes matching MCP limits and preserves the full body through retrieval and hooks", async () => {
+    vi.stubGlobal("PKG_VERSION", "test");
+    const server = createMcpServer();
+    const client = new Client({ name: "decision-limits-test", version: "1" });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const text = (result: Awaited<ReturnType<typeof client.callTool>>) => (result.content as { text: string }[])[0].text;
+    try {
+      await server.connect(a); await client.connect(b);
+      const tool = (await client.listTools()).tools.find(t => t.name === "save_decision")!;
+      const manifest = JSON.parse(await fs.readFile(new URL("../manifest.json", import.meta.url), "utf8"));
+      const declared = manifest.tools.find((t: { name: string }) => t.name === "save_decision").inputSchema.properties;
+      for (const [field, max] of [["title", 80], ["body", 2500]] as const) {
+        expect(tool.inputSchema.properties![field]).toMatchObject({ type: "string", minLength: 1, maxLength: max });
+        expect(declared[field]).toMatchObject(tool.inputSchema.properties![field]);
+      }
+      const input = { dir: tmpDir, title: "Auth retry rationale", body: "Valid body", category: "gotcha", files: ["src/auth.ts"], force: true };
+      for (const [field, length] of [["title", 81], ["body", 2501]] as const) {
+        const rejected = await client.callTool({ name: "save_decision", arguments: { ...input, [field]: `  ${"x".repeat(length)}  ` } });
+        expect(rejected.isError).toBe(true);
+        expect(text(rejected)).toContain(`${field} has ${length} characters`);
+        expect(text(rejected)).toContain("(1 over)");
+      }
+      await expect(fs.access(path.join(tmpDir, ".mason"))).rejects.toThrow();
+      for (const length of [1500, 1501, 2500]) {
+        const exception = " Never retry without the key.";
+        const body = "x".repeat(length - exception.length) + exception;
+        const result = await client.callTool({ name: "save_decision", arguments: { ...input, title: `Auth ${length}`.padEnd(80, "!"), body: `  ${body}  ` } });
+        expect(result.isError).not.toBe(true);
+        const saved = JSON.parse(text(result));
+        expect(saved.status).toBe("created");
+        expect(saved.warnings).toHaveLength(length > 1500 ? 1 : 0);
+        if (length > 1500) expect(saved.warnings[0]).toContain("include it in full");
+        const context = JSON.parse(text(await client.callTool({ name: "get_context", arguments: { dir: tmpDir, task: "Auth retries", files: ["src/auth.ts"] } })));
+        expect(context.decisions[saved.id].body).toBe(body);
+        expect(context.decisions[saved.id].approval).toBe("proposed");
+        const hook = await runHook(JSON.stringify({ session_id: `length-${length}`, cwd: tmpDir, tool_name: "Read", tool_input: { file_path: path.join(tmpDir, "src/auth.ts") } }), { stateDir: tmpDir });
+        expect(JSON.parse(hook!).hookSpecificOutput.additionalContext).toContain(body);
+      }
+    } finally { await client.close(); await server.close(); }
+  }, 15000);
 
   describe("computeDecisionDrift", () => {
     it("flags decisions whose anchor files changed, not untouched ones", async () => {
