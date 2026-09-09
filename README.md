@@ -6,15 +6,60 @@
 
 **Remember why decisions were made · Catch outdated guidance · Find what else needs updating**
 
-[![npm version](https://shieldcn.dev/npm/mason-context.svg?variant=outline&size=sm)](https://www.npmjs.com/package/mason-context)
-[![CI](https://shieldcn.dev/github/ci/adrianczuczka/mason.svg?workflow=ci.yml&branch=main&variant=outline&size=sm)](https://github.com/adrianczuczka/mason/actions/workflows/ci.yml)
-[![Monthly downloads](https://shieldcn.dev/npm/dm/mason-context.svg?variant=outline&size=sm)](https://www.npmjs.com/package/mason-context)
-[![License](https://shieldcn.dev/npm/license/mason-context.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/LICENSE)
+<!-- Explicit image modes keep outline labels readable in both GitHub themes. -->
+<p>
+  <a href="https://www.npmjs.com/package/mason-context">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/npm/mason-context.svg?variant=outline&amp;size=sm&amp;mode=dark">
+      <img alt="npm version" src="https://shieldcn.dev/npm/mason-context.svg?variant=outline&amp;size=sm&amp;mode=light" height="28">
+    </picture>
+  </a>
+  <a href="https://github.com/adrianczuczka/mason/actions/workflows/ci.yml">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/ci/adrianczuczka/mason.svg?workflow=ci.yml&amp;branch=main&amp;variant=outline&amp;size=sm&amp;mode=dark">
+      <img alt="CI" src="https://shieldcn.dev/github/ci/adrianczuczka/mason.svg?workflow=ci.yml&amp;branch=main&amp;variant=outline&amp;size=sm&amp;mode=light" height="28">
+    </picture>
+  </a>
+  <a href="https://www.npmjs.com/package/mason-context">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/npm/dm/mason-context.svg?variant=outline&amp;size=sm&amp;mode=dark">
+      <img alt="Monthly downloads" src="https://shieldcn.dev/npm/dm/mason-context.svg?variant=outline&amp;size=sm&amp;mode=light" height="28">
+    </picture>
+  </a>
+  <a href="https://github.com/adrianczuczka/mason/blob/main/LICENSE">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/npm/license/mason-context.svg?variant=outline&amp;size=sm&amp;mode=dark">
+      <img alt="License" src="https://shieldcn.dev/npm/license/mason-context.svg?variant=outline&amp;size=sm&amp;mode=light" height="28">
+    </picture>
+  </a>
+</p>
 
-[![Works with Codex](https://shieldcn.dev/badge/agent-Codex-64748b.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/docs/setup.md)
-[![Works with Claude Code](https://shieldcn.dev/badge/agent-Claude%20Code-64748b.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/docs/setup.md)
-[![MCP compatible](https://shieldcn.dev/badge/protocol-MCP-64748b.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/docs/setup.md#other-clients)
-[![Supported platforms](https://shieldcn.dev/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-64748b.svg?variant=outline&size=sm)](https://github.com/adrianczuczka/mason/blob/main/docs/distribution.md)
+<p>
+  <a href="https://github.com/adrianczuczka/mason/blob/main/docs/setup.md">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/agent-Codex-64748b.svg?variant=outline&amp;size=sm&amp;mode=dark&amp;valueColor=cbd5e1">
+      <img alt="Works with Codex" src="https://shieldcn.dev/badge/agent-Codex-64748b.svg?variant=outline&amp;size=sm&amp;mode=light&amp;valueColor=334155" height="28">
+    </picture>
+  </a>
+  <a href="https://github.com/adrianczuczka/mason/blob/main/docs/setup.md">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/agent-Claude%20Code-64748b.svg?variant=outline&amp;size=sm&amp;mode=dark&amp;valueColor=cbd5e1">
+      <img alt="Works with Claude Code" src="https://shieldcn.dev/badge/agent-Claude%20Code-64748b.svg?variant=outline&amp;size=sm&amp;mode=light&amp;valueColor=334155" height="28">
+    </picture>
+  </a>
+  <a href="https://github.com/adrianczuczka/mason/blob/main/docs/setup.md#other-clients">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/protocol-MCP-64748b.svg?variant=outline&amp;size=sm&amp;mode=dark&amp;valueColor=cbd5e1">
+      <img alt="MCP compatible" src="https://shieldcn.dev/badge/protocol-MCP-64748b.svg?variant=outline&amp;size=sm&amp;mode=light&amp;valueColor=334155" height="28">
+    </picture>
+  </a>
+  <a href="https://github.com/adrianczuczka/mason/blob/main/docs/distribution.md">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-64748b.svg?variant=outline&amp;size=sm&amp;mode=dark&amp;valueColor=cbd5e1">
+      <img alt="Supported platforms" src="https://shieldcn.dev/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-64748b.svg?variant=outline&amp;size=sm&amp;mode=light&amp;valueColor=334155" height="28">
+    </picture>
+  </a>
+</p>
 
 </div>
 
