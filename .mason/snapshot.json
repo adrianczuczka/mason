@@ -1,8 +1,8 @@
 {
   "version": 2,
   "createdAt": "2026-07-22T14:18:53.690Z",
-  "updatedAt": "2026-09-08T16:44:28.802Z",
-  "gitHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8",
+  "updatedAt": "2026-09-09T12:09:56.301Z",
+  "gitHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb",
   "features": {
     "MCP server entry point": {
       "description": "Registers 21 MCP tools, including setup through the installed Mason command and local instruction-completion state. Configured get_context calls record activation observations without storing prompts.",
@@ -388,7 +388,7 @@
       "refreshedHash": "6de5b00ddca9ecb9ec2421f2f11ba30fa72577fe"
     },
     "project onboarding": {
-      "description": "Read-only audit/review by default. Explicit setup verifies mason on PATH, retains pre-edit evidence and records ownership before merging MCP, hooks, instructions and ignore rules. Guidance routes investigations and lasting sourced lessons to proposal capture. Local bookkeeping and observed activation remain separate.",
+      "description": "Read-only audit/review by default. Explicit setup verifies mason on PATH, retains pre-edit evidence and records ownership before merging MCP, guarded hooks, instructions and ignore rules. Inactive local hooks stay quiet; invalid setup stays visible and MCP remains strict. Version-specific activation observations remain separate from configuration.",
       "files": [
         "src/mcp/init.ts",
         "src/mcp/onboarding.ts",
@@ -406,10 +406,11 @@
         "test/tools.test.ts",
         "test/setup.test.ts",
         "test/distribution.test.ts",
-        "test/teardown.test.ts"
+        "test/teardown.test.ts",
+        "test/adoption-hardening.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
+      "refreshedHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb"
     },
     "decision review": {
       "description": "Prepares the draft, operative accepted revision, and source evidence for both anchor sets. Authorized verdicts replace or withdraw the operative constraint, reject stale tokens, and preserve review history and baselines through metadata commits.",
@@ -440,7 +441,7 @@
       "refreshedHash": "7cb818d573a3c6bc0c537778efd3d900d28a143d"
     },
     "documentation automation": {
-      "description": "Retains documentation evidence across sessions and commits with change-scoped caches. Hook installation shares the setup/teardown lock and records previous and pending commands until replacement succeeds, preserving recovery across interrupted custom-command changes.",
+      "description": "Retains documentation evidence across sessions and commits with change-scoped caches. Known read-only tools record lifecycle observations without advancing verification; shell, editor and unknown tools retain pre-edit checks. Shared setup/teardown ownership recognizes generated guards while preserving custom hooks and interrupted command changes.",
       "files": [
         "bin/mason-auto.ts",
         "src/automation/adapters.ts",
@@ -456,10 +457,11 @@
         "test/automation.test.ts",
         "test/automation-reliability.test.ts",
         "test/setup.test.ts",
-        "test/teardown.test.ts"
+        "test/teardown.test.ts",
+        "test/adoption-hardening.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+      "refreshedHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb"
     },
     "automatic-use evaluations": {
       "description": "Evaluates ordinary module-renaming and unrelated control tasks with baseline, instructions and hooks arms for Claude Code and Codex. Separates offline lifecycle replay from real host sessions, records activation and preserved evidence, and grades behavior, protected configuration and verification after the final commit. Its shared session runner also supports explicit MCP configuration, isolated knowledge sessions, tool failures, session identity and usage recording.",
@@ -481,13 +483,14 @@
       ],
       "tests": [
         "test/distribution.test.ts",
-        "test/teardown.test.ts"
+        "test/teardown.test.ts",
+        "test/adoption-hardening.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+      "refreshedHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb"
     },
     "standalone distribution": {
-      "description": "Builds verified bundles with pinned Node, installs owned user launchers and configures PATH. Global upgrades reach projects on the next launch. Native smoke checks cover both hosts, activation, clones, retained repair evidence, project teardown/reconnection and global uninstall/reinstall.",
+      "description": "Builds verified bundles with pinned Node, installs owned user launchers and configures PATH. Global upgrades reach projects on the next launch. A custom mirror requires an explicit version without public discovery. Native smoke checks cover inactive guards, both hosts, clones, retained repair evidence, teardown and uninstall/reinstall.",
       "files": [
         "src/distribution/bundle.ts",
         "src/distribution/install.ts",
@@ -503,22 +506,24 @@
       ],
       "tests": [
         "test/distribution.test.ts",
-        "test/distribution-path.test.ts"
+        "test/distribution-path.test.ts",
+        "test/adoption-hardening.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+      "refreshedHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb"
     },
     "project teardown": {
-      "description": "Disconnects selected or all project hosts using a read-only plan and ownership checks. Removes identifiable MCP/hooks and unchanged shared instruction blocks, preserves user content and knowledge/evidence, retains ambiguous edits, and resumes interrupted cleanup.",
+      "description": "Disconnects selected hosts using recorded ownership and exact generated command variants, preserving custom or edited configuration, other hosts, knowledge and evidence. Dry runs are read-only; interrupted removal is resumable and ambiguous ownership remains explicit.",
       "files": [
         "src/setup/teardown.ts",
         "src/setup/ownership.ts"
       ],
       "tests": [
-        "test/teardown.test.ts"
+        "test/teardown.test.ts",
+        "test/adoption-hardening.test.ts"
       ],
       "type": "capability",
-      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+      "refreshedHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb"
     },
     "knowledge capture and reuse evaluation": {
       "description": "Evaluates ordinary investigation capture, digest-bound separate semantic review, and retrieval before worktree creation in a fresh session/clone, plus no-capture controls. Compares frozen guidance, candidate guidance and portable notes; preserves missed captures, rejected proposals, tool failures and unknown cost. Deterministic validation is separate from live performance evidence.",
@@ -535,6 +540,18 @@
       ],
       "type": "infrastructure",
       "refreshedHash": "34d24a8b1b3edcff4ad0556f25c0ffde34594bd8"
+    },
+    "adoption validation": {
+      "description": "Exercises inactive hooks, active failure visibility, conservative evidence capture, and core CLI/MCP network and input-retention boundaries. A local hook benchmark measures full CLI overhead without model calls; OS network denial is tested on macOS, with narrower Node tripwires elsewhere.",
+      "files": [
+        "scripts/bench-hooks.mjs",
+        "test/support/deny-network.mjs"
+      ],
+      "tests": [
+        "test/adoption-hardening.test.ts"
+      ],
+      "type": "infrastructure",
+      "refreshedHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb"
     }
   },
   "flows": {
@@ -628,7 +645,7 @@
       "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
     },
     "documentation automation flow": {
-      "description": "Host events invoke mason on PATH and drive scoped evidence capture and final-commit verification under a serialized runtime. Bounded receipts preserve failures and uncertainty; local observations separate activation by Mason version, host, setup revision and worktree/branch.",
+      "description": "Guarded host events invoke the local Mason command. Known read-only tools observe activation without refreshing audit evidence; potentially mutating events drive scoped capture and final-commit verification under a serialized runtime. Receipts retain failures and uncertainty separately from observed activation.",
       "chain": [
         "src/automation/adapters.ts",
         "src/automation/runtime.ts",
@@ -641,7 +658,7 @@
         "src/automation/execution.ts",
         "src/setup/observations.ts"
       ],
-      "refreshedHash": "e15c2b9b8bec2774539a335d8acaba9368982887"
+      "refreshedHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb"
     },
     "project setup and activation flow": {
       "description": "CLI or explicit MCP setup probes the global command, retains original audit evidence, records ownership and merges project configuration. Resumable local records distinguish configured integrations from version-specific observed activation.",
@@ -658,7 +675,7 @@
         "src/setup/observations.ts",
         "src/setup/status.ts"
       ],
-      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+      "refreshedHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb"
     },
     "project teardown flow": {
       "description": "The CLI resolves the Git project, previews removals without writes, or replans under the setup lock. It checks owned MCP/hooks and shared instructions, retains ambiguous entries and original repair evidence, then removes relevant local setup records last.",
@@ -669,7 +686,7 @@
         "src/setup/ownership.ts",
         "src/setup/files.ts"
       ],
-      "refreshedHash": "7224f237f4b0a546874d93318d49ec8e92d42b78"
+      "refreshedHash": "8a97d00d20f33d85de9bb6b6f8437e45c5bd63bb"
     }
   }
 }
