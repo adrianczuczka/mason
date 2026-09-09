@@ -178,9 +178,10 @@ describe("automation reliability", { timeout: 20000 }, () => {
     last.status = "running";
     delete last.finishedAt;
     await fs.writeFile(file, JSON.stringify(log));
-    await write(ws.directory + "/lock", JSON.stringify({ pid: process.pid, host: os.hostname() }));
+    const ownerPath = ws.directory + `/executions/${last.id}.json`;
+    await write(ownerPath, JSON.stringify({ pid: process.pid, host: os.hostname() }));
     expect((await automationStatus(root)).execution.status).toBe("running");
-    await fs.rm(path.join(root, ws.directory, "lock"));
+    await fs.rm(path.join(root, ownerPath));
     last.host = "different-machine";
     const bytes = JSON.stringify(log);
     await fs.writeFile(file, bytes);

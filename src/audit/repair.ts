@@ -67,6 +67,11 @@ export interface RepairFinding {
   reason: string;
   current?: Finding;
 }
+export const repairFindingSchema = z.object({
+  id: z.string(), original: z.union([issueSchema, advisorySchema]),
+  status: z.enum(["resolved", "unresolved", "review-required", "unverified"]), reason: z.string(),
+  current: z.union([issueSchema, advisorySchema]).optional(),
+});
 export interface RepairVerification {
   version: 1;
   action: "verify";

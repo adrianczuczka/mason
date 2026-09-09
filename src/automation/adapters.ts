@@ -1,4 +1,4 @@
-import { failureMessage } from "./execution.js";
+import { failureMessage, hookFailureMessage } from "./execution.js";
 import { z } from "zod";
 import { automate, observeReadOnlyTool, type AutomationEvent } from "./runtime.js";
 import { hostSchema, type Host } from "./store.js";
@@ -27,12 +27,14 @@ export function normalizeHook(host: Host, raw: unknown): { cwd: string; name: st
 
 export async function runAutomationHook(host: Host, stdin: string): Promise<Record<string, unknown> | null> {
   let name = "";
+  let hook: ReturnType<typeof normalizeHook> | undefined;
   try {
     if (Buffer.byteLength(stdin) > 1024 * 1024) throw new Error("Hook input exceeds 1 MiB.");
     let raw: unknown;
     try { raw = JSON.parse(stdin); }
     catch { throw new Error("Hook input is not valid JSON."); }
     const input = normalizeHook(host, raw);
+    hook = input;
     name = input.name;
     if (["before_tool", "after_tool"].includes(input.event.event) && input.readOnly) {
       const observed = await observeReadOnlyTool(input.cwd, input.event);
@@ -53,7 +55,8 @@ export async function runAutomationHook(host: Host, stdin: string): Promise<Reco
     }
     return { hookSpecificOutput: { hookEventName: name, additionalContext: result.message } };
   } catch (error) {
-    const message = failureMessage(error);
+    const message = hook ? await hookFailureMessage(hook.cwd, host, hook.event.sessionId!, error) : failureMessage(error);
+    if (!message) return null;
     // Hook failure is visible but does not turn documentation advice into an editing permission gate.
     return { systemMessage: message, ...(["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"].includes(name)
       ? { hookSpecificOutput: { hookEventName: name, additionalContext: message } } : {}) };

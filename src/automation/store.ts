@@ -19,6 +19,7 @@ export const stateSchema = z.object({
   })),
   updatedAt: z.string(), fingerprint: z.string().nullable(),
   latest: z.string().nullable(),
+  analysis: z.object({ id: z.string(), fingerprint: z.string(), completedAt: z.number(), path: z.string() }).optional(),
 });
 export type State = z.infer<typeof stateSchema>;
 export function parseState(raw: unknown): State {
@@ -27,9 +28,9 @@ export function parseState(raw: unknown): State {
 }
 
 /** Cross-process lock: a killed writer's lock is reclaimed only after its local PID is gone. */
-export async function withLock<T>(root: string, directory: string, run: () => Promise<T>): Promise<T> {
+export async function withLock<T>(root: string, directory: string, run: () => Promise<T>, waitMs = 5000): Promise<T> {
   const file = await storePath(root, directory + "/lock", true);
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + waitMs;
   let handle;
   while (!handle) {
     try {
