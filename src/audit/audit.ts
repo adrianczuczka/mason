@@ -17,7 +17,7 @@ export interface AuditOptions {
 }
 
 /**
- * Audit the repo's context files (CLAUDE.md, .claude/CLAUDE.md, AGENTS.md)
+ * Audit discovered instruction files and READMEs
  * against repo reality. Fully deterministic — git, filesystem, and lexical
  * extraction only; no LLM, no network. Returns null when no context file
  * exists.
@@ -38,6 +38,8 @@ export async function computeAudit(
     checksRun: [],
     docs: docs.map((d) => ({
       path: d.path,
+      scope: d.scope,
+      kind: d.kind,
       lastCommit: d.lastCommit,
       dirty: d.dirty,
       lineCount: d.lineCount,

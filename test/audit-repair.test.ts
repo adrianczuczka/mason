@@ -63,7 +63,7 @@ describe("audit repair", () => {
     const prepared = await prepareRepair(root, ["deleted-reference"]);
     await write("CLAUDE.md", "# Header\n\nSource: `src/old.ts`. Also `src/wrong.ts`.\n");
     const result = await verifyRepair(root, prepared.baselinePath);
-    expect(result.status).toBe("issues-remain");
+    expect(result.status).toBe("incomplete"); // The newly invented path requires review.
     expect(result.findings[0].status).toBe("unresolved");
     expect(result.findings[0].original.anchor.line).toBe(1);
     expect(result.findings[0].current?.anchor.line).toBe(3);
@@ -225,7 +225,7 @@ describe("audit repair", () => {
     await write("CLAUDE.md", Array.from({ length: 25 }, (_, i) => "Path: `src/missing" + i + ".ts`.").join("\n"));
     const init = JSON.parse(await masonInit(root, { base: "HEAD" }));
     expect(init.audit.truncated).toBe(true);
-    expect(init.audit.issues).toHaveLength(20);
+    expect(init.audit.advisories).toHaveLength(20);
     const prepared = await prepareRepair(root, ["deleted-reference"]);
     expect((await verifyRepair(root, prepared.baselinePath)).findings).toHaveLength(25);
   });

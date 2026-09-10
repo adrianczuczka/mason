@@ -6,7 +6,7 @@ export type IssueType =
   | "stale-count"
   | "dead-command";
 
-export type AdvisoryType = "deps-changed" | "decision-anchor-drift";
+export type AdvisoryType = "deps-changed" | "decision-anchor-drift" | IssueType;
 
 export type CheckName = IssueType | AdvisoryType;
 
@@ -21,10 +21,9 @@ export const ALL_CHECKS: CheckName[] = [
 
 /**
  * "certain" — the claim is provably false (a tracked path is gone, a computed
- * count differs, a script exists in no manifest). "likely" — evidence-backed
- * but heuristic (an unmentioned directory; a never-tracked path whose parent
- * exists). Certain-class issues are safe to auto-fix; likely-class issues
- * deserve a look.
+ * count differs, a script is absent from a resolved manifest). "likely" is
+ * retained for older reports. Inferred scope and speculative omissions are
+ * advisory; even a certain mismatch needs semantic review before repair.
  */
 export type Confidence = "certain" | "likely";
 
@@ -43,6 +42,13 @@ export interface DocAnchor {
   excerpt: string | null;
 }
 
+export interface ClaimScope {
+  basis: "repository" | "document" | "document-link" | "explicit";
+  directory: string;
+  /** Exact repository-relative paths/manifests considered by the check. */
+  candidates: string[];
+}
+
 export type Evidence =
   | {
       kind: "missing-path";
@@ -51,6 +57,8 @@ export type Evidence =
       deletedInCommit: CommitRef | null;
       everTracked: boolean;
       parentDirExists: boolean;
+      resolvedPath?: string;
+      scope?: ClaimScope;
     }
   | {
       kind: "unmentioned-dir";
@@ -74,6 +82,7 @@ export type Evidence =
       invocation: string;
       manifestsChecked: string[];
       availableScripts: string[];
+      scope?: ClaimScope;
     }
   | {
       kind: "doc-behind-manifests";
@@ -99,20 +108,22 @@ export interface AuditIssue {
 }
 
 /**
- * Advisories are facts the fixing agent cannot close by editing the doc (a
- * manifest commit after the doc's commit stays true forever; decision records
- * must be re-verified by humans). They NEVER affect the exit code — same
- * precedent as decision staleness in mason-drift.
+ * Advisories require judgment and never drive the ordinary audit exit code.
+ * Historical advisories require a separate review. Explicitly recheckable
+ * candidates can cease to be detected without asserting semantic approval.
  */
 export interface AuditAdvisory {
   type: AdvisoryType;
   message: string;
   anchor: DocAnchor;
   evidence: Evidence;
+  resolution?: "recheck";
 }
 
 export interface AuditDocInfo {
   path: string;
+  scope?: string;
+  kind?: "instructions" | "readme";
   lastCommit: CommitRef | null;
   /** Uncommitted edits present — deps-changed is suppressed for dirty docs. */
   dirty: boolean;
@@ -144,6 +155,8 @@ export interface PathClaim {
   path: string;
   line: number;
   excerpt: string;
+  /** Markdown links resolve against the physical document directory. */
+  relativeTo?: "document";
 }
 
 export interface CountClaim {
@@ -158,6 +171,9 @@ export interface CommandClaim {
   invocation: string;
   line: number;
   excerpt: string;
+  /** A literal cd/directory flag, relative to the document's assumed cwd. */
+  directory?: string;
+  scopeUnknown?: string;
 }
 
 export interface DocClaims {

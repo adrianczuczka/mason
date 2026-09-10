@@ -1,3 +1,5 @@
+import MarkdownIt from "markdown-it";
+import { commandClaims } from "./commands.js";
 import type {
   CommandClaim,
   CountClaim,
@@ -45,7 +47,7 @@ const ROOT_FILE_NAMES = new Set([
 
 const SHELL_FENCE_INFOS = new Set(["", "bash", "sh", "shell", "console", "zsh"]);
 
-const COMMAND_RE = /\b(npm|pnpm|yarn)\s+run\s+([A-Za-z0-9:_.-]+)/g;
+const markdown = new MarkdownIt("commonmark", { html: false });
 const COUNT_RE = /(\d+)\s+(modules?|packages?|workspaces?|crates?)\b/gi;
 /** "3 package managers" is not a package count. */
 const COUNT_DENYLIST_RE = /^\s*(manager|registr|lock|json)/i;
@@ -137,12 +139,35 @@ export function extractClaims(content: string): DocClaims {
   const commands = new Map<string, CommandClaim>();
 
   const addPath = (claim: PathClaim): void => {
-    if (!paths.has(claim.path)) paths.set(claim.path, claim);
+    const key = [claim.relativeTo ?? "scope", claim.path].join(":");
+    if (!paths.has(key)) paths.set(key, claim);
   };
   const addCommand = (claim: CommandClaim): void => {
-    if (!commands.has(claim.scriptName)) commands.set(claim.scriptName, claim);
+    const key = JSON.stringify([claim.scriptName, claim.directory, claim.scopeUnknown]);
+    if (!commands.has(key)) commands.set(key, claim);
   };
 
+  // A real Markdown parser distinguishes reference links, images and escaped
+  // destinations from code examples. Ignore markers preserve source line offsets.
+  const parsed = markdown.parse(lines.map((line, i) => ignored[i] ? "" : line).join("\n"), {});
+  for (const token of parsed) {
+    if (token.type !== "inline" || !token.map) continue;
+    let line = token.map[0] + 1;
+    for (const child of token.children ?? []) {
+      const target = child.type === "link_open" ? child.attrGet("href") : child.type === "image" ? child.attrGet("src") : null;
+      if (target && !/^(?:[a-z][a-z0-9+.-]*:|[\/#~])/i.test(target)) {
+        let pathname: string | null = null;
+        try { pathname = decodeURIComponent(target.split(/[?#]/)[0]); } catch { /* Unsupported URL encoding. */ }
+        if (pathname && !/[$*?{}<>\\\x00-\x1f]/.test(pathname)) {
+          addPath({ path: pathname, line, excerpt: target, relativeTo: "document" });
+        }
+      }
+      if (child.type === "softbreak" || child.type === "hardbreak") line++;
+      else line += child.content.split("\n").length - 1;
+    }
+  }
+
+  let shellCwd: string | null | undefined;
   let inFence = false;
   let fenceInfo = "";
   let fenceMarker = "";
@@ -176,6 +201,7 @@ export function extractClaims(content: string): DocClaims {
         fenceMarker = fenceMatch[1][0];
         fenceInfo = fenceMatch[2].trim().toLowerCase();
         blockLines = [];
+        shellCwd = undefined;
         blockStartLine = lineNo + 1;
       } else if (fenceMatch[1][0] === fenceMarker) {
         inFence = false;
@@ -188,14 +214,9 @@ export function extractClaims(content: string): DocClaims {
       // Ignored lines become spacers so the rest of a tree still parses.
       blockLines.push(ignored[i] ? "" : line);
       if (!ignored[i] && SHELL_FENCE_INFOS.has(fenceInfo)) {
-        for (const m of line.matchAll(COMMAND_RE)) {
-          addCommand({
-            scriptName: m[2],
-            invocation: m[0],
-            line: lineNo,
-            excerpt: m[0],
-          });
-        }
+        const scanned = commandClaims(line, lineNo, shellCwd, true);
+        shellCwd = scanned.cwd;
+        for (const claim of scanned.claims) addCommand(claim);
       }
       continue;
     }
@@ -224,14 +245,10 @@ export function extractClaims(content: string): DocClaims {
         excerpt: m[0],
       });
     }
-    for (const m of line.matchAll(COMMAND_RE)) {
-      addCommand({
-        scriptName: m[2],
-        invocation: m[0],
-        line: lineNo,
-        excerpt: m[0],
-      });
+    for (const match of line.matchAll(/`([^`]+)`/g)) {
+      for (const claim of commandClaims(match[1], lineNo, undefined, true).claims) addCommand(claim);
     }
+    for (const claim of commandClaims(line.replace(/`[^`]+`/g, ""), lineNo).claims) addCommand(claim);
   }
 
   // An unclosed fence still gets its block processed — trees at the end of a

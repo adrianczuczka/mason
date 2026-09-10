@@ -101,14 +101,17 @@ describe("computeAudit: deleted-reference", () => {
     }
   });
 
-  it("flags a never-tracked path with an existing parent as likely", async () => {
+  it("reports a never-tracked path as advisory without failing the audit", async () => {
     await write("src/a.ts", "export const a = 1;\n");
     await write("CLAUDE.md", "See `src/typo.ts`.\n");
     await commitAll(tmpDir, "init");
 
-    const issues = issuesOf(await computeAudit(tmpDir, CHECKS));
+    const report = await computeAudit(tmpDir, CHECKS);
+    const issues = report!.advisories;
+    expect(report!.issues).toEqual([]);
+    expect(report!.clean).toBe(true);
     expect(issues).toHaveLength(1);
-    expect(issues[0].confidence).toBe("likely");
+    expect(issues[0].evidence.kind).toBe("missing-path");
   });
 
   it("drops a never-tracked path with no parent (illustrative example)", async () => {
@@ -169,9 +172,9 @@ describe("computeAudit: new-module", () => {
     await write("CLAUDE.md", "# Doc\n\nNothing to see.\n");
     await commitAll(tmpDir, "init");
 
-    const issues = issuesOf(await computeAudit(tmpDir, CHECKS));
+    const issues = (await computeAudit(tmpDir, CHECKS))!.advisories;
     expect(issues).toHaveLength(1);
-    expect(issues[0].confidence).toBe("likely");
+    expect("confidence" in issues[0]).toBe(false);
     if (issues[0].evidence.kind === "unmentioned-dir") {
       expect(issues[0].evidence.dir).toBe("mystery");
     }
@@ -183,7 +186,7 @@ describe("computeAudit: new-module", () => {
     await write("AGENTS.md", "The mystery/ dir holds experiments.\n");
     await commitAll(tmpDir, "init");
 
-    expect(issuesOf(await computeAudit(tmpDir, CHECKS))).toEqual([]);
+    expect((await computeAudit(tmpDir, CHECKS))!.advisories).toEqual([]);
   });
 
   it("uses word boundaries — 'application' does not mention app/", async () => {
@@ -191,7 +194,7 @@ describe("computeAudit: new-module", () => {
     await write("CLAUDE.md", "The application code is documented here.\n");
     await commitAll(tmpDir, "init");
 
-    const issues = issuesOf(await computeAudit(tmpDir, CHECKS));
+    const issues = (await computeAudit(tmpDir, CHECKS))!.advisories;
     expect(issues).toHaveLength(1);
   });
 
@@ -203,7 +206,7 @@ describe("computeAudit: new-module", () => {
     await write("CLAUDE.md", "# Doc\n\nsrc/ has `src/alpha` and `src/beta`.\n");
     await commitAll(tmpDir, "init");
 
-    const issues = issuesOf(await computeAudit(tmpDir, CHECKS));
+    const issues = (await computeAudit(tmpDir, CHECKS))!.advisories;
     expect(issues).toHaveLength(1);
     if (issues[0].evidence.kind === "unmentioned-dir") {
       expect(issues[0].evidence.dir).toBe("src/gamma");
@@ -217,7 +220,7 @@ describe("computeAudit: new-module", () => {
     await write("CLAUDE.md", "# Doc\n\nCode is under src/.\n");
     await commitAll(tmpDir, "init");
 
-    expect(issuesOf(await computeAudit(tmpDir, CHECKS))).toEqual([]);
+    expect((await computeAudit(tmpDir, CHECKS))!.advisories).toEqual([]);
   });
 });
 
@@ -333,7 +336,7 @@ describe("computeAudit: dead-command", () => {
     const report = await computeAudit(tmpDir, CHECKS);
     expect(report!.issues).toEqual([]);
     expect(report!.skippedChecks).toEqual([
-      { check: "dead-command", reason: "no package.json at the repo root" },
+      { check: "dead-command", doc: "CLAUDE.md", reason: "No package.json for the command's scope (.)." },
     ]);
   });
 });

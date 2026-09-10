@@ -12,7 +12,7 @@ const reason = (error: unknown) => error instanceof Error ? error.message : Stri
 async function auditSummary(root: string) {
   try {
     const report = await computeAudit(root);
-    if (!report) return { status: "no-context-files", reason: "No AGENTS.md, CLAUDE.md, or .claude/CLAUDE.md found to audit." };
+    if (!report) return { status: "no-context-files", reason: "No README.md or agent instruction files found to audit." };
     if (!report.gitAvailable) return { status: "unavailable", reason: "Audit needs readable Git history to verify documentation claims.", docs: report.docs };
     return {
       ...report, status: "complete",

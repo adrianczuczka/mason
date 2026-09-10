@@ -44,7 +44,7 @@
           "mode": { "type": "string", "enum": ["quickstart", "map", "setup"], "default": "quickstart", "description": "Read-only quickstart checks, architecture map workflow, or explicit configuration of MCP, instructions and hooks using mason on PATH" },
           "host": { "type": "string", "enum": ["codex", "claude"], "description": "Assistant to configure in setup mode; inferred only when unambiguous" },
           "base": { "type": "string", "description": "Git ref for committed-diff review; defaults to an available main branch ref" },
-          "evidence": { "type": "array", "items": { "type": "string" }, "maxItems": 10, "description": "Repository-local CI evidence manifests to include in the review. Imports Vitest JSON and SARIF without executing check commands." }
+          "evidence": { "type": "array", "items": { "type": "string" }, "maxItems": 10, "description": "Repository-local CI evidence manifests to include in the review. Imports Vitest JSON, SARIF, and native-validator mason-check-json results without executing check commands." }
         },
         "required": ["dir"]
       }

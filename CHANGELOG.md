@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Discover nested README and agent instruction files with their actual filename casing. Respect exclusions and preserve scope through local references, package commands, repair baselines, and automation caches.
+- Keep never-tracked paths, ambiguous commands, and undocumented modules advisory. Recheckable candidates can resolve when their condition disappears; historical dependency and decision advisories still require review.
+- Import individual native-validator outcomes through `mason-check-json`, including optional environment metadata. Preserve missing, skipped, failed, stale, and unknown evidence without running imported commands. Automatic compiler discovery and snippet execution remain future integrations.
+
 ## 0.16.3 — 2026-09-09
 
 - Coordinate overlapping hooks without holding the shared state lock during audit analysis. Reuse analysis for identical inputs, let changed inputs proceed independently, and revalidate before publishing results so older work cannot overwrite newer evidence.

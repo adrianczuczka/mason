@@ -5,16 +5,17 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fg from "fast-glob";
 import { z } from "zod";
-import { DOC_CANDIDATES } from "../audit/docs.js";
+import { discoverDocPaths } from "../audit/docs.js";
+import { pathClaimScope, pathExists, optionalMasonPath } from "../audit/scope.js";
 import { extractClaims } from "../audit/claims.js";
 import { checkResultSchema } from "../audit/repair.js";
 import { CHECKS, type CheckResult } from "../audit/checks/index.js";
 import type { AuditOptions } from "../audit/audit.js";
 import type { CheckName } from "../audit/types.js";
 import { readAuditInput } from "../audit/inputs.js";
-import { moduleCandidates } from "../audit/checks/new-module.js";
-import { resolveCountSource } from "../audit/checks/stale-count.js";
-import { commandManifests } from "../audit/checks/dead-command.js";
+import { moduleCandidates, moduleDocumentation } from "../audit/checks/new-module.js";
+import { resolveDocCountSource } from "../audit/checks/stale-count.js";
+import { commandInputs } from "../audit/checks/dead-command.js";
 import { storePath } from "../utils/storage.js";
 
 const exec = promisify(execFile);
@@ -36,8 +37,6 @@ export async function workspace(dir: string) {
 
 const content = readAuditInput;
 
-const internal = (file: string) => file === ".mason" || file === ".mason/reports" || file.startsWith(".mason/reports/");
-
 export interface Inputs {
   fingerprint: string;
   head: string;
@@ -46,9 +45,10 @@ export interface Inputs {
 }
 
 export async function readInputs(root: string): Promise<Inputs> {
+  const docPaths = await discoverDocPaths(root);
   const [headText, docStatus, shallowPath, replacements] = await Promise.all([
     git(root, "rev-parse", "HEAD"),
-    git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...DOC_CANDIDATES),
+    docPaths.length ? git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...docPaths.map(p => `:(literal)${p}`)) : "",
     git(root, "rev-parse", "--git-path", "shallow"),
     git(root, "for-each-ref", "--format=%(refname) %(objectname)", "refs/replace"),
   ]);
@@ -59,39 +59,32 @@ export async function readInputs(root: string): Promise<Inputs> {
   const docs: Record<string, string | null> = {};
   const docContents: Array<[string, string | null]> = [];
   const claims: Array<[string, boolean, boolean]> = [];
-  for (const file of DOC_CANDIDATES) {
+  for (const file of docPaths) {
     const text = await content(root, file);
     docs[file] = text === null ? null : hash(text);
     docContents.push([file, text]);
     for (const claim of text ? extractClaims(text).paths : []) {
-      if (internal(claim.path) || claim.path.startsWith(".mason/")) continue;
-      // Explicit claims can name ignored files, directories, or symlink targets.
-      const exists = async (p: string) => fs.access(path.resolve(root, p)).then(() => true, () => false);
-      claims.push([claim.path, await exists(claim.path), await exists(path.dirname(claim.path))]);
+      const scope = pathClaimScope(file, claim);
+      for (const candidate of scope?.candidates ?? []) {
+        if (optionalMasonPath(candidate)) continue;
+        claims.push([candidate, await pathExists(root, candidate), await pathExists(root, path.posix.dirname(candidate))]);
+      }
     }
   }
-  const combinedDocs = docContents.map(([, text]) => text ?? "").join("\n");
-  const countClaims = docContents.flatMap(([, text]) => text ? extractClaims(text).counts : []);
-  const commandClaims = docContents.flatMap(([, text]) => text ? extractClaims(text).commands : []);
-  const rootPackage = await content(root, "package.json");
-  let rootScripts: string[] | null = null;
-  if (rootPackage !== null) {
-    try { const pkg = JSON.parse(rootPackage); rootScripts = pkg?.scripts && typeof pkg.scripts === "object" ? Object.keys(pkg.scripts) : []; }
-    catch { /* The dead-command check reports a malformed manifest as skipped. */ }
-  }
-  const needsWorkspaceScripts = rootScripts !== null && commandClaims.some(claim => !rootScripts!.includes(claim.scriptName));
+  const parsedDocs = docContents.map(([file, text]) => ({ path: file, content: text ?? "", claims: extractClaims(text ?? "") }));
+  const combinedDocs = moduleDocumentation(parsedDocs);
+  const countClaims = parsedDocs.flatMap(doc => doc.claims.counts.map(claim => ({ doc: doc.path, claim })));
   const decisionDirectory = await storePath(root, ".mason/decisions");
   const decisionPresence = await fs.lstat(decisionDirectory).then(stat => stat.isDirectory() ? "directory" : "file", error => {
     if (error.code === "ENOENT") return "absent";
     throw error;
   });
-  const [modules, counts, manifests, decisionFiles] = await Promise.all([
+  const [modules, counts, commands, decisionFiles] = await Promise.all([
     combinedDocs ? moduleCandidates(root, combinedDocs) : [],
-    Promise.all(countClaims.map(claim => resolveCountSource(root, claim))),
-    needsWorkspaceScripts ? commandManifests(root) : [],
+    Promise.all(countClaims.map(({ doc, claim }) => resolveDocCountSource(root, doc, claim))),
+    commandInputs(root, parsedDocs),
     fg(".mason/decisions/*.json", { cwd: root, dot: true, onlyFiles: false, followSymbolicLinks: false }),
   ]);
-  const packages = [["package.json", rootPackage], ...await Promise.all(manifests.sort().map(async file => [file, await content(root, file)]))];
   const decisions = await Promise.all(decisionFiles.sort().map(async file => {
     await storePath(root, file);
     return [file, await content(root, file)];
@@ -102,12 +95,12 @@ export async function readInputs(root: string): Promise<Inputs> {
     git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".", ":(exclude).mason/reports"),
     git(root, "ls-files", "--stage", "-z", "--", ".", ":(exclude).mason/reports"),
   ]) : ["", ""];
-  const common = [3, engineVersion, head, shallow, replacements, docContents];
+  const common = [4, engineVersion, head, shallow, replacements, docContents];
   const keys: Record<CheckName, string> = {
     "deleted-reference": hash([common, claims, docStatus]),
     "new-module": hash([common, modules]),
     "stale-count": hash([common, counts]),
-    "dead-command": hash([common, packages]),
+    "dead-command": hash([common, commands]),
     "deps-changed": hash([common, docStatus]),
     "decision-anchor-drift": hash([common, decisionPresence, decisions, status, index]),
   };

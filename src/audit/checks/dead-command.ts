@@ -1,86 +1,106 @@
+import path from "node:path";
 import { auditGlob, readAuditInput } from "../inputs.js";
+import { documentScope } from "../docs.js";
+import { scopedPath } from "../scope.js";
+import type { ClaimScope, CommandClaim } from "../types.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
 
 const AVAILABLE_SCRIPTS_CAP = 30;
-
-async function scriptsOf(root: string, manifest: string): Promise<string[] | null> {
-  const raw = await readAuditInput(root, manifest);
-  if (raw === null) return null;
+function scriptsOf(raw: string): string[] | null {
   try {
     const pkg = JSON.parse(raw);
-    return pkg && typeof pkg.scripts === "object" && pkg.scripts !== null
-      ? Object.keys(pkg.scripts)
-      : [];
-  } catch {
-    return null;
-  }
+    if (!pkg || typeof pkg !== "object" || Array.isArray(pkg)) return null;
+    if (pkg.scripts === undefined) return [];
+    return pkg.scripts && typeof pkg.scripts === "object" && !Array.isArray(pkg.scripts)
+      && Object.values(pkg.scripts).every(value => typeof value === "string") ? Object.keys(pkg.scripts) : null;
+  } catch { return null; }
 }
 
-/**
- * `npm run <script>` claims checked against package.json scripts — the one
- * ecosystem where task discovery is a single JSON parse. A script missing
- * from the root manifest is searched in every workspace manifest before
- * being flagged; docs legitimately say "in packages/foo run `npm run build`".
- */
-export async function checkDeadCommands(
-  ctx: CheckContext
-): Promise<CheckResult> {
-  const result = emptyResult();
+interface Resolution {
+  doc: string; claim: CommandClaim; scope: ClaimScope; manifest: string | null;
+  scripts: string[]; elsewhere: string[]; problem?: string;
+}
 
-  const commandClaims = ctx.docs.flatMap((doc) =>
-    doc.claims.commands.map((claim) => ({ doc, claim }))
-  );
-  if (commandClaims.length === 0) return result;
-
-  const rootScripts = await scriptsOf(ctx.root, "package.json");
-  if (rootScripts === null) {
-    result.skipped.push({
-      check: "dead-command",
-      reason: "no package.json at the repo root",
-    });
-    return result;
-  }
-  const rootSet = new Set(rootScripts);
-
-  let workspaceScripts: Set<string> | null = null;
-  let manifestsChecked: string[] = ["package.json"];
-  const loadWorkspaceScripts = async (): Promise<Set<string>> => {
-    if (workspaceScripts !== null) return workspaceScripts;
-    workspaceScripts = new Set<string>();
-    const manifests = await commandManifests(ctx.root);
-    manifestsChecked = ["package.json", ...manifests.sort()];
-    for (const manifest of manifests) {
-      const scripts = await scriptsOf(ctx.root, manifest);
-      for (const name of scripts ?? []) workspaceScripts.add(name);
-    }
-    return workspaceScripts;
+/** Shared dependency resolver: the cache records every manifest actually consulted. */
+export async function commandInputs(root: string, docs: Array<{ path: string; claims: { commands: CommandClaim[] } }>) {
+  const contents = new Map<string, string | null>();
+  const read = async (file: string) => {
+    if (!contents.has(file)) contents.set(file, await readAuditInput(root, file));
+    return contents.get(file)!;
   };
-
-  for (const { doc, claim } of commandClaims) {
-    if (rootSet.has(claim.scriptName)) continue;
-    const elsewhere = await loadWorkspaceScripts();
-    if (elsewhere.has(claim.scriptName)) continue;
-
-    result.issues.push({
-      type: "dead-command",
-      message: `\`${claim.invocation}\` refers to script "${claim.scriptName}", which exists in no package.json`,
-      anchor: { doc: doc.path, line: claim.line, excerpt: claim.excerpt },
-      confidence: "certain",
-      evidence: {
-        kind: "missing-script",
-        scriptName: claim.scriptName,
-        invocation: claim.invocation,
-        manifestsChecked,
-        availableScripts: rootScripts.slice(0, AVAILABLE_SCRIPTS_CAP),
-      },
-    });
+  await read("package.json");
+  let inventory: string[] | undefined;
+  const resolutions: Resolution[] = [];
+  for (const doc of docs) for (const claim of doc.claims.commands) {
+    const base = documentScope(doc.path);
+    const directory = scopedPath(base, claim.directory ?? ".");
+    const scope: ClaimScope = { basis: claim.directory === undefined ? "document" : "explicit",
+      directory: directory ?? base, candidates: [] };
+    const resolution: Resolution = { doc: doc.path, claim, scope, manifest: null, scripts: [], elsewhere: [] };
+    resolutions.push(resolution);
+    if (claim.scopeUnknown || directory === null) {
+      resolution.problem = claim.scopeUnknown ?? "The command's directory leaves the repository.";
+      continue;
+    }
+    let cursor = directory;
+    while (true) {
+      const manifest = path.posix.join(cursor, "package.json");
+      scope.candidates.push(manifest);
+      const raw = await read(manifest);
+      if (raw !== null) {
+        resolution.manifest = manifest;
+        const scripts = scriptsOf(raw);
+        if (scripts === null) resolution.problem = "Invalid package manifest: " + manifest;
+        else resolution.scripts = scripts;
+        break;
+      }
+      // An explicit directory is a declared execution scope, never silently use a sibling.
+      if (claim.directory !== undefined || cursor === ".") break;
+      cursor = path.posix.dirname(cursor);
+    }
+    if (!resolution.manifest && !resolution.problem) {
+      resolution.problem = `No package.json for the command's scope (${directory}).`;
+    }
+    if (resolution.problem || resolution.scripts.includes(claim.scriptName) || claim.directory !== undefined) continue;
+    inventory ??= await commandManifests(root);
+    for (const manifest of [...new Set(["package.json", ...inventory])].sort()) {
+      if (scope.candidates.includes(manifest)) continue;
+      scope.candidates.push(manifest);
+      const raw = await read(manifest);
+      if (raw === null) continue;
+      const scripts = scriptsOf(raw);
+      if (scripts === null) resolution.problem = "Cannot establish script availability: invalid manifest " + manifest;
+      else if (scripts.includes(claim.scriptName)) resolution.elsewhere.push(manifest);
+    }
   }
+  return { manifests: [...contents].sort(([a], [b]) => a.localeCompare(b)), resolutions };
+}
 
+export async function checkDeadCommands(ctx: CheckContext): Promise<CheckResult> {
+  const result = emptyResult();
+  const { resolutions } = await commandInputs(ctx.root, ctx.docs);
+  for (const { doc, claim, scope, scripts, elsewhere, problem, manifest } of resolutions) {
+    if (problem) {
+      result.skipped.push({ check: "dead-command", doc, reason: problem });
+      continue;
+    }
+    if (scripts.includes(claim.scriptName)) continue;
+    const evidence = { kind: "missing-script" as const, scriptName: claim.scriptName, invocation: claim.invocation,
+      manifestsChecked: scope.candidates, availableScripts: scripts.slice(0, AVAILABLE_SCRIPTS_CAP), scope };
+    const anchor = { doc, line: claim.line, excerpt: claim.excerpt };
+    const message = `\`${claim.invocation}\` names script "${claim.scriptName}", which is absent from ${manifest}`;
+    // Nested docs imply a package, but may describe commands run from another cwd.
+    const certain = documentScope(doc) === "." && (scope.basis === "explicit" || !elsewhere.length);
+    if (certain) result.issues.push({ type: "dead-command", message, anchor, confidence: "certain", evidence });
+    else result.advisories.push({ resolution: "recheck", type: "dead-command", message: message + (elsewhere.length
+      ? `; it exists in ${elsewhere.join(", ")}. Clarify the intended working directory.`
+      : "; the intended working directory needs review."), anchor, evidence });
+  }
   return result;
 }
 
-/** Shared with automation so ignored workspace manifests remain cache dependencies. */
+/** Ignored workspace manifests may still be explicit command dependencies. */
 export function commandManifests(root: string): Promise<string[]> {
   return auditGlob(root, "**/package.json", {
     ignore: ["**/node_modules/**", "**/dist/**", "**/build/**", ".mason/reports/**", "package.json"],

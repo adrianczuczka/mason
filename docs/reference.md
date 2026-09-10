@@ -5,6 +5,7 @@
 - [Give the next task the context it needs](#give-the-next-task-the-context-it-needs)
 - [Decision records](#decision-records)
 - [MCP tools](#mcp-tools)
+- [Documentation checks and validation evidence](checks.md)
 - [Change impact](#change-impact)
 - [Drift detection](#drift-detection)
 - [Confluence sync](#confluence-sync)
@@ -69,7 +70,7 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 
 | Tool | Purpose |
 |---|---|
-| `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence`, and `mode: "map"`. `mode: "setup", host: "codex"` (or `"claude"`) configures MCP, instructions, and hooks using `mason` on PATH using the shared setup engine. |
+| `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence` (Vitest, SARIF, or native-validator JSON), and `mode: "map"`. `mode: "setup", host: "codex"` (or `"claude"`) configures MCP, instructions, and hooks using `mason` on PATH using the shared setup engine. |
 | `mason_repair` | Prepare an audit repair baseline; verify the same original findings after edits. Reports unresolved advisories and unavailable checks. |
 | `mason_automation` | Inspect configured hooks and observed events, or capture/resume and verify retained repair evidence across sessions. |
 | `mason_complete_init` | Records assistant instruction setup in ignored local state, with feature settings in shared configuration; preserves prior settings on repeated calls. |

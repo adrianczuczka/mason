@@ -66,7 +66,7 @@ describe("runAuditCli: environment errors", () => {
     await write("src/a.ts", "export const a = 1;\n");
     await commitAll(tmpDir, "init");
     expect(await runAuditCli(["--dir", tmpDir], io)).toBe(2);
-    expect(err.join("\n")).toContain("No CLAUDE.md");
+    expect(err.join("\n")).toContain("No README.md");
   });
 
   it("exits 2 outside a git repository", async () => {

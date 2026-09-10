@@ -57,16 +57,16 @@ export async function checkNewModules(ctx: CheckContext): Promise<CheckResult> {
   const result = emptyResult();
   if (ctx.docs.length === 0) return result;
 
-  const combinedDocs = ctx.docs.map((d) => d.content).join("\n");
+  const combinedDocs = moduleDocumentation(ctx.docs);
   const primaryDoc = ctx.docs[0].path;
   const checkedDocs = ctx.docs.map((d) => d.path);
 
   const flag = async (dir: string, sourceFileCount: number): Promise<void> => {
-    result.issues.push({
+    result.advisories.push({
+      resolution: "recheck",
       type: "new-module",
-      message: `directory \`${dir}/\` contains ${sourceFileCount} source file${sourceFileCount === 1 ? "" : "s"} but is not mentioned in any context file`,
+      message: `directory \`${dir}/\` contains ${sourceFileCount} source file${sourceFileCount === 1 ? "" : "s"} but is not mentioned in the discovered documentation; review whether it needs documenting`,
       anchor: { doc: primaryDoc, line: null, excerpt: dir },
-      confidence: "likely",
       evidence: {
         kind: "unmentioned-dir",
         dir,
@@ -82,6 +82,12 @@ export async function checkNewModules(ctx: CheckContext): Promise<CheckResult> {
   }
 
   return result;
+}
+
+/** Nested documentation establishes a directory is documented without requiring
+ * every package README to repeat its full repository path. */
+export function moduleDocumentation(docs: Array<{ path: string; content: string }>): string {
+  return docs.map(doc => doc.content + "\n" + (path.posix.dirname(doc.path) === "." ? "" : path.posix.dirname(doc.path) + "/")).join("\n");
 }
 
 /** Shared dependency witness: cache exactly the module candidates the audit observes. */

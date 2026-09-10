@@ -1,115 +1,49 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { deletingCommitOf, lastCommitOf } from "../git.js";
-import type { AuditIssue } from "../types.js";
+import { optionalMasonPath, pathClaimScope, pathExists } from "../scope.js";
+import type { Evidence } from "../types.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
 
-async function exists(absPath: string): Promise<boolean> {
-  try {
-    await fs.access(absPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * A claimed path that is missing on disk is only flagged when the repo can
- * prove it was ever real: a rename since the doc's last commit, or git
- * history for the path, or at least an existing parent directory. Paths with
- * none of those are illustrative examples and are dropped silently.
- */
-export async function checkDeletedReferences(
-  ctx: CheckContext
-): Promise<CheckResult> {
+/** Prove removed references only when their scope is resolved. */
+export async function checkDeletedReferences(ctx: CheckContext): Promise<CheckResult> {
   const result = emptyResult();
-
   for (const doc of ctx.docs) {
     const changes = ctx.changesSinceDoc.get(doc.path);
-    const renames = new Map<string, string>();
-    for (const change of changes ?? []) {
-      if (change.status === "renamed" && change.previousPath) {
-        renames.set(change.previousPath, change.path);
-      }
-    }
-
+    const renames = new Map((changes ?? []).filter(c => c.status === "renamed" && c.previousPath)
+      .map(c => [c.previousPath!, c.path]));
     for (const claim of doc.claims.paths) {
-      // Mason's own metadata is optional state, not repo structure — docs
-      // legitimately describe .mason/ files that a given repo doesn't have.
-      if (claim.path === ".mason" || claim.path.startsWith(".mason/")) {
+      const scope = pathClaimScope(doc.path, claim);
+      if (!scope) {
+        result.skipped.push({ check: "deleted-reference", doc: doc.path,
+          reason: `Reference ${claim.excerpt} is outside the repository or has an unsupported path.` });
         continue;
       }
-      if (await exists(path.join(ctx.root, claim.path))) continue;
+      if (scope.candidates.some(optionalMasonPath)) continue;
+      if ((await Promise.all(scope.candidates.map(file => pathExists(ctx.root, file)))).some(Boolean)) continue;
 
+      const candidates = await Promise.all(scope.candidates.map(async file => ({ file,
+        tracked: await lastCommitOf(ctx.root, file), parent: await pathExists(ctx.root, path.posix.dirname(file)) })));
+      const candidate = candidates.find(c => c.tracked || renames.has(c.file)) ?? candidates.find(c => c.parent);
+      // No history/parent for a bare path is usually an illustrative example.
+      if (!candidate && claim.relativeTo !== "document") continue;
+      const resolvedPath = candidate?.file ?? scope.candidates[0];
+      const renamedTo = renames.get(resolvedPath) ?? null;
+      const deletedInCommit = candidate?.tracked && !renamedTo ? await deletingCommitOf(ctx.root, resolvedPath) : null;
+      const evidence: Evidence = { kind: "missing-path", claimed: claim.path, resolvedPath, scope,
+        renamedTo, deletedInCommit, everTracked: !!candidate?.tracked || !!renamedTo, parentDirExists: candidate?.parent ?? false };
       const anchor = { doc: doc.path, line: claim.line, excerpt: claim.excerpt };
-      const renamedTo = renames.get(claim.path) ?? null;
-
-      if (renamedTo) {
-        result.issues.push({
-          type: "deleted-reference",
-          message: `\`${claim.path}\` was renamed to \`${renamedTo}\``,
-          anchor,
-          confidence: "certain",
-          evidence: {
-            kind: "missing-path",
-            claimed: claim.path,
-            renamedTo,
-            deletedInCommit: null,
-            everTracked: true,
-            parentDirExists: true,
-          },
-        });
-        continue;
+      const message = renamedTo ? `\`${resolvedPath}\` was renamed to \`${renamedTo}\``
+        : `\`${resolvedPath}\` does not exist` + (deletedInCommit
+          ? ` – deleted in ${deletedInCommit.hash.slice(0, 7)} "${deletedInCommit.subject}" (${deletedInCommit.date.slice(0, 10)})` : "");
+      if (scope.basis !== "document" && (renamedTo || candidate?.tracked)) {
+        result.issues.push({ type: "deleted-reference", message, anchor, confidence: "certain", evidence });
+      } else {
+        result.advisories.push({ resolution: "recheck", type: "deleted-reference", message: message + (scope.basis === "document"
+          ? "; the bare path's document/repository scope needs review."
+          : "; no tracked history establishes it as a required file. Review for a typo, generated output, or example."), anchor, evidence });
       }
-
-      const tracked = await lastCommitOf(ctx.root, claim.path);
-      if (tracked) {
-        const deleted = await deletingCommitOf(ctx.root, claim.path);
-        const detail = deleted
-          ? ` – deleted in ${deleted.hash.slice(0, 7)} "${deleted.subject}" (${deleted.date.slice(0, 10)})`
-          : "";
-        result.issues.push({
-          type: "deleted-reference",
-          message: `\`${claim.path}\` no longer exists${detail}`,
-          anchor,
-          confidence: "certain",
-          evidence: {
-            kind: "missing-path",
-            claimed: claim.path,
-            renamedTo: null,
-            deletedInCommit: deleted,
-            everTracked: true,
-            parentDirExists: await exists(
-              path.join(ctx.root, path.dirname(claim.path))
-            ),
-          },
-        });
-        continue;
-      }
-
-      const parentDirExists = await exists(
-        path.join(ctx.root, path.dirname(claim.path))
-      );
-      if (!parentDirExists) continue;
-
-      const issue: AuditIssue = {
-        type: "deleted-reference",
-        message: `\`${claim.path}\` does not exist (never tracked in git – possible typo or invented path)`,
-        anchor,
-        confidence: "likely",
-        evidence: {
-          kind: "missing-path",
-          claimed: claim.path,
-          renamedTo: null,
-          deletedInCommit: null,
-          everTracked: false,
-          parentDirExists: true,
-        },
-      };
-      result.issues.push(issue);
     }
   }
-
   return result;
 }

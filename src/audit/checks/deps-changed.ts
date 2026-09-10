@@ -1,3 +1,4 @@
+import { documentScope } from "../docs.js";
 import { releaseMetadataOnly } from "../release-metadata.js";
 import { commitsTouchingSince } from "../git.js";
 import type { CheckContext, CheckResult } from "./index.js";
@@ -56,7 +57,11 @@ export async function checkDepsChanged(
     const range = await commitsTouchingSince(
       ctx.root,
       doc.lastCommit.hash,
-      MANIFEST_PATHSPECS
+      documentScope(doc.path) === "." ? MANIFEST_PATHSPECS : MANIFEST_PATHSPECS.map(spec => {
+        const scope = documentScope(doc.path);
+        const escaped = scope.replace(/[\\*?\[\]]/g, "\\$&");
+        return spec.startsWith(":(glob)") ? ":(glob)" + escaped + "/" + spec.slice(":(glob)".length) : ":(literal)" + scope + "/" + spec;
+      })
     );
     if (range === null) {
       result.skipped.push({

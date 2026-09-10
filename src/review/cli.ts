@@ -93,6 +93,12 @@ function evidenceSummary(report: ReviewReport): string[] {
   for (const check of evidence.checks) {
     lines.push(`  [${check.kind}] ${display(check.id)}: ${check.outcome}, ${check.freshness} (${display(check.tool)})`);
     lines.push(`    command: ${display(check.command)}; tested commit: ${check.commit ?? "unknown"}`);
+    if (check.environment) {
+      lines.push(`    environment: ${display(check.tool)} ${display(check.environment.toolVersion)}`
+        + (check.environment.runtime ? `; ${display(check.environment.runtime)}` : "")
+        + (check.environment.platform ? `; ${display(check.environment.platform)}` : ""));
+      if (check.environment.configuration?.length) lines.push("    configuration: " + check.environment.configuration.map(value => display(value)).join(", "));
+    }
     lines.push(`    source: ${display(check.source ?? check.manifest)}; report: ${display(check.report?.path ?? "none")}`);
     if (Object.keys(check.counts).length) lines.push(`    counts: ${JSON.stringify(check.counts)}`);
     for (const diagnostic of check.diagnostics.slice(0, 5)) lines.push(`    note: ${display(diagnostic)}`);

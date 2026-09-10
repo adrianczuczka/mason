@@ -65,11 +65,13 @@
     "@anthropic-ai/sdk": "^0.95.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "fast-glob": "^3.3.3",
+    "markdown-it": "14.1.0",
     "openai": "^6.33.0",
     "smol-toml": "1.8.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/markdown-it": "14.1.2",
     "@types/node": "^25.5.2",
     "tsup": "^8.5.1",
     "typescript": "^6.0.2",

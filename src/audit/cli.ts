@@ -6,7 +6,7 @@ import type { AuditIssue, AuditReport, CheckName } from "./types.js";
 
 export const USAGE = `Usage: mason-audit [--dir <path>] [--json | --fix-prompt] [--checks <list>]
 
-Audits the repo's AI context files (CLAUDE.md, .claude/CLAUDE.md, AGENTS.md)
+Audits README.md and agent instruction files at any depth, preserving filename case
 against repo reality: referenced paths that no longer exist, undocumented
 modules, stale counts, dead npm scripts, and manifests newer than the doc.
 Deterministic: no LLM call, no network – safe for CI. Works on any repo with
@@ -193,10 +193,10 @@ export function formatFixPrompt(report: AuditReport, baselinePath?: string): str
     "- dead-command: replace with the correct script from availableScripts if an obvious rename exists; otherwise remove the command mention."
   );
   lines.push(
-    "- new-module: add a one-line factual mention of the directory where sibling modules are described; read the directory's files first and describe only what you verified."
+    "- new-module: review whether the directory needs documenting; an omission alone does not establish a defect. Preserve scope and describe only what you verified."
   );
   lines.push(
-    "- ADVISORIES require a separate assessment of the cited commits or decision evidence. Report any review you perform and what remains unknown. Their disappearance after edits or a commit does not establish review or approval."
+    "- Historical ADVISORIES require a separate assessment of the cited commits or decision evidence. Candidates marked resolution: recheck can be rerun to see whether the condition remains; this does not establish semantic approval. Report any review you perform and what remains unknown."
   );
   lines.push("");
   lines.push("AUDIT REPORT (current context files and repository evidence, including local edits):");
@@ -210,7 +210,7 @@ export function formatFixPrompt(report: AuditReport, baselinePath?: string): str
   );
   lines.push("");
   lines.push(
-    "After edits, call mason_repair with action: verify and the original baselinePath, or mason-audit --verify-repair <baselinePath> --dir <project>. Repeat against the same baseline after any final documentation commit. Summarize resolved, unresolved, review-required, unverified, and new findings with their evidence. Do not report a suppressed or unavailable check as fixed. This audit covers the listed context files; independently discovered README or application issues need their own validation."
+    "After edits, call mason_repair with action: verify and the original baselinePath, or mason-audit --verify-repair <baselinePath> --dir <project>. Repeat against the same baseline after any final documentation commit. Summarize resolved, unresolved, review-required, unverified, and new findings with their evidence. Do not report a suppressed or unavailable check as fixed. This audit covers the listed documents and supported claims; application behavior and code examples need their own validation."
   );
   return lines.join("\n");
 }
@@ -264,7 +264,7 @@ export async function runAuditCli(
 
   if (!report) {
     io.err(
-      `No CLAUDE.md, .claude/CLAUDE.md, or AGENTS.md found in ${rootDir}.`
+      `No README.md or agent instruction files found in ${rootDir}.`
     );
     return 2;
   }

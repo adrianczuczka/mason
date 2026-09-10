@@ -143,7 +143,12 @@ jobs:
           # The workflow's own baseline is the only permitted non-doc artifact.
           node --input-type=module <<'NODE'
           import { execFileSync } from 'node:child_process';
-          const allowed = new Set(['CLAUDE.md', '.claude/CLAUDE.md', 'AGENTS.md', process.env.MASON_REPAIR_BASELINE]);
+          import { readFileSync } from 'node:fs';
+          import path from 'node:path';
+          const report = JSON.parse(readFileSync(path.join(process.env.RUNNER_TEMP, 'audit.json'), 'utf8'));
+          const discovered = new Set(report.docs.map(doc => doc.path));
+          const allowed = new Set([process.env.MASON_REPAIR_BASELINE,
+            ...report.issues.map(issue => issue.anchor.doc).filter(file => discovered.has(file))]);
           const changes = execFileSync('git', ['-c', 'status.renames=false', 'status', '--porcelain=v1', '-z', '--untracked-files=all'], {encoding: 'utf8'});
           const extra = changes.split('\0').filter(Boolean).map(line => line.slice(3)).filter(file => !allowed.has(file));
           if (extra.length) { console.error('Agent modified non-doc files:', extra); process.exit(1); }
@@ -160,9 +165,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -B "${{ inputs.branch-name }}"
-          for doc in CLAUDE.md .claude/CLAUDE.md AGENTS.md; do
-            [ -f "$doc" ] && git add "$doc"
-          done
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
+          import path from 'node:path';
+          const report = JSON.parse(readFileSync(path.join(process.env.RUNNER_TEMP, 'audit.json'), 'utf8'));
+          const discovered = new Set(report.docs.map(doc => doc.path));
+          const docs = [...new Set(report.issues.map(issue => issue.anchor.doc))].filter(file => discovered.has(file));
+          if (!docs.length) throw new Error('No flagged documentation to stage');
+          execFileSync('git', ['--literal-pathspecs', 'add', '--', ...docs], { stdio: 'inherit' });
+          NODE
           git commit -m "${{ inputs.pr-title }}"
           bash "$RUNNER_TEMP/verify-mason-repair.sh"
           # Safe: this path only runs when no open PR exists for the branch,

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { documentScope } from "../docs.js";
 import { auditGlob, readAuditInput } from "../inputs.js";
 import type { CountClaim } from "../types.js";
 import type { CheckContext, CheckResult } from "./index.js";
@@ -144,6 +145,15 @@ export async function resolveCountSource(
   );
 }
 
+/** Nested documents cannot assert the root workspace's count implicitly. */
+export async function resolveDocCountSource(root: string, doc: string, claim: CountClaim): Promise<CountSource | null> {
+  const scope = documentScope(doc);
+  const source = await resolveCountSource(path.join(root, scope), claim);
+  if (!source || scope === ".") return source;
+  return { ...source, countedFrom: scope + "/" + source.countedFrom,
+    members: source.members.map(member => scope + "/" + member) };
+}
+
 export async function checkStaleCounts(
   ctx: CheckContext
 ): Promise<CheckResult> {
@@ -151,7 +161,7 @@ export async function checkStaleCounts(
 
   for (const doc of ctx.docs) {
     for (const claim of doc.claims.counts) {
-      const source = await resolveCountSource(ctx.root, claim);
+      const source = await resolveDocCountSource(ctx.root, doc.path, claim);
       if (source === null) {
         result.skipped.push({ check: "stale-count", doc: doc.path,
           reason: `${doc.path}: cannot resolve a workspace manifest for "${claim.excerpt}"` });

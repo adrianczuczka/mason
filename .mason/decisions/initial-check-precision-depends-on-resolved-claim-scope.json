@@ -1,0 +1,75 @@
+{
+  "version": 2,
+  "id": "initial-check-precision-depends-on-resolved-claim-scope",
+  "title": "Initial-check precision depends on resolved claim scope",
+  "body": "A 2026-09-10 exploratory trial on elevenlabs/packages at c7c5bdc found useful initial checks without a model: two README snippets failed against real types, and Turbo 2.10.8 kept the widget test hash unchanged after a test-config edit while a source edit changed it. Controls showed why deterministic does not mean correct: a missing lint wrapper was a valid transit task; generated files were absent before build; broad import reachability was not coverage; README command cwd and runtime ranges needed scope review. Existing Mason audit scans only selected instruction files and searches a union of package scripts, so discovery and scope can hide stronger findings. Prefer explicit claims checked against exact package/version/environment evidence. Keep unsupported inputs unavailable and inferred scope advisory; use the connected agent for rationale and ambiguity. Proposed new checks are research recommendations, not shipped capabilities or accepted policy. Full results: .mason/reports/initial-checks-research-2026-09-10/report.md. No population precision or agent-outcome improvement was established.",
+  "category": "gotcha",
+  "files": [
+    "src/audit/docs.ts",
+    "src/audit/checks/dead-command.ts",
+    "src/audit/checks/new-module.ts",
+    "src/mcp/onboarding.ts"
+  ],
+  "createdAt": "2026-09-10T20:23:53.889Z",
+  "updatedAt": "2026-09-10T20:23:53.889Z",
+  "refreshedHash": "77dd733d899866b30e3902e524715b93d75cb905",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "document",
+      "reference": ".mason/reports/initial-checks-research-2026-09-10/report.md",
+      "note": "Local research report and reproducible prototypes, with compiler/hash controls; ignored report is not distributed with Git."
+    },
+    {
+      "kind": "document",
+      "reference": "https://github.com/elevenlabs/packages/blob/c7c5bdca6730e532c673b51844826d529492a765/turbo.json",
+      "note": "Pinned task definitions for hash-input and transit-task observations."
+    },
+    {
+      "kind": "document",
+      "reference": "https://github.com/elevenlabs/packages/blob/c7c5bdca6730e532c673b51844826d529492a765/packages/types/README.md",
+      "note": "Two complete TypeScript examples checked against actual local exports with TypeScript 5.9.3."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-09-10T20:23:53.889Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Initial-check precision depends on resolved claim scope",
+        "body": "A 2026-09-10 exploratory trial on elevenlabs/packages at c7c5bdc found useful initial checks without a model: two README snippets failed against real types, and Turbo 2.10.8 kept the widget test hash unchanged after a test-config edit while a source edit changed it. Controls showed why deterministic does not mean correct: a missing lint wrapper was a valid transit task; generated files were absent before build; broad import reachability was not coverage; README command cwd and runtime ranges needed scope review. Existing Mason audit scans only selected instruction files and searches a union of package scripts, so discovery and scope can hide stronger findings. Prefer explicit claims checked against exact package/version/environment evidence. Keep unsupported inputs unavailable and inferred scope advisory; use the connected agent for rationale and ambiguity. Proposed new checks are research recommendations, not shipped capabilities or accepted policy. Full results: .mason/reports/initial-checks-research-2026-09-10/report.md. No population precision or agent-outcome improvement was established.",
+        "category": "gotcha",
+        "files": [
+          "src/audit/docs.ts",
+          "src/audit/checks/dead-command.ts",
+          "src/audit/checks/new-module.ts",
+          "src/mcp/onboarding.ts"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": ".mason/reports/initial-checks-research-2026-09-10/report.md",
+            "note": "Local research report and reproducible prototypes, with compiler/hash controls; ignored report is not distributed with Git."
+          },
+          {
+            "kind": "document",
+            "reference": "https://github.com/elevenlabs/packages/blob/c7c5bdca6730e532c673b51844826d529492a765/turbo.json",
+            "note": "Pinned task definitions for hash-input and transit-task observations."
+          },
+          {
+            "kind": "document",
+            "reference": "https://github.com/elevenlabs/packages/blob/c7c5bdca6730e532c673b51844826d529492a765/packages/types/README.md",
+            "note": "Two complete TypeScript examples checked against actual local exports with TypeScript 5.9.3."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "77dd733d899866b30e3902e524715b93d75cb905"
+    }
+  ]
+}

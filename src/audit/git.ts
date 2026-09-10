@@ -20,7 +20,7 @@ export async function lastCommitOf(
   try {
     const { stdout } = await exec(
       "git",
-      ["log", "-1", `--format=${COMMIT_FORMAT}`, "--", relPath],
+      ["log", "-1", `--format=${COMMIT_FORMAT}`, "--", `:(literal)${relPath}`],
       { cwd: resolvedRoot }
     );
     const line = stdout.trim().split("\n")[0];
@@ -44,7 +44,7 @@ export async function deletingCommitOf(
         "--diff-filter=D",
         `--format=${COMMIT_FORMAT}`,
         "--",
-        relPath,
+        `:(literal)${relPath}`,
       ],
       { cwd: resolvedRoot }
     );
@@ -63,7 +63,7 @@ export async function firstCommitOf(
   try {
     const { stdout } = await exec(
       "git",
-      ["log", "--reverse", `--format=${COMMIT_FORMAT}`, "--", relPath],
+      ["log", "--reverse", `--format=${COMMIT_FORMAT}`, "--", `:(literal)${relPath}`],
       { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }
     );
     const line = stdout.trim().split("\n")[0];

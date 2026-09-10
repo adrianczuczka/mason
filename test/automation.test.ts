@@ -93,7 +93,7 @@ describe("portable automation", { timeout: 20000 }, () => {
     await seed();
     await automate(root, { event: "session_start" });
     await write("new-module/file.js", "export const added = true;");
-    expect((await automate(root, { event: "after_tool" })).report.counts.unresolved).toBeGreaterThan(0);
+    expect((await automate(root, { event: "after_tool" })).report.counts["review-required"]).toBeGreaterThan(0);
     await write("CLAUDE.md", "The `old-module/wrong.js` module provides a greeting.\n");
     expect((await automate(root, { event: "after_tool" })).report.findings.some(f => f.original.type === "deleted-reference")).toBe(true);
   });

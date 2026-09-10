@@ -3,12 +3,12 @@ import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { computeAudit, type AuditOptions } from "./audit.js";
-import { DOC_CANDIDATES } from "./docs.js";
+import { discoverDocPaths } from "./docs.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { getChangesWithStatus } from "../drift/drift.js";
 import { readStoreJson, storePath, writeStoreJson } from "../utils/storage.js";
 import { readBoundedFile } from "../utils/files.js";
-import { isWithinRoot } from "../utils/paths.js";
+import { isWithinRoot, normalizeRepoPath } from "../utils/paths.js";
 import { ALL_CHECKS } from "./types.js";
 import type { AuditAdvisory, AuditIssue, AuditReport, CheckName } from "./types.js";
 
@@ -16,15 +16,17 @@ const checkSchema = z.enum(["deleted-reference", "new-module", "stale-count", "d
 const commitSchema = z.object({ hash: z.string().regex(/^[a-f0-9]{40,64}$/), date: z.string(), subject: z.string() });
 const anchorSchema = z.object({ doc: z.string(), line: z.number().int().positive().nullable(), excerpt: z.string().nullable() });
 const count = z.number().int().nonnegative();
+const scopeSchema = z.object({ basis: z.enum(["repository", "document", "document-link", "explicit"]),
+  directory: z.string(), candidates: z.array(z.string()) });
 const evidenceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("missing-path"), claimed: z.string(), renamedTo: z.string().nullable(),
-    deletedInCommit: commitSchema.nullable(), everTracked: z.boolean(), parentDirExists: z.boolean() }),
+    deletedInCommit: commitSchema.nullable(), everTracked: z.boolean(), parentDirExists: z.boolean(), resolvedPath: z.string().optional(), scope: scopeSchema.optional() }),
   z.object({ kind: z.literal("unmentioned-dir"), dir: z.string(), sourceFileCount: count,
     firstCommit: commitSchema.nullable(), checkedDocs: z.array(z.string()) }),
   z.object({ kind: z.literal("count-mismatch"), claimed: count, actual: count, unit: z.string(),
     countedFrom: z.string(), members: z.array(z.string()) }),
   z.object({ kind: z.literal("missing-script"), scriptName: z.string(), invocation: z.string(),
-    manifestsChecked: z.array(z.string()), availableScripts: z.array(z.string()) }),
+    manifestsChecked: z.array(z.string()), availableScripts: z.array(z.string()), scope: scopeSchema.optional() }),
   z.object({ kind: z.literal("doc-behind-manifests"), docLastCommit: commitSchema,
     manifestCommits: z.array(commitSchema.extend({ files: z.array(z.string()) })), totalCommits: count }),
   z.object({ kind: z.literal("decision-anchor"), decisionId: z.string(), title: z.string(),
@@ -36,7 +38,7 @@ const issueSchema = findingSchema.extend({
   type: z.enum(["deleted-reference", "new-module", "stale-count", "dead-command"]),
   confidence: z.enum(["certain", "likely"]),
 });
-const advisorySchema = findingSchema.extend({ type: z.enum(["deps-changed", "decision-anchor-drift"]) });
+const advisorySchema = findingSchema.extend({ type: checkSchema, resolution: z.literal("recheck").optional() });
 export const checkResultSchema = z.object({
   issues: z.array(issueSchema), advisories: z.array(advisorySchema),
   suppressedAdvisories: z.array(advisorySchema).optional(),
@@ -45,7 +47,8 @@ export const checkResultSchema = z.object({
 const reportSchema = z.object({
   version: z.literal(1), root: z.string(), gitAvailable: z.literal(true),
   headHash: commitSchema.shape.hash, checksRun: z.array(checkSchema).nonempty(),
-  docs: z.array(z.object({ path: z.enum(DOC_CANDIDATES), lastCommit: commitSchema.nullable(),
+  docs: z.array(z.object({ path: z.string().refine(value => normalizeRepoPath(value) === value), scope: z.string().optional(),
+    kind: z.enum(["instructions", "readme"]).optional(), lastCommit: commitSchema.nullable(),
     dirty: z.boolean(), lineCount: count })).nonempty(),
   decisionsChecked: z.boolean(), clean: z.boolean(),
   issues: z.array(issueSchema), advisories: z.array(advisorySchema),
@@ -92,14 +95,19 @@ export function findingId(finding: Finding): string {
   const e = finding.evidence;
   let key: unknown;
   switch (e.kind) {
-    case "missing-path": key = e.claimed; break;
+    case "missing-path": key = e.resolvedPath && e.resolvedPath !== e.claimed ? [e.claimed, e.resolvedPath] : e.claimed; break;
     case "unmentioned-dir": key = e.dir; break;
     case "count-mismatch": key = [e.unit.replace(/s$/, ""), e.countedFrom]; break;
-    case "missing-script": key = e.scriptName; break;
+    case "missing-script": key = e.scope && e.scope.directory !== "." ? [e.scriptName, e.scope.directory] : e.scriptName; break;
     case "doc-behind-manifests": key = null; break;
     case "decision-anchor": key = [e.decisionId, e.provenance?.revision, e.provenance?.approval]; break;
   }
   return digest([finding.type, finding.anchor.doc, key]);
+}
+function recheckable(finding: Finding): boolean {
+  return !("confidence" in finding) && finding.resolution === "recheck"
+    && ["deleted-reference", "dead-command", "new-module"].includes(finding.type)
+    && ["missing-path", "missing-script", "unmentioned-dir"].includes(finding.evidence.kind);
 }
 function allFindings(report: AuditReport): Finding[] {
   return [...report.issues, ...report.advisories, ...(report.suppressedAdvisories ?? [])];
@@ -107,7 +115,7 @@ function allFindings(report: AuditReport): Finding[] {
 
 async function docState(root: string): Promise<string> {
   const docs = [];
-  for (const doc of DOC_CANDIDATES) {
+  for (const doc of await discoverDocPaths(root)) {
     try {
       const content = await readBoundedFile(await storePath(root, doc), 10 * 1024 * 1024);
       if (content === null) throw new Error("Context file is not regular or exceeds 10 MiB: " + doc);
@@ -165,7 +173,7 @@ export async function verifyRepair(rootDir: string, baselinePath: string, option
     if (!current) diagnostics.push("No context files remain available to audit.");
     else if (!current.gitAvailable) diagnostics.push("Git history is unavailable.");
     for (const doc of original.docs) {
-      if (!original.issues.some(f => f.anchor.doc === doc.path) || !current?.docs.some(d => d.path === doc.path)) continue;
+      if (!allFindings(original).some(f => f.anchor.doc === doc.path && ("confidence" in f || recheckable(f))) || !current?.docs.some(d => d.path === doc.path)) continue;
       const content = await readBoundedFile(await storePath(root, doc.path), 10 * 1024 * 1024);
       if (content === null || !content.trim()) {
         diagnostics.push("Original context file " + doc.path + " is empty or unreadable; losing its claims does not verify a repair.");
@@ -196,7 +204,7 @@ export async function verifyRepair(rootDir: string, baselinePath: string, option
     if (!current.checksRun?.includes(finding.type) || skipped.length) {
       return { ...base, status: "unverified", reason: skipped.map(s => s.reason).join("; ") || "The original check did not run." };
     }
-    if (!("confidence" in finding)) {
+    if (!("confidence" in finding) && (!recheckable(finding) || now)) {
       return { ...base, status: "review-required",
         reason: "An audit cannot establish that this advisory was reviewed. Retain its original evidence and report a separate assessment; editing or committing the doc is not approval." };
     }
@@ -213,7 +221,7 @@ export async function verifyRepair(rootDir: string, baselinePath: string, option
     currentHead: current?.gitAvailable ? current.headHash! : null,
     status: incomplete ? "incomplete" : issuesRemain ? "issues-remain" : "verified",
     findings, newFindings, diagnostics, currentAudit: current, counts,
-    scope: "Original audit checks over current context files and repository evidence. Resolved means no longer detected by that check. Advisories require separate review; this is not a certification of documentation or application correctness.",
+    scope: "Original audit checks over current context files and repository evidence. Resolved means no longer detected by that check. Historical advisories require separate review; a resolved candidate only means its condition is no longer detected. This is not a certification of documentation or application correctness.",
   };
 }
 

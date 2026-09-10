@@ -52,7 +52,7 @@ export function createMcpServer(): McpServer {
         .describe("Quickstart inspects without edits; map requests an architecture build; setup installs the shared onboarding flow."),
       host: z.enum(["codex", "claude"]).optional().describe("Assistant to configure in setup mode; inferred only when unambiguous."),
       base: z.string().optional().describe("Git ref for committed-diff review. Defaults to the first available main branch ref."),
-      evidence: z.array(z.string()).max(10).optional().describe("Repository-local CI evidence manifests to include in the review. Imports Vitest JSON and SARIF without executing check commands."),
+      evidence: z.array(z.string()).max(10).optional().describe("Repository-local CI evidence manifests to include in the review. Imports Vitest JSON, SARIF, and native-validator mason-check-json results without executing check commands."),
     },
     async ({ dir, mode, host, base, evidence }) => {
       const result = await masonInit(dir, { mode, host, base, evidence });

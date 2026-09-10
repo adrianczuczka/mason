@@ -72,7 +72,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(configured.report.baselinePaths).toContain(baseline);
     await write("new-feature/main.kt", "fun feature() = true\n");
     const changed = await automate(root, { event: "task_end" });
-    expect(changed.report.findings.some(f => f.original.type === "new-module" && f.status === "unresolved")).toBe(true);
+    expect(changed.report.findings.some(f => f.original.type === "new-module" && f.status === "review-required")).toBe(true);
     await fs.appendFile(path.join(root, "AGENTS.md"), "\nThe new-feature directory contains the added capability.\n");
     await commitAll(root, "document the new feature and commit setup metadata");
     const verified = await automate(root, { event: "task_end" });

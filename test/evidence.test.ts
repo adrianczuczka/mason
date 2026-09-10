@@ -64,6 +64,60 @@ describe("CI evidence in reviews", () => {
     expect((await cli(["--require-evidence"])).code).toBe(0);
   });
 
+  it("imports language-neutral documentation results with the recorded environment", async () => {
+    await write(reportPath, { version: 1, commit: head, results: [{ name: "README example", status: "passed", locations: [{ file: "README.md", line: 12 }] }] });
+    await manifest([check({ kind: "documentation", tool: "TypeScript", command: "validate-docs", environment: {
+      toolVersion: "5.9.3", runtime: "Node 24", platform: "linux-x64", configuration: ["tsconfig.json", "pnpm-lock.yaml"],
+    }, report: { format: "mason-check-json", path: reportPath } })]);
+    const result = await review();
+    expect(result.evidence.status).toBe("passed");
+    expect(result.evidence.checks[0]).toMatchObject({ kind: "documentation", counts: { total: 1, passed: 1 },
+      environment: { toolVersion: "5.9.3", configuration: ["tsconfig.json", "pnpm-lock.yaml"] } });
+    expect((await cli(["--require-evidence"])).code).toBe(0);
+    expect(JSON.parse(await masonInit(repo, { base, evidence: [manifestPath] })).review.evidence.checks[0].environment.toolVersion).toBe("5.9.3");
+  });
+
+  it("imports native test failures and keeps unsafe locations as unlocated diagnostics", async () => {
+    await write(reportPath, { version: 1, results: [{ name: "Rust documentation example", status: "failed", message: "Example failed to compile",
+      locations: [{ file: "README.md", line: 9 }, { file: "../../outside.rs" }] }] });
+    await manifest([check({ tool: "cargo", command: "cargo test --doc", exitCode: 1, report: { format: "mason-check-json", path: reportPath } })]);
+    const result = await review();
+    expect(result.evidence.status).toBe("failed");
+    expect(result.evidence.checks[0].findings[0].locations).toEqual([{ file: "README.md", line: 9 }]);
+    expect(result.evidence.checks[0].diagnostics.join(" ")).toContain("outside");
+  });
+
+  it.each([[], [{ name: "example", status: "skipped" }], [{ name: "one", status: "passed" }, { name: "two", status: "skipped" }]])(
+    "does not accept empty or partially skipped native validation (%j)", async results => {
+      await write(reportPath, { version: 1, results });
+      await manifest([check({ report: { format: "mason-check-json", path: reportPath } })]);
+      expect((await review()).evidence.status).not.toBe("passed");
+      expect((await cli(["--require-evidence"])).code).toBe(2);
+    });
+
+  it.each([{ exitCode: null }, { workingTreeClean: false }, { commit: null }, { commit: "a".repeat(40) }])(
+    "does not promote native reports with incomplete or stale provenance (%j)", async extra => {
+      await write(reportPath, { version: 1, results: [{ name: "example", status: "passed" }] });
+      await manifest([check({ ...extra, report: { format: "mason-check-json", path: reportPath } })]);
+      expect((await review()).evidence.status).not.toBe("passed");
+    });
+
+  it("rejects native report revision conflicts and preserves actual nonzero exit status", async () => {
+    await write(reportPath, { version: 1, commit: base, results: [{ name: "example", status: "passed" }] });
+    await manifest([check({ exitCode: 1, report: { format: "mason-check-json", path: reportPath } })]);
+    const result = await review();
+    expect(result.evidence.checks[0]).toMatchObject({ outcome: "failed", freshness: "unknown", incomplete: true });
+    expect(result.evidence.checks[0].diagnostics.join(" ")).toContain("conflicts");
+  });
+
+  it("reports malformed native artifacts without hiding another check", async () => {
+    await write(reportPath, { version: 1, results: [{ name: "example", status: "probably-passed" }] });
+    await write(".mason/reports/valid.json", { version: 1, results: [{ name: "valid", status: "passed" }] });
+    await manifest([check({ report: { format: "mason-check-json", path: reportPath } }),
+      check({ id: "valid", report: { format: "mason-check-json", path: ".mason/reports/valid.json" } })]);
+    expect((await review()).evidence.checks.map(c => c.outcome)).toEqual(["unavailable", "passed"]);
+  });
+
   it("associates failing tests with paired changed sources and accepted decisions only", async () => {
     const input = { title: "Delivery idempotency", body: "Incident 42 duplicated deliveries; require a key before retry.", category: "gotcha" as const, files: ["src/delivery.ts"], owner: "Delivery team", sources: [{ kind: "incident" as const, reference: "incident/42" }] };
     const saved = await upsertDecision(repo, input);

@@ -9,17 +9,21 @@ import { decisionApproval, decisionProvenance, effectiveDecision, type DecisionR
 import type { Freshness } from "../context/trust.js";
 import { parseVitest } from "./evidence/vitest.js";
 import { parseSarif } from "./evidence/sarif.js";
+import { parseCheck } from "./evidence/check.js";
 import { MAX_FINDINGS, type CheckOutcome, type RawFinding, type ParsedEvidence } from "./evidence/types.js";
 
 const checkSchema = z.object({
-  id: z.string().min(1).max(100), kind: z.enum(["tests", "static-analysis", "security", "complexity", "duplication"]),
+  id: z.string().min(1).max(100), kind: z.enum(["tests", "static-analysis", "security", "complexity", "duplication", "documentation"]),
   tool: z.string().min(1).max(200), command: z.string().min(1).max(2000),
   commit: z.string().regex(/^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/).nullable().optional(),
   workingTreeClean: z.boolean().optional(),
   source: z.string().max(2000).optional(), sourceRoot: z.string().min(1).max(4000).optional(),
   status: z.enum(["completed", "skipped", "unavailable"]).default("completed"), reason: z.string().min(1).max(2000).optional(),
   exitCode: z.number().int().nullable().optional(),
-  report: z.object({ format: z.enum(["vitest-json", "sarif"]), path: z.string().min(1).max(4000) }).optional(),
+  environment: z.object({ toolVersion: z.string().min(1).max(200),
+    runtime: z.string().min(1).max(200).optional(), platform: z.string().min(1).max(200).optional(),
+    configuration: z.array(z.string().min(1).max(4000)).max(100).optional() }).optional(),
+  report: z.object({ format: z.enum(["vitest-json", "sarif", "mason-check-json"]), path: z.string().min(1).max(4000) }).optional(),
 });
 type CheckInput = z.infer<typeof checkSchema>;
 export interface LinkedFinding extends RawFinding {
@@ -35,6 +39,7 @@ export interface EvidenceCheck {
   findings: LinkedFinding[]; totalFindings: number; counts: Record<string, number>;
   incomplete: boolean; diagnostics: string[]; truncated: boolean;
   reportedCommands?: string[]; reportedTools?: string[];
+  environment?: CheckInput["environment"];
 }
 export interface ReviewEvidence {
   version: 1; scope: "committed"; headHash: string;
@@ -98,6 +103,7 @@ export async function collectReviewEvidence(root: string, manifests: string[], c
         id: check.id, kind: check.kind, tool: check.tool, command: check.command,
         commit: check.commit?.toLowerCase() ?? null, workingTreeClean: check.workingTreeClean ?? null, source: check.source ?? null, manifest, report: check.report ?? null,
         outcome: "unavailable", freshness: "unknown", findings: [], totalFindings: 0, counts: {}, incomplete: false, diagnostics: [], truncated: false,
+        ...(check.environment ? { environment: check.environment } : {}),
       };
       output.checks.push(result);
       if (check.workingTreeClean !== true) result.diagnostics.push("The check's working tree was dirty or not recorded; its results cannot be attributed to the claimed commit alone.");
@@ -110,13 +116,14 @@ export async function collectReviewEvidence(root: string, manifests: string[], c
       }
       try {
         if (!check.report) throw new Error("Completed check has no report artifact.");
-        if ((check.kind === "tests") !== (check.report.format === "vitest-json")) throw new Error("Test checks require vitest-json; analysis checks require sarif.");
+        if (check.report.format !== "mason-check-json" && (check.kind === "tests") !== (check.report.format === "vitest-json")) throw new Error("Test checks require vitest-json or mason-check-json; analysis checks require sarif or mason-check-json.");
         const file = relativeArtifact(root, check.report.path);
         const report = await readStoreJson(root, file);
         if (report === null) throw new Error(`Report artifact is missing: ${file}`);
         const sourceRoot = check.sourceRoot ?? root;
         if (!path.posix.isAbsolute(sourceRoot) && !/^[A-Za-z]:[\\/]/.test(sourceRoot)) throw new Error("sourceRoot must identify the absolute checkout root on the check runner.");
-        const parsed: ParsedEvidence = check.report.format === "vitest-json" ? parseVitest(report, sourceRoot) : parseSarif(report, sourceRoot);
+        const parsed: ParsedEvidence = check.report.format === "vitest-json" ? parseVitest(report, sourceRoot)
+          : check.report.format === "mason-check-json" ? parseCheck(report, sourceRoot) : parseSarif(report, sourceRoot);
         result.outcome = parsed.outcome; result.counts = parsed.counts; result.incomplete = parsed.incomplete;
         result.diagnostics.push(...parsed.diagnostics);
         result.reportedCommands = parsed.reportedCommands; result.reportedTools = parsed.reportedTools;
@@ -130,7 +137,7 @@ export async function collectReviewEvidence(root: string, manifests: string[], c
         if (check.exitCode != null && check.exitCode !== 0 && result.outcome === "passed") {
           result.outcome = "failed"; result.diagnostics.push(`Check command exited ${check.exitCode} despite a report with no active failures.`);
         }
-        if (check.report.format === "vitest-json" && pairs === undefined) {
+        if (check.kind === "tests" && pairs === undefined) {
           try { pairs = (await buildTestMap(root)).paired; }
           catch (error) { pairs = []; output.diagnostics.push(`Test pairing unavailable: ${String(error)}`); }
         }
