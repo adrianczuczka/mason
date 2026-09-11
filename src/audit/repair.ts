@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { computeAudit, type AuditOptions } from "./audit.js";
 import { discoverDocPaths } from "./docs.js";
@@ -10,40 +10,12 @@ import { readStoreJson, storePath, writeStoreJson } from "../utils/storage.js";
 import { readBoundedFile } from "../utils/files.js";
 import { isWithinRoot, normalizeRepoPath } from "../utils/paths.js";
 import { ALL_CHECKS } from "./types.js";
-import type { AuditAdvisory, AuditIssue, AuditReport, CheckName } from "./types.js";
-
-const checkSchema = z.enum(["deleted-reference", "new-module", "stale-count", "dead-command", "deps-changed", "decision-anchor-drift"]);
-const commitSchema = z.object({ hash: z.string().regex(/^[a-f0-9]{40,64}$/), date: z.string(), subject: z.string() });
-const anchorSchema = z.object({ doc: z.string(), line: z.number().int().positive().nullable(), excerpt: z.string().nullable() });
+import type { AuditReport, CheckName } from "./types.js";
+import { checkSchema, commitSchema, issueSchema, advisorySchema, digest, findingId, type Finding } from "./findings.js";
+import { assessAdvisory, advisoryReviewInventory, reviewSummarySchema, type AdvisoryReviewSummary } from "./advisory-review.js";
+export { checkResultSchema, findingId } from "./findings.js";
 const count = z.number().int().nonnegative();
-const scopeSchema = z.object({ basis: z.enum(["repository", "document", "document-link", "explicit"]),
-  directory: z.string(), candidates: z.array(z.string()) });
-const evidenceSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("missing-path"), claimed: z.string(), renamedTo: z.string().nullable(),
-    deletedInCommit: commitSchema.nullable(), everTracked: z.boolean(), parentDirExists: z.boolean(), resolvedPath: z.string().optional(), scope: scopeSchema.optional() }),
-  z.object({ kind: z.literal("unmentioned-dir"), dir: z.string(), sourceFileCount: count,
-    firstCommit: commitSchema.nullable(), checkedDocs: z.array(z.string()) }),
-  z.object({ kind: z.literal("count-mismatch"), claimed: count, actual: count, unit: z.string(),
-    countedFrom: z.string(), members: z.array(z.string()) }),
-  z.object({ kind: z.literal("missing-script"), scriptName: z.string(), invocation: z.string(),
-    manifestsChecked: z.array(z.string()), availableScripts: z.array(z.string()), scope: scopeSchema.optional() }),
-  z.object({ kind: z.literal("doc-behind-manifests"), docLastCommit: commitSchema,
-    manifestCommits: z.array(commitSchema.extend({ files: z.array(z.string()) })), totalCommits: count }),
-  z.object({ kind: z.literal("decision-anchor"), decisionId: z.string(), title: z.string(),
-    changedFiles: z.array(z.string()), refreshedHash: z.string(),
-    provenance: z.object({}).passthrough().optional() }),
-]);
-const findingSchema = z.object({ message: z.string(), anchor: anchorSchema, evidence: evidenceSchema });
-const issueSchema = findingSchema.extend({
-  type: z.enum(["deleted-reference", "new-module", "stale-count", "dead-command"]),
-  confidence: z.enum(["certain", "likely"]),
-});
-const advisorySchema = findingSchema.extend({ type: checkSchema, resolution: z.literal("recheck").optional() });
-export const checkResultSchema = z.object({
-  issues: z.array(issueSchema), advisories: z.array(advisorySchema),
-  suppressedAdvisories: z.array(advisorySchema).optional(),
-  skipped: z.array(z.object({ check: z.string(), reason: z.string(), doc: z.string().optional() })),
-});
+
 const reportSchema = z.object({
   version: z.literal(1), root: z.string(), gitAvailable: z.literal(true),
   headHash: commitSchema.shape.hash, checksRun: z.array(checkSchema).nonempty(),
@@ -59,21 +31,23 @@ const baselineSchema = z.object({
   kind: z.literal("mason-audit-repair"), version: z.literal(1),
   createdAt: z.string().datetime(), report: reportSchema, digest: z.string().regex(/^[a-f0-9]{64}$/),
 });
-const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
 
 export type RepairStatus = "resolved" | "unresolved" | "review-required" | "unverified";
-type Finding = AuditIssue | AuditAdvisory;
+
 export interface RepairFinding {
   id: string;
   original: Finding;
   status: RepairStatus;
   reason: string;
   current?: Finding;
+  review?: AdvisoryReviewSummary;
 }
 export const repairFindingSchema = z.object({
   id: z.string(), original: z.union([issueSchema, advisorySchema]),
   status: z.enum(["resolved", "unresolved", "review-required", "unverified"]), reason: z.string(),
   current: z.union([issueSchema, advisorySchema]).optional(),
+  review: reviewSummarySchema.optional(),
 });
 export interface RepairVerification {
   version: 1;
@@ -90,20 +64,6 @@ export interface RepairVerification {
   scope: string;
 }
 
-/** Lines and wording can change without changing the underlying claim. */
-export function findingId(finding: Finding): string {
-  const e = finding.evidence;
-  let key: unknown;
-  switch (e.kind) {
-    case "missing-path": key = e.resolvedPath && e.resolvedPath !== e.claimed ? [e.claimed, e.resolvedPath] : e.claimed; break;
-    case "unmentioned-dir": key = e.dir; break;
-    case "count-mismatch": key = [e.unit.replace(/s$/, ""), e.countedFrom]; break;
-    case "missing-script": key = e.scope && e.scope.directory !== "." ? [e.scriptName, e.scope.directory] : e.scriptName; break;
-    case "doc-behind-manifests": key = null; break;
-    case "decision-anchor": key = [e.decisionId, e.provenance?.revision, e.provenance?.approval]; break;
-  }
-  return digest([finding.type, finding.anchor.doc, key]);
-}
 function recheckable(finding: Finding): boolean {
   return !("confidence" in finding) && finding.resolution === "recheck"
     && ["deleted-reference", "dead-command", "new-module"].includes(finding.type)
@@ -155,7 +115,7 @@ export async function prepareRepair(rootDir: string, checks: CheckName[] = ALL_C
   return { version: 1 as const, action: "prepare" as const, baselinePath, report };
 }
 
-export async function verifyRepair(rootDir: string, baselinePath: string, options: AuditOptions = {}): Promise<RepairVerification> {
+export async function loadRepairBaseline(rootDir: string, baselinePath: string) {
   const root = await fs.realpath(rootDir);
   const declaredRoot = path.resolve(rootDir);
   const relative = path.isAbsolute(baselinePath)
@@ -166,14 +126,21 @@ export async function verifyRepair(rootDir: string, baselinePath: string, option
   if (digest(payload) !== savedDigest) throw new Error("Repair baseline was modified; use the original baseline.");
   if (stored.report.root !== root) throw new Error("Repair baseline belongs to a different repository.");
   const original = stored.report as AuditReport;
+  return { root, relative, original };
+}
+
+export async function verifyRepair(rootDir: string, baselinePath: string, options: AuditOptions = {}): Promise<RepairVerification> {
+  const { root, relative, original } = await loadRepairBaseline(rootDir, baselinePath);
   const diagnostics: string[] = [];
+  let reviewDigest: string | undefined;
   let current: AuditReport | null = null;
   try {
+    reviewDigest = digest(await advisoryReviewInventory(root));
     current = await stableAudit(root, original.checksRun!, options);
     if (!current) diagnostics.push("No context files remain available to audit.");
     else if (!current.gitAvailable) diagnostics.push("Git history is unavailable.");
     for (const doc of original.docs) {
-      if (!allFindings(original).some(f => f.anchor.doc === doc.path && ("confidence" in f || recheckable(f))) || !current?.docs.some(d => d.path === doc.path)) continue;
+      if (!allFindings(original).some(f => f.anchor.doc === doc.path) || !current?.docs.some(d => d.path === doc.path)) continue;
       const content = await readBoundedFile(await storePath(root, doc.path), 10 * 1024 * 1024);
       if (content === null || !content.trim()) {
         diagnostics.push("Original context file " + doc.path + " is empty or unreadable; losing its claims does not verify a repair.");
@@ -190,38 +157,54 @@ export async function verifyRepair(rootDir: string, baselinePath: string, option
   const originalIds = new Set(originalFindings.map(findingId));
   const missingDocs = original.docs.filter(doc => !current?.docs.some(d => d.path === doc.path));
   for (const doc of missingDocs) diagnostics.push("Original context file " + doc.path + " is unavailable; removing it does not verify a repair.");
-  const findings = originalFindings.map((finding): RepairFinding => {
+  const findings = await Promise.all(originalFindings.map(async (finding): Promise<RepairFinding> => {
     const id = findingId(finding);
     const now = currentById.get(id);
     const base = { id, original: finding, ...(now ? { current: now } : {}) };
     if (diagnostics.length || !current) {
       return { ...base, status: "unverified", reason: "The original audit scope could not be verified. See diagnostics." };
     }
-    if ("confidence" in finding && now) {
+    if (now && ("confidence" in finding || "confidence" in now)) {
       return { ...base, status: "unresolved", reason: "The original check still reports this claim." };
     }
     const skipped = current.skippedChecks.filter(s => s.check === finding.type && (!s.doc || s.doc === finding.anchor.doc));
     if (!current.checksRun?.includes(finding.type) || skipped.length) {
       return { ...base, status: "unverified", reason: skipped.map(s => s.reason).join("; ") || "The original check did not run." };
     }
+    const review = await assessAdvisory(root, now ?? finding, original.headHash!);
+    if (review) {
+      if (review.status === "unverified") return { ...base, review, status: "unverified", reason: review.reason };
+      if (review.status === "current") return { ...base, review, status: "resolved", reason: review.reason };
+      return { ...base, review, status: "review-required", reason: review.reason };
+    }
     if (!("confidence" in finding) && (!recheckable(finding) || now)) {
       return { ...base, status: "review-required",
         reason: "An audit cannot establish that this advisory was reviewed. Retain its original evidence and report a separate assessment; editing or committing the doc is not approval." };
     }
     return { ...base, status: "resolved", reason: "The original check ran and no longer reports this claim. Inspect the edit for semantic correctness." };
-  });
+  }));
+  try {
+    if (reviewDigest !== digest(await advisoryReviewInventory(root)) || current?.headHash !== await getCurrentGitHash(root)) {
+      diagnostics.push("HEAD or advisory review records changed during verification; repeat against stable evidence.");
+      for (const finding of findings) { finding.status = "unverified"; finding.reason = diagnostics.at(-1)!; }
+    }
+  } catch (error) {
+    diagnostics.push(String(error));
+    for (const finding of findings) { finding.status = "unverified"; finding.reason = "Advisory review evidence became unavailable during verification."; }
+  }
   const newFindings = [...currentById].filter(([id]) => !originalIds.has(id)).map(([, f]) => f);
+  const reviewedIds = new Set(current?.advisoryReviews?.filter(review => review.status === "current").map(review => review.id));
   const counts: Record<RepairStatus, number> = { resolved: 0, unresolved: 0, "review-required": 0, unverified: 0 };
   for (const f of findings) counts[f.status]++;
   const incomplete = diagnostics.length > 0 || counts.unverified > 0 || counts["review-required"] > 0 ||
-    (current?.skippedChecks.length ?? 0) > 0 || newFindings.some(f => !("confidence" in f));
+    (current?.skippedChecks.length ?? 0) > 0 || newFindings.some(f => !("confidence" in f) && !reviewedIds.has(findingId(f)));
   const issuesRemain = counts.unresolved > 0 || newFindings.some(f => "confidence" in f);
   return {
     version: 1, action: "verify", baselinePath: relative, baselineHead: original.headHash!,
     currentHead: current?.gitAvailable ? current.headHash! : null,
     status: incomplete ? "incomplete" : issuesRemain ? "issues-remain" : "verified",
     findings, newFindings, diagnostics, currentAudit: current, counts,
-    scope: "Original audit checks over current context files and repository evidence. Resolved means no longer detected by that check. Historical advisories require separate review; a resolved candidate only means its condition is no longer detected. This is not a certification of documentation or application correctness.",
+    scope: "Original audit checks over current context files and repository evidence. Resolved means no longer detected by the check or covered by an explicit assessment of current evidence; inspect each finding's reason and review. This is not a certification of documentation or application correctness.",
   };
 }
 
@@ -232,7 +215,7 @@ export function repairExitCode(report: RepairVerification): number {
 export function formatRepairSummary(report: RepairVerification): string {
   return [
     "Repair verification: " + report.status + ". Baseline: " + report.baselinePath,
-    ...report.findings.map(f => "  [" + f.status + "] " + f.original.type + " " + f.original.anchor.doc + ": " + f.original.message + "\n    " + f.reason),
+    ...report.findings.map(f => "  [" + f.status + "] " + f.original.type + " " + f.original.anchor.doc + ": " + f.original.message + "\n    " + f.reason + "\n    findingId: " + f.id),
     ...report.newFindings.map(f => "  [new] " + f.type + " " + f.anchor.doc + ": " + f.message),
     ...report.diagnostics.map(d => "  [unverified] " + d),
     ...(report.currentAudit?.skippedChecks ?? []).map(s => "  [skipped] " + s.check + ": " + s.reason),

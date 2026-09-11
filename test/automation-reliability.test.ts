@@ -60,6 +60,15 @@ describe("automation reliability", { timeout: 20000 }, () => {
     await expect(automate(root, { event: "session_start" })).rejects.toThrow("symbolic link");
   });
 
+  it("ignores directory aliases without hiding a linked tracked source directory", async () => {
+    await fs.symlink("src", path.join(root, "SourceAlias"), "junction");
+    await commitAll(root, "add directory alias");
+    expect((await automate(root, { event: "session_start" })).report.status).toBe("verified");
+    await fs.rename(path.join(root, "src"), path.join(root, "actual-src"));
+    await fs.symlink("actual-src", path.join(root, "src"), "junction");
+    await expect(automate(root, { event: "task_end" })).rejects.toThrow("symbolic link");
+  });
+
   it.each(["directory", "manifest"])("does not hide a broken literal workspace %s link", async kind => {
     await write("package.json", '{"workspaces":["packages/alias"]}');
     await write("CLAUDE.md", "The src directory. There are 1 workspaces.\n");

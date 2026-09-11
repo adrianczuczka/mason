@@ -25,6 +25,15 @@ const MANIFEST_PATHSPECS = [
   "composer.json",
 ];
 
+/** Share exact dependency scope with persisted advisory assessments. */
+export function manifestPathspecs(doc: string): string[] {
+  const scope = documentScope(doc);
+  if (scope === ".") return MANIFEST_PATHSPECS;
+  const escaped = scope.replace(/[\\*?\[\]]/g, "\\$&");
+  return MANIFEST_PATHSPECS.map(spec => spec.startsWith(":(glob)")
+    ? ":(glob)" + escaped + "/" + spec.slice(":(glob)".length) : ":(literal)" + scope + "/" + spec);
+}
+
 /**
  * Advisory, never an issue: a manifest commit after the doc's last commit
  * proves recency ordering, not that any specific claim is false — and it can
@@ -57,11 +66,7 @@ export async function checkDepsChanged(
     const range = await commitsTouchingSince(
       ctx.root,
       doc.lastCommit.hash,
-      documentScope(doc.path) === "." ? MANIFEST_PATHSPECS : MANIFEST_PATHSPECS.map(spec => {
-        const scope = documentScope(doc.path);
-        const escaped = scope.replace(/[\\*?\[\]]/g, "\\$&");
-        return spec.startsWith(":(glob)") ? ":(glob)" + escaped + "/" + spec.slice(":(glob)".length) : ":(literal)" + scope + "/" + spec;
-      })
+      manifestPathspecs(doc.path)
     );
     if (range === null) {
       result.skipped.push({

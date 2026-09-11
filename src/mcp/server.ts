@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { attributionSchema } from "../decisions/provenance.js";
+import { advisoryReviewRequest } from "../audit/advisory-review.js";
 import { decisionTitleSchema, decisionBodySchema, BODY_RECOMMENDED_CHARS, BODY_MAX_CHARS, TITLE_MAX_CHARS } from "../decisions/decisions.js";
 import {
   analyzeProject,
@@ -20,6 +21,7 @@ import {
   masonCompleteInit,
   masonInit,
   masonRepair,
+  masonReviewAdvisory,
   masonAutomation,
   masonSetConfluence,
   reduceSnapshot,
@@ -84,6 +86,13 @@ export function createMcpServer(): McpServer {
       const result = await masonRepair(dir, { action, baselinePath, checks });
       return { content: [{ type: "text", text: result }] };
     }
+  );
+
+  server.tool(
+    "review_advisory",
+    "Prepare an assessment of an original repair advisory and its exact repository scope, then record authorized addressed, inapplicable or deferred outcomes with reviewToken, reviewer and note. Relevant changes reopen reviews; unrelated commits preserve them. Records belong in Git. Decision findings route to review_decision; this tool never approves decisions. Recorded identities are assertions, not authenticated approvals.",
+    { dir: z.string().describe("Absolute path to the project root"), ...advisoryReviewRequest.shape },
+    async ({ dir, ...request }) => ({ content: [{ type: "text", text: await masonReviewAdvisory(dir, request) }] })
   );
 
   server.tool(
@@ -378,7 +387,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "save_decision",
-    "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. No setup or map required. Writes a local record and preserves content history. Changes create a pending proposal while the last accepted revision remains operative; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede a record with an operative accepted revision; review its replacement and retire the original separately.",
+    "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. Compare matching get_context records and pending proposals before saving. When new evidence changes the same lesson's assumptions, scope, or recommended action, pass its existing id, including for accepted records. Preserve supported rationale and sources and replace obsolete instructions. Create a new record for a genuinely distinct lesson; skip unchanged restatements. No setup or map required. Writes a local record and preserves content history. Changes create a pending proposal while the last accepted revision remains operative; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede a record with an operative accepted revision; review its replacement and retire the original separately.",
     {
       dir: z
         .string()
@@ -395,7 +404,7 @@ export function createMcpServer(): McpServer {
       id: z
         .string()
         .optional()
-        .describe("Existing id to revise. Changed content becomes a proposal; unchanged content leaves the review and freshness untouched."),
+        .describe("Pass the matching record's existing id when evidence changes that lesson's assumptions, scope, or recommended action, including for accepted records. Changed content becomes a proposal while the accepted version remains operative; unchanged content leaves review and freshness untouched."),
       supersedes: z
         .string()
         .optional()

@@ -1,0 +1,211 @@
+{
+  "date": "2026-09-11",
+  "masonBaseCommit": "e9f04c4ef580195705a322c9a03d35fdad1b1a78",
+  "masonWorkingTree": "uncommitted advisory review and source-directory alias fix",
+  "auditSha256": "fc6685e877bee52f5516a25c03611c1bd05675ffdabd46b2a4b2dd259940e6eb",
+  "initialFailure": {
+    "repository": "BurntSushi/ripgrep",
+    "exitCode": 2,
+    "reason": "Audit input contains a symbolic link: HomebrewFormula",
+    "fixed": true
+  },
+  "results": [
+    {
+      "repository": "pallets/click",
+      "commit": "6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1",
+      "shallow": true,
+      "exitCode": 0,
+      "trackedUnchanged": true,
+      "docs": [
+        "README.md"
+      ],
+      "issues": [],
+      "advisories": [
+        {
+          "type": "new-module",
+          "doc": "README.md",
+          "message": "directory `examples/` contains 14 source files but is not mentioned in the discovered documentation; review whether it needs documenting"
+        },
+        {
+          "type": "new-module",
+          "doc": "README.md",
+          "message": "directory `tests/` contains 58 source files but is not mentioned in the discovered documentation; review whether it needs documenting"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "README.md",
+          "message": "dependency manifests touched by 31 commits since README.md was last committed (latest: dda8db4 \"Start 8.5.1.\")"
+        }
+      ],
+      "skippedChecks": [],
+      "stderr": ""
+    },
+    {
+      "repository": "BurntSushi/ripgrep",
+      "commit": "3fce3b5bb0236da2df6d99672afb8a719642eca7",
+      "shallow": true,
+      "exitCode": 0,
+      "trackedUnchanged": true,
+      "docs": [
+        "benchsuite/runs/2020-10-14-archlinux-frink/README.md",
+        "benchsuite/runs/2022-12-16-archlinux-duff/README.md",
+        "crates/cli/README.md",
+        "crates/core/README.md",
+        "crates/globset/README.md",
+        "crates/grep/README.md",
+        "crates/ignore/README.md",
+        "crates/index/README.md",
+        "crates/matcher/README.md",
+        "crates/pcre2/README.md",
+        "crates/printer/README.md",
+        "crates/regex/README.md",
+        "crates/searcher/README.md",
+        "fuzz/README.md",
+        "pkg/windows/README.md",
+        "README.md"
+      ],
+      "issues": [],
+      "advisories": [
+        {
+          "type": "deps-changed",
+          "doc": "crates/cli/README.md",
+          "message": "dependency manifests touched by 2 commits since crates/cli/README.md was last committed (latest: a9dc222 \"cargo: set `rust-version` on all crates\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "crates/globset/README.md",
+          "message": "dependency manifests touched by 5 commits since crates/globset/README.md was last committed (latest: 5055264 \"globset-0.4.20\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "crates/grep/README.md",
+          "message": "dependency manifests touched by 4 commits since crates/grep/README.md was last committed (latest: a9dc222 \"cargo: set `rust-version` on all crates\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "crates/ignore/README.md",
+          "message": "dependency manifests touched by 12 commits since crates/ignore/README.md was last committed (latest: 3fce3b5 \"ignore-0.4.33\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "crates/matcher/README.md",
+          "message": "dependency manifests touched by 2 commits since crates/matcher/README.md was last committed (latest: a9dc222 \"cargo: set `rust-version` on all crates\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "crates/pcre2/README.md",
+          "message": "dependency manifests touched by 2 commits since crates/pcre2/README.md was last committed (latest: a9dc222 \"cargo: set `rust-version` on all crates\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "crates/printer/README.md",
+          "message": "dependency manifests touched by 3 commits since crates/printer/README.md was last committed (latest: a9dc222 \"cargo: set `rust-version` on all crates\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "crates/regex/README.md",
+          "message": "dependency manifests touched by 1 commit since crates/regex/README.md was last committed (latest: a9dc222 \"cargo: set `rust-version` on all crates\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "crates/searcher/README.md",
+          "message": "dependency manifests touched by 3 commits since crates/searcher/README.md was last committed (latest: a9dc222 \"cargo: set `rust-version` on all crates\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "README.md",
+          "message": "dependency manifests touched by 10 commits since README.md was last committed (latest: 3fce3b5 \"ignore-0.4.33\")"
+        }
+      ],
+      "skippedChecks": [],
+      "stderr": ""
+    },
+    {
+      "repository": "spf13/cobra",
+      "commit": "adbc8813901bba65827259daa8e22ff94ec1f30e",
+      "shallow": true,
+      "exitCode": 0,
+      "trackedUnchanged": true,
+      "docs": [
+        "README.md"
+      ],
+      "issues": [],
+      "advisories": [
+        {
+          "type": "new-module",
+          "doc": "README.md",
+          "message": "directory `doc/` contains 11 source files but is not mentioned in the discovered documentation; review whether it needs documenting"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "README.md",
+          "message": "dependency manifests touched by 3 commits since README.md was last committed (latest: 88b30ab \"chore: Migrate from gopkg.in/yaml.v3 to go.yaml.in/yaml/v3 (#2336)\")"
+        }
+      ],
+      "skippedChecks": [],
+      "stderr": ""
+    },
+    {
+      "repository": "elevenlabs/packages",
+      "commit": "c7c5bdca6730e532c673b51844826d529492a765",
+      "shallow": false,
+      "exitCode": 0,
+      "trackedUnchanged": true,
+      "docs": [
+        "agents.md",
+        "examples/agent-testbench/README.md",
+        "examples/react-native-expo/README.md",
+        "packages/client/README.md",
+        "packages/react-native/README.md",
+        "packages/react/README.md",
+        "packages/types/README.md",
+        "README.md"
+      ],
+      "issues": [],
+      "advisories": [
+        {
+          "type": "deps-changed",
+          "doc": "agents.md",
+          "message": "dependency manifests touched by 32 commits since agents.md was last committed (latest: 58598fa \"Version Packages (#1000)\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "examples/agent-testbench/README.md",
+          "message": "dependency manifests touched by 18 commits since examples/agent-testbench/README.md was last committed (latest: 2968d3a \"chore(deps): bump the react group across 1 directory with 8 updates (#927)\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "examples/react-native-expo/README.md",
+          "message": "dependency manifests touched by 21 commits since examples/react-native-expo/README.md was last committed (latest: 58598fa \"Version Packages (#1000)\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "packages/client/README.md",
+          "message": "dependency manifests touched by 4 commits since packages/client/README.md was last committed (latest: 58598fa \"Version Packages (#1000)\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "packages/react-native/README.md",
+          "message": "dependency manifests touched by 11 commits since packages/react-native/README.md was last committed (latest: 58598fa \"Version Packages (#1000)\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "packages/react/README.md",
+          "message": "dependency manifests touched by 46 commits since packages/react/README.md was last committed (latest: 58598fa \"Version Packages (#1000)\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "packages/types/README.md",
+          "message": "dependency manifests touched by 33 commits since packages/types/README.md was last committed (latest: 9575dc4 \"Version Packages (#985)\")"
+        },
+        {
+          "type": "deps-changed",
+          "doc": "README.md",
+          "message": "dependency manifests touched by 93 commits since README.md was last committed (latest: 58598fa \"Version Packages (#1000)\")"
+        }
+      ],
+      "skippedChecks": [],
+      "stderr": ""
+    }
+  ]
+}

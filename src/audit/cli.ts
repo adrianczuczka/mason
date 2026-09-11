@@ -3,6 +3,8 @@ import { computeAudit } from "./audit.js";
 import { ALL_CHECKS } from "./types.js";
 import { prepareRepair, verifyRepair, formatRepairSummary, repairExitCode } from "./repair.js";
 import type { AuditIssue, AuditReport, CheckName } from "./types.js";
+import { findingId } from "./findings.js";
+import { runAdvisoryCli } from "./advisory-cli.js";
 
 export const USAGE = `Usage: mason-audit [--dir <path>] [--json | --fix-prompt] [--checks <list>]
 
@@ -24,6 +26,8 @@ Options:
   --checks <list>  Comma-separated subset of checks to run (default: all):
                    ${ALL_CHECKS.join(", ")}
   --help           Show this help
+
+Use mason audit review --help to prepare and record an authorized advisory assessment.
 
 Exit codes:
   0  no issues (advisories may still be present)
@@ -107,7 +111,10 @@ function issueLine(issue: AuditIssue): string {
 
 export function formatAuditSummary(report: AuditReport): string {
   const lines: string[] = [];
-  const reviewCount = report.advisories.length + (report.suppressedAdvisories?.length ?? 0);
+  const reviewed = new Set(report.advisoryReviews?.filter(review => review.status === "current").map(review => review.id));
+  const open = report.advisories.filter(finding => !reviewed.has(findingId(finding)));
+  const suppressed = (report.suppressedAdvisories ?? []).filter(finding => !reviewed.has(findingId(finding)));
+  const reviewCount = open.length + suppressed.length;
 
   for (const doc of report.docs) {
     const docIssues = report.issues.filter((i) => i.anchor.doc === doc.path);
@@ -131,9 +138,9 @@ export function formatAuditSummary(report: AuditReport): string {
     if (!docPaths.has(issue.anchor.doc)) lines.push(issueLine(issue));
   }
 
-  if (report.advisories.length > 0) {
+  if (open.length > 0) {
     lines.push("Advisories (do not affect the exit code):");
-    for (const advisory of report.advisories) {
+    for (const advisory of open) {
       lines.push(`  [${advisory.type}] ${advisory.anchor.doc}: ${advisory.message}`);
     }
   }
@@ -143,7 +150,9 @@ export function formatAuditSummary(report: AuditReport): string {
     }
   }
 
-  for (const advisory of report.suppressedAdvisories ?? []) {
+  if (reviewed.size) lines.push(`${reviewed.size} advisories have recorded assessments covering current evidence (see --json).`);
+  for (const review of report.advisoryReviews ?? []) if (review.status !== "current") lines.push(`  [${review.status}] ${review.reason}`);
+  for (const advisory of suppressed) {
     lines.push(`  [suppressed; unresolved] ${advisory.type} ${advisory.anchor.doc}: ${advisory.message}`);
   }
 
@@ -196,7 +205,7 @@ export function formatFixPrompt(report: AuditReport, baselinePath?: string): str
     "- new-module: review whether the directory needs documenting; an omission alone does not establish a defect. Preserve scope and describe only what you verified."
   );
   lines.push(
-    "- Historical ADVISORIES require a separate assessment of the cited commits or decision evidence. Candidates marked resolution: recheck can be rerun to see whether the condition remains; this does not establish semantic approval. Report any review you perform and what remains unknown."
+    "- Historical ADVISORIES require a separate authorized assessment using review_advisory with the baselinePath and findingId from verification. Prepare and inspect evidence first; record addressed, inapplicable or deferred with the actual reviewer, note and reviewToken. Decision findings use review_decision. Candidates marked resolution: recheck can be rerun to see whether the condition remains; this does not establish semantic approval. Report what remains unknown."
   );
   lines.push("");
   lines.push("AUDIT REPORT (current context files and repository evidence, including local edits):");
@@ -222,6 +231,7 @@ export async function runAuditCli(
     err: (line) => process.stderr.write(`${line}\n`),
   }
 ): Promise<number> {
+  if (argv[0] === "review") return runAdvisoryCli(argv.slice(1), io);
   let args: ParsedArgs;
   try {
     args = parseArgs(argv);

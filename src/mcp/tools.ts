@@ -3,6 +3,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { prepareRepair, verifyRepair } from "../audit/repair.js";
+import { reviewAdvisory, type AdvisoryReviewInput } from "../audit/advisory-review.js";
 import { formatFixPrompt } from "../audit/cli.js";
 import type { CheckName } from "../audit/types.js";
 
@@ -1046,6 +1047,11 @@ export async function masonAutomation(dir: string, action: "status" | "check"): 
     const failure = automationFailure(error);
     return JSON.stringify({ version: 1, status: "unavailable", error: failure.message, failure });
   }
+}
+
+export async function masonReviewAdvisory(dir: string, options: AdvisoryReviewInput): Promise<string> {
+  try { return JSON.stringify(await reviewAdvisory(dir, options), null, 2); }
+  catch (error) { return JSON.stringify({ status: "unavailable", error: error instanceof Error ? error.message : String(error) }); }
 }
 
 export async function masonRepair(dir: string, options: { action: "prepare" | "verify"; baselinePath?: string; checks?: CheckName[] }): Promise<string> {

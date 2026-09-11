@@ -17,6 +17,7 @@ import { moduleCandidates, moduleDocumentation } from "../audit/checks/new-modul
 import { resolveDocCountSource } from "../audit/checks/stale-count.js";
 import { commandInputs } from "../audit/checks/dead-command.js";
 import { storePath } from "../utils/storage.js";
+import { advisoryReviewInventory } from "../audit/advisory-review.js";
 
 const exec = promisify(execFile);
 declare const PKG_VERSION: string;
@@ -104,7 +105,7 @@ export async function readInputs(root: string): Promise<Inputs> {
     "deps-changed": hash([common, docStatus]),
     "decision-anchor-drift": hash([common, decisionPresence, decisions, status, index]),
   };
-  return { fingerprint: hash(keys), head, docs, keys };
+  return { fingerprint: hash([keys, await advisoryReviewInventory(root)]), head, docs, keys };
 }
 
 const cacheSchema = z.object({ version: z.literal(1), entries: z.record(z.object({ key: z.string(), result: checkResultSchema })), digest: z.string() });

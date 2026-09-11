@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Clarify when agents should revise an existing lesson using its ID, including accepted records, instead of creating another proposal. Keep supported rationale and sources, distinguish genuinely separate lessons, and preserve review boundaries.
+- Add an interrupted-upload maintenance probe with a local publishing simulator, reviewed starting knowledge, fresh-session reuse and first-upload controls. No real publishing service is contacted.
+
+- Add a conditional knowledge lifecycle evaluation using a reduced R8 startup reproduction, ordinary-note comparison, two independent reviews, fresh-session reuse and a no-capture control. This is evaluation tooling, not automatic compiler discovery or a new production check.
+
+- Passive audits ignore directory aliases outside the source inventory while still refusing links used by selected source paths; fixes the audit abort reproduced on ripgrep's `HomebrewFormula` alias.
+- Record authorized advisory assessments through `review_advisory` and `mason audit review`. Preserve history, reuse decision reviews, retain closure through unrelated and metadata commits, and reopen when relevant evidence changes. Deferred or unavailable findings remain outstanding.
 - Discover nested README and agent instruction files with their actual filename casing. Respect exclusions and preserve scope through local references, package commands, repair baselines, and automation caches.
 - Keep never-tracked paths, ambiguous commands, and undocumented modules advisory. Recheckable candidates can resolve when their condition disappears; historical dependency and decision advisories still require review.
 - Import individual native-validator outcomes through `mason-check-json`, including optional environment metadata. Preserve missing, skipped, failed, stale, and unknown evidence without running imported commands. Automatic compiler discovery and snippet execution remain future integrations.

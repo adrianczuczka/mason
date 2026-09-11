@@ -2,17 +2,17 @@
   "version": 2,
   "id": "mason-s-definitive-context-engineer-direction-and-growth-roa",
   "title": "Mason's definitive context engineer direction and growth roadmap",
-  "body": "The maintainer wants Mason to preserve engineering intent and prevent repeated AI coding mistakes as projects grow. Consult ROADMAP.md for strategy. The original priorities remain trust, real evaluations, adoption without a required map, provenance, and quality-check evidence; Confluence stays lower priority. On 2026-09-09 the maintainer requested combining the seven ranked knowledge-debt ideas with the maintenance proposal. Usefulness rank and build order differ: correction capture is the highest-value outcome, but basic capture already exists. The proposed sequence starts with durable advisory assessments and evidence-scoped reopening, then selective correction capture and task-relevant review through maintained reuse. Follow with executable constraints, contradiction review, a context debugger, explicit reconsideration conditions, and cross-repository coordination when demand warrants. Basic diagnostics and outcome evaluation run throughout. Preserve reviewed history and unknown states; closure is not blanket decision approval. Measure useful capture, later mistakes, incorrect closures, review noise/effort and cost against ordinary notes. The initial patch comparison tied 10/10; capture/reuse smoke tests do not establish superiority. Roadmap recording is authorized; the sequence is a proposal, not approval to implement every milestone. No roadmap owner or formal acceptance is recorded.",
+  "body": "The maintainer wants Mason to preserve engineering intent and prevent repeated AI coding mistakes as projects grow. Consult ROADMAP.md for strategy and measured progress. The original priorities remain trust, real evaluations, adoption without a required map, provenance, and quality-check evidence; Confluence stays lower priority. Usefulness rank and build order differ: correction capture is the highest-value outcome, but basic capture exists. On 2026-09-11 the maintainer authorized the durable advisory assessment lifecycle and broader audit evaluation. Explicit revision guidance now favors the existing ID when the same lesson changes. R8 and upload development trials passed maintained reuse in both Mason and notes; broaden independent validation before claiming superiority. Follow with executable constraints, contradiction review, a context debugger, explicit reconsideration conditions, and cross-repository coordination when demand warrants. Documentation examples are a separate feature: evaluate existing doctest/Twoslash tooling before custom compilers; the exploratory adapter is paused. Preserve reviewed history and unknown states; closing an advisory never implicitly approves a decision. Measure capture usefulness, later mistakes, incorrect closures, review effort and cost against ordinary notes. The initial patch comparison tied 10/10; smoke tests and passive audits do not establish superiority. Later milestones remain proposals. No roadmap owner or formal acceptance is recorded.",
   "category": "decision",
   "files": [
     "ROADMAP.md"
   ],
   "createdAt": "2026-09-05T11:24:50.523Z",
-  "updatedAt": "2026-09-09T11:13:39.778Z",
+  "updatedAt": "2026-09-11T09:30:03.985Z",
   "refreshedHash": "6d0da83d0fbf7c07caa94369b795fd2e76d2297c",
   "status": "active",
   "approval": "proposed",
-  "revision": 2,
+  "revision": 4,
   "sources": [
     {
       "kind": "discussion",
@@ -28,6 +28,21 @@
       "kind": "discussion",
       "reference": "Maintainer conversation, 2026-09-09: combine the quoted seven-idea usefulness ranking with the preceding maintenance proposal and update the roadmap",
       "note": "The ranking was supplied verbatim by the maintainer. Delivery order and acceptance criteria are Codex synthesis; recording the roadmap does not imply implementation approval. No conversation permalink was supplied."
+    },
+    {
+      "kind": "discussion",
+      "reference": "Maintainer conversation, 2026-09-11: approval to separate documentation-example validation, broaden passive audits, and implement advisory review",
+      "note": "Approval followed the proposed next steps. This does not authorize every later roadmap milestone; no permalink was supplied."
+    },
+    {
+      "kind": "document",
+      "reference": "bench/harness/knowledge/REVISION_GUIDANCE_RESULTS.md",
+      "note": "Records the unchanged R8 repeat, constructed upload-maintenance probe, non-blind review, tied notes results and remaining validation limits."
+    },
+    {
+      "kind": "discussion",
+      "reference": "Maintainer conversation, 2026-09-11: implement revise-versus-create guidance, repeat the ordinary-request lifecycle and test an interrupted-upload case",
+      "note": "Implementation was authorized by the maintainer. This does not approve unrelated roadmap milestones or formally accept this record; no conversation permalink was supplied."
     }
   ],
   "history": [
@@ -87,6 +102,94 @@
             "kind": "discussion",
             "reference": "Maintainer conversation, 2026-09-09: combine the quoted seven-idea usefulness ranking with the preceding maintenance proposal and update the roadmap",
             "note": "The ranking was supplied verbatim by the maintainer. Delivery order and acceptance criteria are Codex synthesis; recording the roadmap does not imply implementation approval. No conversation permalink was supplied."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "6d0da83d0fbf7c07caa94369b795fd2e76d2297c"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-11T07:57:32.349Z",
+      "actor": "Codex",
+      "revision": 3,
+      "content": {
+        "title": "Mason's definitive context engineer direction and growth roadmap",
+        "body": "The maintainer wants Mason to preserve engineering intent and prevent repeated AI coding mistakes as projects grow. Consult ROADMAP.md for strategy and measured progress. The original priorities remain trust, real evaluations, adoption without a required map, provenance, and quality-check evidence; Confluence stays lower priority. Usefulness rank and build order differ: correction capture is the highest-value outcome, but basic capture exists. On 2026-09-11 the maintainer authorized the durable advisory assessment lifecycle and broader audit evaluation. Next prove selective correction capture through reviewed, maintained reuse. Follow with executable constraints, contradiction review, a context debugger, explicit reconsideration conditions, and cross-repository coordination when demand warrants. Documentation examples are a separate feature: evaluate existing doctest/Twoslash tooling before custom compilers; the exploratory adapter is paused. Preserve reviewed history and unknown states; closing an advisory never implicitly approves a decision. Measure capture usefulness, later mistakes, incorrect closures, review effort and cost against ordinary notes. The initial patch comparison tied 10/10; smoke tests and passive audits do not establish superiority. Later milestones remain proposals. No roadmap owner or formal acceptance is recorded.",
+        "category": "decision",
+        "files": [
+          "ROADMAP.md"
+        ],
+        "sources": [
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, captured 2026-09-05: what Mason needs to become the definitive context engineer as projects grow",
+            "note": "Source includes the growth-focused question, the explicit five priorities, and the request to capture project memory. No conversation permalink or verbatim earlier assessment was supplied."
+          },
+          {
+            "kind": "document",
+            "reference": "ROADMAP.md",
+            "note": "Durable roadmap with source limitations, current progress, growth requirements labeled as synthesis, and proposed next work."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-09-09: combine the quoted seven-idea usefulness ranking with the preceding maintenance proposal and update the roadmap",
+            "note": "The ranking was supplied verbatim by the maintainer. Delivery order and acceptance criteria are Codex synthesis; recording the roadmap does not imply implementation approval. No conversation permalink was supplied."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-09-11: approval to separate documentation-example validation, broaden passive audits, and implement advisory review",
+            "note": "Approval followed the proposed next steps. This does not authorize every later roadmap milestone; no permalink was supplied."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "6d0da83d0fbf7c07caa94369b795fd2e76d2297c"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-11T09:30:03.985Z",
+      "actor": "Codex",
+      "revision": 4,
+      "content": {
+        "title": "Mason's definitive context engineer direction and growth roadmap",
+        "body": "The maintainer wants Mason to preserve engineering intent and prevent repeated AI coding mistakes as projects grow. Consult ROADMAP.md for strategy and measured progress. The original priorities remain trust, real evaluations, adoption without a required map, provenance, and quality-check evidence; Confluence stays lower priority. Usefulness rank and build order differ: correction capture is the highest-value outcome, but basic capture exists. On 2026-09-11 the maintainer authorized the durable advisory assessment lifecycle and broader audit evaluation. Explicit revision guidance now favors the existing ID when the same lesson changes. R8 and upload development trials passed maintained reuse in both Mason and notes; broaden independent validation before claiming superiority. Follow with executable constraints, contradiction review, a context debugger, explicit reconsideration conditions, and cross-repository coordination when demand warrants. Documentation examples are a separate feature: evaluate existing doctest/Twoslash tooling before custom compilers; the exploratory adapter is paused. Preserve reviewed history and unknown states; closing an advisory never implicitly approves a decision. Measure capture usefulness, later mistakes, incorrect closures, review effort and cost against ordinary notes. The initial patch comparison tied 10/10; smoke tests and passive audits do not establish superiority. Later milestones remain proposals. No roadmap owner or formal acceptance is recorded.",
+        "category": "decision",
+        "files": [
+          "ROADMAP.md"
+        ],
+        "sources": [
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, captured 2026-09-05: what Mason needs to become the definitive context engineer as projects grow",
+            "note": "Source includes the growth-focused question, the explicit five priorities, and the request to capture project memory. No conversation permalink or verbatim earlier assessment was supplied."
+          },
+          {
+            "kind": "document",
+            "reference": "ROADMAP.md",
+            "note": "Durable roadmap with source limitations, current progress, growth requirements labeled as synthesis, and proposed next work."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-09-09: combine the quoted seven-idea usefulness ranking with the preceding maintenance proposal and update the roadmap",
+            "note": "The ranking was supplied verbatim by the maintainer. Delivery order and acceptance criteria are Codex synthesis; recording the roadmap does not imply implementation approval. No conversation permalink was supplied."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-09-11: approval to separate documentation-example validation, broaden passive audits, and implement advisory review",
+            "note": "Approval followed the proposed next steps. This does not authorize every later roadmap milestone; no permalink was supplied."
+          },
+          {
+            "kind": "document",
+            "reference": "bench/harness/knowledge/REVISION_GUIDANCE_RESULTS.md",
+            "note": "Records the unchanged R8 repeat, constructed upload-maintenance probe, non-blind review, tied notes results and remaining validation limits."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-09-11: implement revise-versus-create guidance, repeat the ordinary-request lifecycle and test an interrupted-upload case",
+            "note": "Implementation was authorized by the maintainer. This does not approve unrelated roadmap milestones or formally accept this record; no conversation permalink was supplied."
           }
         ]
       },

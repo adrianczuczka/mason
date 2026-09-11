@@ -17,6 +17,7 @@ Mason separately reads files and Git history needed by the requested checks or t
 | Location | Contents and retention |
 |---|---|
 | `.mason/decisions/` | Rationale, sources, owners, and proposal/review history. Intended for normal Git review and versioning; never automatically published to a service. |
+| `.mason/reviews/advisories/` | Explicit advisory assessments, reviewer and reason, original findings, and scoped Git evidence. Intended for project review and versioning; shared across clones. |
 | `.mason/snapshot.json`, `.mason/config.json` | Optional architecture map and repository settings. Shared when committed; maps can contain proprietary descriptions and paths. |
 | `.mason/local/` | Setup and ownership records, ignored by generated setup rules. |
 | `.mason/reports/` | Original evidence, findings, caches, execution/activation receipts; ignored by generated setup rules. Receipts can contain root paths, branch, hostname, PID, timing, event names, hashed session identifiers, and tool call identifiers. Baselines persist; execution history is bounded. |

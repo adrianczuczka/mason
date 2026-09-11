@@ -97,7 +97,11 @@ export async function moduleCandidates(root: string, combinedDocs: string) {
   const sources = sourcePaths.filter(file => !file.split("/").some(part => part.startsWith(".")));
   const listSubdirs = async (dir: string): Promise<string[]> => {
     const entries = await fs.readdir(await auditInputPath(root, dir), { withFileTypes: true });
-    const dirs = entries.filter(entry => (entry.isDirectory() || entry.isSymbolicLink())
+    // A directory alias is not another source module. Only inspect a link
+    // when Git's source inventory actually requires paths beneath it (for
+    // example, a tracked source directory replaced by a local symlink).
+    const dirs = entries.filter(entry => (entry.isDirectory() || entry.isSymbolicLink()
+      && sources.some(file => file.startsWith(path.posix.join(dir, entry.name) + "/")))
       && !entry.name.startsWith(".") && !DIR_DENYLIST.has(entry.name))
       .map(entry => path.posix.join(dir, entry.name));
     const ignored = await gitIgnoredPaths(root, dirs);

@@ -222,7 +222,9 @@ describe("portable automation", { timeout: 20000 }, () => {
     await fs.rmdir(path.join(root, "additional/file.js"));
     await write("additional/file.js", "export const value = true;");
     expect((await automate(root, { event: "after_tool" })).report.findings.some(f => f.original.type === "new-module")).toBe(true);
-    await fs.symlink(path.join(root, "old-module"), path.join(root, "alias"));
+    // A selected source alias remains unsafe; unrelated directory aliases
+    // are outside module discovery's source inventory.
+    await fs.symlink(path.join(root, "additional/file.js"), path.join(root, "additional/alias.js"));
     await expect(automate(root, { event: "task_end" })).rejects.toThrow("symbolic link");
   });
 

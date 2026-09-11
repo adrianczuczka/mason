@@ -51,11 +51,31 @@ mason-audit --dir . --verify-repair .mason/reports/repairs/<id>.json
 
 Preparation saves the full original audit under `.mason/reports/repairs/`; it does not edit documentation. Ordinary audits and verification remain read-only. Add `.mason/reports/` to your ignore rules if you want these local artifacts excluded from commits. Keep the same baseline through any final documentation commit, then verify again. Do not regenerate it to clear unresolved findings. `--json` is supported for preparation and verification; use `--checks` only during preparation to select a scope.
 
-Each original finding is **resolved** (its check no longer reports it), **unresolved**, **review-required**, or **unverified**. New findings are separate. A shifted line number does not erase the original claim, and a missing document, unavailable history, or skipped check cannot count as a fix. Inspect the edit for meaning: these deterministic checks do not establish complete documentation correctness. Code examples and arbitrary build commands need separate validation using the project's toolchain.
+Each original finding is **resolved** (its check no longer reports it, or an explicit assessment covers current evidence), **unresolved**, **review-required**, or **unverified**. The reason and optional `review` distinguish these outcomes. New findings are separate. A shifted line number does not erase the original claim, and a missing document, unavailable history, or skipped check cannot count as a fix. These checks do not establish complete documentation correctness. Code examples and arbitrary build commands need separate validation using the project's toolchain.
 
-Dependency evidence suppressed by local edits is retained in `suppressedAdvisories`, including when setup has already dirtied the document. Committing that document does not prove the dependency change was reviewed: the original advisory stays in the repair report. Record your assessment separately; this workflow does not approve advisories or decisions. Baselines are validated local evidence with a checksum to detect accidental edits, not authenticated attestations.
+Dependency evidence suppressed by local edits is retained in `suppressedAdvisories`, including when setup has already dirtied the document. Committing that document does not prove the dependency change was reviewed: the original advisory stays in the repair report. Baselines are validated local evidence with a checksum to detect accidental edits, not authenticated attestations.
 
 Ordinary audit exit codes remain **0** for no issues (advisories may exist), **1** for issues, and **2** for errors. Explicit `--verify-repair` uses **0** for verified scope, **1** for remaining/new issues, and **2** for incomplete verification, including advisories needing review or skipped checks. Incomplete verification takes precedence when both issues and unavailable evidence remain.
+
+### Review an advisory
+
+An advisory can remain true after review: a manifest changed, but the instructions still apply. Ask your assistant to assess that finding. `review_advisory` takes the original `baselinePath`, the `findingId` from verification or automation, and `action: "prepare"`. It returns the original evidence, scoped Git state, review history, a bounded diff preview, and a `reviewToken` without writing anything.
+
+After inspecting the evidence, record the authorized assessment with `action: "addressed"`, `"inapplicable"`, or `"deferred"`, the actual `reviewer`, a reason in `note`, and that token. Relevant document and source edits must be committed; unrelated local work can remain. Changed evidence or competing reviews invalidate the prepared token. Deferral remains outstanding.
+
+CLI equivalent:
+
+```sh
+mason audit review --baseline .mason/reports/repairs/<baseline>.json --finding <finding-id> --json
+# Inspect the returned evidence, then record the authorized assessment:
+mason audit review --baseline .mason/reports/repairs/<baseline>.json --finding <finding-id> \
+  --outcome inapplicable --reviewer 'Reviewer name' \
+  --note 'The added build script does not change these instructions.' --token <review-token>
+```
+
+Assessment history is versioned under `.mason/reviews/advisories/`. Review and commit that record, then verify the original baseline again. Assessments survive unrelated commits and the final metadata commit; changes within the recorded document and manifest/path scope reopen them. Explicit path references also retain presence observations for ignored generated outputs; they do not verify those files' contents. Equivalent findings in retained baselines share a review identity. Another clone can use the shared assessment with its own local baseline. Original findings and prior events remain available; ordinary audit JSON preserves them alongside additive `advisoryReviews`, while its concise summary keeps currently reviewed advisories out of the active list. Automation also includes closed findings in the full report and excludes them from its active summary.
+
+Decision findings route to `review_decision`. Acceptance, reaffirmation or retirement must cover the original finding and retain usable history; proposals alone never close it. An advisory assessment cannot approve an engineering decision. Recorded reviewer identities and dispositions are assertions for normal project review, not authenticated approvals or proof of correctness. Missing, malformed, skipped or conflicting evidence remains unverified. If setup previously ignored all `.mason/` data, rerun setup to allow versioning `.mason/reviews/`.
 
 ### Repair pull requests in CI
 

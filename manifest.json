@@ -76,6 +76,48 @@
       }
     },
     {
+      "name": "review_advisory",
+      "description": "Prepare an assessment of an original repair advisory and its exact repository scope, then record authorized addressed, inapplicable or deferred outcomes with reviewToken, reviewer and note. Relevant changes reopen reviews; unrelated commits preserve them. Records belong in Git. Decision findings route to review_decision; this tool never approves decisions. Recorded identities are assertions, not authenticated approvals.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": {
+            "type": "string"
+          },
+          "baselinePath": {
+            "type": "string"
+          },
+          "findingId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "prepare",
+              "addressed",
+              "inapplicable",
+              "deferred"
+            ],
+            "default": "prepare"
+          },
+          "reviewer": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "reviewToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dir",
+          "baselinePath",
+          "findingId"
+        ]
+      }
+    },
+    {
       "name": "mason_complete_init",
       "description": "Record assistant instruction setup locally in ignored .mason/local/project.json, with feature settings in shared .mason/config.json. Other tools work without this marker. Repeated calls preserve the original setup time and existing settings; pass confluenceConfigured only to change that setting.",
       "inputSchema": {
@@ -259,7 +301,7 @@
     },
     {
       "name": "save_decision",
-      "description": "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. No setup or map required. Writes a local record and preserves content history. Changes create a pending proposal while the last accepted revision remains operative; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede a record with an operative accepted revision; review its replacement and retire the original separately.",
+      "description": "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. Compare matching get_context records and pending proposals before saving. When new evidence changes the same lesson's assumptions, scope, or recommended action, pass its existing id, including for accepted records. Preserve supported rationale and sources and replace obsolete instructions. Create a new record for a genuinely distinct lesson; skip unchanged restatements. No setup or map required. Writes a local record and preserves content history. Changes create a pending proposal while the last accepted revision remains operative; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede a record with an operative accepted revision; review its replacement and retire the original separately.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -268,7 +310,7 @@
           "body": { "type": "string", "minLength": 1, "maxLength": 2500, "description": "The knowledge itself: what was tried/decided, why, and what to avoid. Must contain information NOT derivable by reading the code. Aim for 1500 characters or fewer; up to 2500 is accepted with a warning above the target. Matching context and hooks include the full body. Preserve exceptions; use sources for supporting references." },
           "category": { "type": "string", "enum": ["decision", "gotcha", "deprecation", "convention"] },
           "files": { "type": "array", "items": { "type": "string" }, "description": "Repo-relative files or directory prefixes; changes flag the decision for re-verification across retrieval, hooks, and review" },
-          "id": { "type": "string", "description": "Existing id to revise; unchanged content does not re-verify" },
+          "id": { "type": "string", "description": "Pass the matching record's existing id when evidence changes that lesson's assumptions, scope, or recommended action, including for accepted records. Changed content becomes a proposal while the accepted version remains operative; unchanged content leaves review and freshness untouched." },
           "supersedes": { "type": "string", "description": "Id of an unreviewed record or proposal with no accepted revision to replace. Operative accepted decisions require separate review and retirement." },
           "owner": { "type": ["string", "null"], "minLength": 1, "maxLength": 200, "description": "Responsible person or team; null clears it. Required for acceptance." },
           "sources": { "type": "array", "maxItems": 20, "description": "Known source references; omit to preserve, [] clears", "items": {

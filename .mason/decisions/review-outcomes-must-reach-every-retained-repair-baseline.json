@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "id": "review-outcomes-must-reach-every-retained-repair-baseline",
+  "title": "Review outcomes must reach every retained repair baseline",
+  "body": "An initially clean repair baseline can later report the same advisory as a new finding while another retained baseline owns it as an original finding. Closing only the latter leaves automation permanently incomplete. Share assessments by stable finding identity and apply them to both original and new findings without deleting raw evidence. Keep raw check caching separate from review status, and include review-record contents in publication fingerprints so a concurrent assessment cannot publish stale closure. Bind review scope to relevant document/manifest history rather than HEAD alone: final metadata and unrelated commits must preserve it. Explicit ignored-path presence needs its own observation because Git alone misses it. Decision findings must consume the existing authorized decision history instead of creating a second approval path. These boundaries were exercised by the multi-baseline, final-commit, concurrency, and ignored-output regressions; they do not establish semantic correctness or authenticated approval.",
+  "category": "gotcha",
+  "files": [
+    "src/audit/repair.ts",
+    "src/audit/advisory-review.ts",
+    "src/automation/evidence.ts",
+    "test/advisory-review.test.ts"
+  ],
+  "createdAt": "2026-09-11T07:57:32.382Z",
+  "updatedAt": "2026-09-11T07:57:32.382Z",
+  "refreshedHash": "e9f04c4ef580195705a322c9a03d35fdad1b1a78",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "document",
+      "reference": "test/advisory-review.test.ts",
+      "note": "Original/new findings across retained baselines, final metadata commit, concurrent reviews and ignored output changes."
+    },
+    {
+      "kind": "document",
+      "reference": "docs/checks.md",
+      "note": "Explicit assessments preserve original evidence and remain separate from decision approval."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-09-11T07:57:32.382Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Review outcomes must reach every retained repair baseline",
+        "body": "An initially clean repair baseline can later report the same advisory as a new finding while another retained baseline owns it as an original finding. Closing only the latter leaves automation permanently incomplete. Share assessments by stable finding identity and apply them to both original and new findings without deleting raw evidence. Keep raw check caching separate from review status, and include review-record contents in publication fingerprints so a concurrent assessment cannot publish stale closure. Bind review scope to relevant document/manifest history rather than HEAD alone: final metadata and unrelated commits must preserve it. Explicit ignored-path presence needs its own observation because Git alone misses it. Decision findings must consume the existing authorized decision history instead of creating a second approval path. These boundaries were exercised by the multi-baseline, final-commit, concurrency, and ignored-output regressions; they do not establish semantic correctness or authenticated approval.",
+        "category": "gotcha",
+        "files": [
+          "src/audit/repair.ts",
+          "src/audit/advisory-review.ts",
+          "src/automation/evidence.ts",
+          "test/advisory-review.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": "test/advisory-review.test.ts",
+            "note": "Original/new findings across retained baselines, final metadata commit, concurrent reviews and ignored output changes."
+          },
+          {
+            "kind": "document",
+            "reference": "docs/checks.md",
+            "note": "Explicit assessments preserve original evidence and remain separate from decision approval."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "e9f04c4ef580195705a322c9a03d35fdad1b1a78"
+    }
+  ]
+}

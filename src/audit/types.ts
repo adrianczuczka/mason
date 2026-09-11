@@ -149,6 +149,8 @@ export interface AuditReport {
   suppressedAdvisories?: AuditAdvisory[];
   skippedChecks: Array<{ check: string; reason: string; doc?: string }>;
   clean: boolean;
+  /** Additive assessment status; original advisory evidence remains intact. */
+  advisoryReviews?: import("./advisory-review.js").AdvisoryReviewSummary[];
 }
 
 export interface PathClaim {

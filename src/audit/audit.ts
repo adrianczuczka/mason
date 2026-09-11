@@ -7,6 +7,7 @@ import { discoverDocs } from "./docs.js";
 import { ALL_CHECKS } from "./types.js";
 import type { AuditReport, CheckName } from "./types.js";
 import { CHECKS } from "./checks/index.js";
+import { assessAdvisory } from "./advisory-review.js";
 import type { CheckContext, CheckResult } from "./checks/index.js";
 
 export interface AuditOptions {
@@ -96,5 +97,8 @@ export async function computeAudit(
   }
 
   report.clean = report.issues.length === 0;
+  const reviews = (await Promise.all([...report.advisories, ...report.suppressedAdvisories!]
+    .map(finding => assessAdvisory(resolvedRoot, finding, headHash)))).filter(review => review !== null);
+  if (reviews.length) report.advisoryReviews = reviews;
   return report;
 }

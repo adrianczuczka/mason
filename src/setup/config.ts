@@ -91,7 +91,7 @@ export async function ancillaryEdits(root: string) {
   catch (error) { if ((error as { code?: number }).code !== 1) throw error; }
   const retainParentRule = parentIgnored || !!ignore?.replace(/\r\n/g, "\n").includes("# mason:ignore:start\n!/.mason/\n/.mason/*");
   const rules = [...(retainParentRule ? ["!/.mason/", "/.mason/*"] : []),
-    "!/.mason/decisions/", "!/.mason/decisions/**", "!/.mason/config.json", "!/.mason/snapshot.json",
+    "!/.mason/decisions/", "!/.mason/decisions/**", "!/.mason/reviews/", "!/.mason/reviews/**", "!/.mason/config.json", "!/.mason/snapshot.json",
     "/.mason/local/", "/.mason/reports/"].join("\n");
   return [{ path: ".gitignore", before: ignore, after: managedBlock(ignore ?? "", "# mason:ignore:start", "# mason:ignore:end", rules) }];
 }

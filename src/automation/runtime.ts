@@ -31,7 +31,7 @@ export interface AutomationReport {
   scope: string;
 }
 
-const SCOPE = "Documentation audit evidence only. Hook receipts show observed events, not complete interception. Resolved claims no longer fail their checks; historical advisories need separate review. Repair only within the user's task authorization.";
+const SCOPE = "Documentation audit evidence only. Hook receipts show observed events, not complete interception. Resolved findings no longer fail their checks or have a recorded assessment covering current evidence. Repair and review only within the user's task authorization.";
 const priority = { resolved: 0, "review-required": 1, unresolved: 2, unverified: 3 };
 const cleanText = (text: string) => text.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").slice(0, 250);
 

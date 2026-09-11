@@ -4,6 +4,10 @@ An ordinary investigation should retain useful project rationale as a sourced pr
 
 The [development smoke results](SMOKE_RESULTS.md) record the completed two-host workflow, earlier failures, and the limits of the comparison.
 
+The [conditional lifecycle case](LIFECYCLE.md) extends this through changed requirements, a second independent review, and another fresh session. It uses a reduced R8 startup reproduction drawn from a real removal/reintroduction incident, with an ordinary-notes comparison and a no-capture control.
+
+The [interrupted-upload probe](UPLOAD.md) tests maintenance of deliberately seeded, reviewed knowledge under a changed retention assumption, with a local publishing simulator, fresh-session reuse and a first-upload control. It measures maintenance rather than original capture.
+
 ```sh
 npm run build
 npm run bench:knowledge -- --validate
