@@ -1,9 +1,9 @@
 import { runAuditCli } from "../src/audit/cli.js";
 
 runAuditCli(process.argv.slice(2)).then(
-  (code) => process.exit(code),
+  (code) => { process.exitCode = code; },
   (err) => {
     process.stderr.write(`mason-audit error: ${err}\n`);
-    process.exit(2);
+    process.exitCode = 2;
   }
 );

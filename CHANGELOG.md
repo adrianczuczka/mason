@@ -1,17 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 — 2026-09-11
 
-- Clarify when agents should revise an existing lesson using its ID, including accepted records, instead of creating another proposal. Keep supported rationale and sources, distinguish genuinely separate lessons, and preserve review boundaries.
-- Add an interrupted-upload maintenance probe with a local publishing simulator, reviewed starting knowledge, fresh-session reuse and first-upload controls. No real publishing service is contacted.
+Mason can now retain an authorized advisory assessment through later sessions and commits, then reopen it when relevant evidence changes. Documentation audits cover nested instructions and README files with more precise reference and command scope.
 
-- Add a conditional knowledge lifecycle evaluation using a reduced R8 startup reproduction, ordinary-note comparison, two independent reviews, fresh-session reuse and a no-capture control. This is evaluation tooling, not automatic compiler discovery or a new production check.
-
-- Passive audits ignore directory aliases outside the source inventory while still refusing links used by selected source paths; fixes the audit abort reproduced on ripgrep's `HomebrewFormula` alias.
 - Record authorized advisory assessments through `review_advisory` and `mason audit review`. Preserve history, reuse decision reviews, retain closure through unrelated and metadata commits, and reopen when relevant evidence changes. Deferred or unavailable findings remain outstanding.
 - Discover nested README and agent instruction files with their actual filename casing. Respect exclusions and preserve scope through local references, package commands, repair baselines, and automation caches.
 - Keep never-tracked paths, ambiguous commands, and undocumented modules advisory. Recheckable candidates can resolve when their condition disappears; historical dependency and decision advisories still require review.
+- Passive audits ignore directory aliases outside the source inventory while still refusing links used by selected source paths; fixes the audit abort reproduced on ripgrep's `HomebrewFormula` alias.
 - Import individual native-validator outcomes through `mason-check-json`, including optional environment metadata. Preserve missing, skipped, failed, stale, and unknown evidence without running imported commands. Automatic compiler discovery and snippet execution remain future integrations.
+- Update the pinned Markdown parser to `markdown-it` 14.3.1, covering its published denial-of-service fixes.
+- Flush complete audit and repair JSON before exit when output is piped, including through the unified `mason audit` command.
+- Clarify when agents should revise an existing lesson using its ID, including accepted records, instead of creating another proposal. Keep supported rationale and sources, distinguish genuinely separate lessons, and preserve review boundaries.
+- Add knowledge-maintenance evaluations with a reduced R8 startup reproduction and a local publishing simulator. Fourteen live Codex sessions exercised reviewed revision, fresh-session reuse and controls; both Mason and ordinary notes passed. These development trials do not establish superiority over notes or production integration correctness. See the [results and limitations](bench/harness/knowledge/REVISION_GUIDANCE_RESULTS.md).
+
+Run `mason upgrade` for standalone installations, or `npm install -g mason-context@0.17.0` for npm installations, then restart running assistants. Existing PATH-based integrations use the new binary on their next launch. In each project, rerun `mason setup --host codex` or `--host claude` to refresh the managed decision guidance and Git ignore rules for `.mason/reviews/`; review and commit those project changes. This preserves existing decisions and repair evidence and requires no decision-store migration. Setup does not approve findings or decision records.
 
 ## 0.16.3 — 2026-09-09
 

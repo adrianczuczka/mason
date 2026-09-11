@@ -58,7 +58,7 @@ mason audit --dir .
 mason review --dir . --base origin/main
 ```
 
-The audit checks claims in `AGENTS.md` and `CLAUDE.md`. The review checks committed changes against your chosen base. Both are read-only and need no model calls.
+The audit checks claims in README and agent instruction files throughout the repository. The review checks committed changes against your chosen base. Both are read-only and need no model calls.
 
 ## What Mason catches
 

@@ -198,6 +198,8 @@ Add to your VS Code settings (`settings.json`):
 
 ## Upgrading from earlier versions
 
+**0.17.0:** Upgrade Mason and restart running assistants. Existing PATH-based integrations immediately use the upgraded binary. Rerun `mason setup --host codex` or `--host claude` in each project to refresh the managed guidance for revising existing lessons and the Git ignore rules that retain `.mason/reviews/`. Review and commit these project changes. Existing decisions and repair evidence are preserved; no decision-store migration is required, and setup does not approve findings or decisions.
+
 **0.15.0:** Project integrations use the global `mason` command. Earlier generated setup layouts have no automatic migration: remove their Mason MCP/hook entries and generated setup files, preserve decisions and repair reports, then follow the fresh setup flow above. Once configured, global upgrades apply on the next launch; restart running assistants and review any changed native trust settings.
 
 **0.10.1 decision fix:** Accepted constraints remain visible while replacement revisions are proposed. Clients sharing a decision store should use a version containing this fix. See the [release notes](../CHANGELOG.md#0101--2026-09-05).

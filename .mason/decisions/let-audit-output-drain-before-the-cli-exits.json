@@ -1,0 +1,61 @@
+{
+  "version": 2,
+  "id": "let-audit-output-drain-before-the-cli-exits",
+  "title": "Let audit output drain before the CLI exits",
+  "body": "During 0.17.0 release preparation, a real repair verification produced valid 122 KB JSON when redirected to a file but truncated JSON when captured through a pipe. The audit entry point called process.exit immediately after writing, losing buffered stdout even though the check finished. Setting process.exitCode lets Node drain output while preserving the 0/1/2 result; the unified mason audit command delegates to the same entry point. The CLI regression deliberately delays the pipe reader and checks full preparation and verification reports, their final finding, and the nonzero exit status. Both entry points failed before the fix and passed afterwards. In-process tests with a string-collecting output callback cannot detect this boundary. Other command entry points were not changed or exhaustively assessed in this release.",
+  "category": "gotcha",
+  "files": [
+    "bin/mason-audit.ts",
+    "test/audit-cli.test.ts"
+  ],
+  "createdAt": "2026-09-11T10:33:09.024Z",
+  "updatedAt": "2026-09-11T10:33:09.024Z",
+  "refreshedHash": "045369e2e124bb90dd342274f15e7955b8373fd0",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "document",
+      "reference": "test/audit-cli.test.ts",
+      "note": "Slow-reader subprocess regression for dedicated and unified audit preparation and verification."
+    },
+    {
+      "kind": "incident",
+      "reference": "Mason 0.17.0 release preparation, 2026-09-11",
+      "note": "Retained local repair JSON parsed from a file but was truncated through execFileSync capture before the exit-handling fix."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-09-11T10:33:09.024Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Let audit output drain before the CLI exits",
+        "body": "During 0.17.0 release preparation, a real repair verification produced valid 122 KB JSON when redirected to a file but truncated JSON when captured through a pipe. The audit entry point called process.exit immediately after writing, losing buffered stdout even though the check finished. Setting process.exitCode lets Node drain output while preserving the 0/1/2 result; the unified mason audit command delegates to the same entry point. The CLI regression deliberately delays the pipe reader and checks full preparation and verification reports, their final finding, and the nonzero exit status. Both entry points failed before the fix and passed afterwards. In-process tests with a string-collecting output callback cannot detect this boundary. Other command entry points were not changed or exhaustively assessed in this release.",
+        "category": "gotcha",
+        "files": [
+          "bin/mason-audit.ts",
+          "test/audit-cli.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": "test/audit-cli.test.ts",
+            "note": "Slow-reader subprocess regression for dedicated and unified audit preparation and verification."
+          },
+          {
+            "kind": "incident",
+            "reference": "Mason 0.17.0 release preparation, 2026-09-11",
+            "note": "Retained local repair JSON parsed from a file but was truncated through execFileSync capture before the exit-handling fix."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "045369e2e124bb90dd342274f15e7955b8373fd0"
+    }
+  ]
+}
