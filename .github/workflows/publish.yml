@@ -10,7 +10,7 @@ jobs:
 
   publish:
     needs: standalone
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
@@ -26,6 +26,14 @@ jobs:
       - run: npm run typecheck
       - name: Verify release version
         run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + JSON.parse(require("fs").readFileSync("package.json")).version) process.exit(1)'
+      - name: Configure native knowledge validation
+        run: |
+          r8_jar="${ANDROID_HOME:?}/build-tools/36.0.0/lib/d8.jar"
+          jdk_home="${JAVA_HOME_17_X64:?}"
+          printf '4097ff9c46c185c6e7214da7fe9b1befb5adeea5cc9ca349270e0249904f9240  %s\n' "$r8_jar" | sha256sum --check
+          "$jdk_home/bin/javac" -version
+          "$jdk_home/bin/java" -cp "$r8_jar" com.android.tools.r8.R8 --version
+          printf 'MASON_EVAL_R8_JAR=%s\nMASON_EVAL_JAVA_HOME=%s\n' "$r8_jar" "$jdk_home" >> "$GITHUB_ENV"
       - run: npm test
       - run: NODE_AUTH_TOKEN="" npm publish --provenance --access public
 

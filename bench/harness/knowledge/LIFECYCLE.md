@@ -73,3 +73,5 @@ npx vitest run test/knowledge-lifecycle.test.ts test/knowledge-benchmark.test.ts
 ```
 
 The native regression cases run when both toolchain environment variables are supplied; otherwise Vitest explicitly skips them. The benchmark itself always requires native preflight and cannot report a pass without it.
+
+CI and tag publishing explicitly supply the Ubuntu 24.04 runner's JDK 17 and Android build-tools 36.0.0 R8 jar, verifying the jar's SHA-256 before tests. Missing tools or a changed artifact fail setup; CI's complete-evidence gate does not waive skipped native tests. This is test infrastructure, not compiler discovery or a download performed by Mason.
