@@ -9,6 +9,7 @@ import { verifyBundle } from "./bundle.js";
 import { storePath, readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { withLock } from "../automation/store.js";
 import { configurePath, removePath, pathChangeSchema } from "./path.js";
+import type { Progress } from "../utils/progress.js";
 
 const recordSchema = z.object({ format: z.literal(1), home: z.string(), bin: z.string(),
   current: z.string().regex(/^[a-f0-9]{24}$/), version: z.string(), launchers: z.record(z.string()), previousLaunchers: z.record(z.string()).optional(),
@@ -30,7 +31,8 @@ async function replace(file: string, content: string, mode = 0o600) {
 }
 
 /** User installation only. Project runtimes and host trust remain independent. */
-export async function installStandalone(source: string) {
+export async function installStandalone(source: string, progress?: Progress) {
+  progress?.step("Checking installation files and location");
   const bundle = await verifyBundle(source);
   const selectedHome = path.resolve(defaultHome());
   await fs.mkdir(selectedHome, { recursive: true });
@@ -87,6 +89,7 @@ finally { $env:MASON_UNINSTALL_TOKEN = $previousToken }
       if (actual !== null && actual !== expected) throw new Error("Retired launcher was edited; retained: " + name);
     };
     for (const [name, expected] of retired) await checkRetired(name, expected);
+    progress?.step(`Installing Mason ${bundle.manifest.version}`);
     const receipt = { format: 1, home, bin, current: id, version: bundle.manifest.version, launchers, pathChanges: previous?.pathChanges ?? [] };
     // Claim only the preflighted installation, retaining old launchers for interrupted upgrades.
     await writeStoreJson(home, "install.json", { ...receipt, previousLaunchers: previous?.previousLaunchers ?? previous?.launchers });
@@ -106,11 +109,12 @@ finally { $env:MASON_UNINSTALL_TOKEN = $previousToken }
       for (const [name, expected] of retired) { await checkRetired(name, expected); await fs.rm(await storePath(bin, name), { force: true }); }
       await writeStoreJson(home, "install.json", receipt);
     } finally { await fs.rm(stage, { recursive: true, force: true }); }
+    progress?.step("Checking terminal command availability");
     const pathResult = await configurePath(bin, receipt.pathChanges, async changes => {
       receipt.pathChanges = changes;
       await writeStoreJson(home, "install.json", receipt);
     });
-    return { home, bin, version: bundle.manifest.version, path: pathResult };
+    return { home, bin, version: bundle.manifest.version, previousVersion: previous?.version, path: pathResult };
   });
 }
 
@@ -125,12 +129,15 @@ async function currentInstallation() {
   return { home, bundle, record };
 }
 
-export async function upgradeStandalone(version?: string) {
+export async function upgradeStandalone(version?: string, progress?: Progress) {
   if (version && !/^v?\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(version)) throw new Error("Expected a release version such as 0.14.0.");
+  progress?.step("Checking current installation");
   const { home, bundle, record } = await currentInstallation();
   await verifyBundle(bundle);
   const windows = process.platform === "win32";
   const script = path.join(bundle, windows ? "install.ps1" : "install.sh");
+  // The installer owns progress from here; do not animate over its inherited IO.
+  progress?.stop();
   return new Promise<number>((resolve, reject) => {
     const child = spawn(windows ? "powershell.exe" : "sh", windows ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script] : [script],
       { stdio: "inherit", windowsHide: true, env: { ...process.env, MASON_HOME: home, MASON_BIN_DIR: record.bin, MASON_VERSION: version ?? "" } });

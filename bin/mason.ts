@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { runAutomationCli, isHookCommand } from "../src/automation/cli.js";
+import { createProgress, type Progress } from "../src/utils/progress.js";
 
 declare const PKG_VERSION: string;
 const inputArgs = process.argv.slice(2);
@@ -24,6 +25,7 @@ Usage: mason <command> [options]
 Use mason <command> --help for options. npm users can keep using mason-auto,
 mason-audit, mason-review, mason-drift, mason-hook and mason-mcp.`;
 
+let progress: Progress | undefined;
 try {
   if (managedLaunch) {
     if (!setupHost || !["codex", "claude"].includes(setupHost) || !["mcp", "auto"].includes(command)) throw new Error("Invalid setup invocation.");
@@ -41,14 +43,22 @@ try {
     if (args.length) throw new Error("internal-install takes no arguments.");
     const { installStandalone } = await import("../src/distribution/install.js");
     const bundleRoot = fileURLToPath(new URL("../..", import.meta.url));
-    const installed = await installStandalone(bundleRoot);
-    console.log(`Installed Mason ${installed.version} in ${installed.home}.\n${installed.path.message}`);
+    progress = createProgress();
+    const installed = await installStandalone(bundleRoot, progress);
+    progress.stop();
+    const outcome = installed.previousVersion && installed.previousVersion !== installed.version
+      ? `Updated Mason ${installed.previousVersion} → ${installed.version}` : `Installed Mason ${installed.version}`;
+    console.log(`${outcome} in ${installed.home}.\n${installed.path.message}`);
   } else if (command === "upgrade" || command === "uninstall") {
     if (args.includes("--help")) console.log(command === "upgrade" ? "Usage: mason upgrade [version]. Configured projects use the upgraded command on their next launch. Restart running assistants." : "Usage: mason uninstall. Removes the standalone user installation; project configuration and knowledge are retained. Run mason teardown in each project first to disconnect its integrations.");
     else {
       const { upgradeStandalone, uninstallStandalone } = await import("../src/distribution/install.js");
       if (args.length > (command === "upgrade" ? 1 : 0)) throw new Error("Unexpected arguments.");
-      if (command === "upgrade") process.exitCode = await upgradeStandalone(args[0]);
+      if (command === "upgrade") {
+        progress = createProgress();
+        process.exitCode = await upgradeStandalone(args[0], progress);
+        if (process.exitCode === 0) console.log("Restart running assistants to use this installation. Existing project integrations use mason from PATH.");
+      }
       else console.log((process.platform === "win32" ? "Finishing installation cleanup after runtime exit: " : "Removed standalone installation: ") + await uninstallStandalone() + ". Project configuration and knowledge were retained. Reinstall Mason to use its integrations.");
     }
   } else if (["setup", "teardown", "status", "check", "auto"].includes(command)) {
@@ -65,6 +75,7 @@ try {
     await import(binary.href);
   } else throw new Error("Unknown command: " + command + ". Run mason --help.");
 } catch (error) {
+  progress?.stop(false);
   const message = "Mason: " + (error instanceof Error ? error.message : String(error));
   if (command === "auto" && isHookCommand(args)) {
     console.log(JSON.stringify({ systemMessage: message + " Verification was not established." }));

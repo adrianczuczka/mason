@@ -1,6 +1,7 @@
 # Download a self-contained Mason release; works in Windows PowerShell 5.1+.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+function Write-MasonStep([string]$Message) { [Console]::Error.WriteLine("Mason: $Message...") }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 $arch = switch ($architecture) { 'ARM64' { 'arm64' } 'AMD64' { 'x64' } default { throw "Unsupported architecture: $architecture" } }
@@ -9,6 +10,7 @@ if ($env:MASON_RELEASE_BASE -and -not $version) {
     throw 'Set MASON_VERSION when using MASON_RELEASE_BASE; no public latest-version lookup was made.'
 }
 if (-not $version) {
+    Write-MasonStep 'Checking the latest release'
     $response = Invoke-WebRequest -UseBasicParsing -Method Head -Uri 'https://github.com/adrianczuczka/mason/releases/latest'
     $url = if ($response.BaseResponse.ResponseUri) { $response.BaseResponse.ResponseUri.AbsoluteUri } else { $response.BaseResponse.RequestMessage.RequestUri.AbsoluteUri }
     $version = ($url -split '/')[-1]
@@ -21,7 +23,12 @@ $temp = Join-Path ([IO.Path]::GetTempPath()) ('mason-install-' + [Guid]::NewGuid
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
     $archive = Join-Path $temp 'bundle.zip'
-    Invoke-WebRequest -UseBasicParsing -Uri "$base/v$version/$asset" -OutFile $archive
+    Write-MasonStep "Downloading Mason $version (win32-$arch)"
+    # Native transfer progress is useful in a terminal, but not in redirected logs.
+    if (-not [Console]::IsOutputRedirected -and -not [Console]::IsErrorRedirected -and -not $env:CI -and $env:TERM -ne 'dumb') { $ProgressPreference = 'Continue' }
+    try { Invoke-WebRequest -UseBasicParsing -Uri "$base/v$version/$asset" -OutFile $archive }
+    finally { $ProgressPreference = 'SilentlyContinue' }
+    Write-MasonStep 'Verifying download'
     $checksums = (Invoke-WebRequest -UseBasicParsing -Uri "$base/v$version/SHA256SUMS").Content
     if ($checksums -is [byte[]]) { $checksums = [Text.Encoding]::UTF8.GetString($checksums) }
     $checksumLines = @($checksums -split "`n" | Where-Object { $_ -cmatch ('^[a-f0-9]{64}\s+' + [regex]::Escape($asset) + '\s*$') })
@@ -32,6 +39,7 @@ try {
     try { $actual = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
     finally { $stream.Dispose(); $sha.Dispose() }
     if ($actual -ne $expected) { throw 'Mason archive checksum mismatch; installation unchanged.' }
+    Write-MasonStep 'Extracting installation files'
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($archive)
     try {

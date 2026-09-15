@@ -26,8 +26,9 @@ export async function configurePath(bin: string, previous: PathChange[], save: (
   const currentPath = platform === "win32" ? Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1] : env.PATH;
   const alreadyOnPath = platform === "win32" ? hasWindowsEntry(currentPath ?? null, bin, env)
     : (currentPath ?? "").split(":").some(entry => path.posix.isAbsolute(entry) && path.posix.resolve(entry) === path.posix.resolve(bin));
-  const message = alreadyOnPath ? "Run: mason setup --host codex" : "Open a new terminal, then run: mason setup --host codex";
-  const manual = (reason: string): PathResult => ({ status: "manual", changes, message: `${reason}\n${alreadyOnPath ? message : `Add ${bin} to your PATH, then run: mason setup --host codex`}` });
+  const setupHint = "To connect a project, run one of these inside its directory:\n  Codex:       mason setup --host codex\n  Claude Code: mason setup --host claude";
+  const message = (alreadyOnPath ? "" : "Open a new terminal to use mason.\n") + setupHint;
+  const manual = (reason: string): PathResult => ({ status: "manual", changes, message: `${reason}\n${alreadyOnPath ? "" : `Add ${bin} to your PATH.\n`}${setupHint}` });
   if (env.MASON_NO_MODIFY_PATH === "1") return manual("Automatic PATH setup is disabled (MASON_NO_MODIFY_PATH=1).");
   if (/[\r\n\0]/.test(bin) || bin.includes(platform === "win32" ? ";" : ":")) return manual("This installation path cannot be represented safely in PATH.");
   try {

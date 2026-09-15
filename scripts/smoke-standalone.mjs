@@ -84,9 +84,12 @@ async function context(host, directory = repo) {
     : JSON.parse(await fs.readFile(path.join(directory, '.mcp.json'), 'utf8')).mcpServers.mason;
   assert.notEqual(config.command, 'node');
   const transport = new StdioClientTransport({ ...config, env, cwd: path.join(directory, 'src'), stderr: 'pipe' });
+  let stderr = '';
+  transport.stderr?.on('data', bytes => { stderr += bytes; });
   const client = new Client({ name: 'standalone-smoke', version: '1' });
   try { await client.connect(transport); const result = await client.callTool({ name: 'get_context', arguments: { dir: directory, task: 'Rename the entry module', files: ['src/old.ts'] } }); assert(!result.isError); }
   finally { await client.close(); }
+  assert(!stderr.includes('Checking project configuration') && !stderr.includes('\x1b'), 'MCP must not emit human progress.');
 }
 async function hook(host, event, directory = repo) {
   const config = JSON.parse(await fs.readFile(path.join(directory, host === 'codex' ? '.codex/hooks.json' : '.claude/settings.json'), 'utf8'));
@@ -95,6 +98,7 @@ async function hook(host, event, directory = repo) {
   // Match Node's shell launch: cmd.exe needs the whole command quoted verbatim,
   // otherwise argument escaping inserts literal backslashes into PowerShell.
   const output = await run(windows ? 'cmd.exe' : 'sh', windows ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command], { cwd: path.join(directory, 'src'), input, windowsVerbatimArguments: windows, timeoutMs: handler.timeout * 1000 });
+  assert.equal(output.stderr, '', 'Hooks must not emit human progress.');
   if (output.stdout.trim()) assert.doesNotThrow(() => JSON.parse(output.stdout));
   return output.stdout.trim() ? JSON.parse(output.stdout) : null;
 }
@@ -111,7 +115,12 @@ try {
   await assert.rejects(install(), /Set MASON_VERSION when using MASON_RELEASE_BASE/);
   assert.equal(downloadRequests, requestsBefore);
   env.MASON_VERSION = original.version;
-  assert((await install()).stdout.includes('Open a new terminal'));
+  const installed = await install();
+  assert(installed.stdout.includes('Open a new terminal'));
+  assert(installed.stdout.includes('Codex:       mason setup --host codex'));
+  assert(installed.stdout.includes('Claude Code: mason setup --host claude'));
+  for (const stage of ['Downloading Mason', 'Verifying download', 'Extracting installation files', 'Installing Mason']) assert(installed.stderr.includes(stage));
+  assert(!installed.stderr.includes('\x1b'), 'Redirected installer progress must be plain text.');
   assert.equal((await mason('--version')).stdout.trim(), original.version);
   assert.equal((await freshTerminal()).stdout.trim(), original.version);
   if (windows) {
@@ -142,7 +151,9 @@ try {
   await fs.writeFile(path.join(repo, 'AGENTS.md'), 'Entry module: `src/old.ts`.\n');
   await commit('initial');
   for (const host of ['codex', 'claude']) {
-    const result = JSON.parse((await mason('setup', '--dir', repo, '--host', host, '--json')).stdout);
+    const setupOutput = await mason('setup', '--dir', repo, '--host', host, '--json');
+    assert.equal(setupOutput.stderr, '', 'JSON setup must not emit human progress.');
+    const result = JSON.parse(setupOutput.stdout);
     assert.equal(result.activation.status, 'pending');
     assert.equal(result.runtime.kind, "global");
     assert.equal(result.runtime.version, original.version);
@@ -197,7 +208,11 @@ try {
   const nextArchive = path.join(nextOut, archiveName);
   execFileSync('tar', windows ? ['-a', '-cf', nextArchive, '-C', nextOut, `mason-${target}`] : ['-czf', nextArchive, '-C', nextOut, `mason-${target}`]);
   releases.set(nextVersion, nextArchive);
-  await mason('upgrade', nextVersion);
+  const upgrade = await mason('upgrade', nextVersion);
+  assert(upgrade.stderr.includes('Checking current installation'));
+  assert(upgrade.stderr.includes('Downloading Mason'));
+  assert(upgrade.stdout.includes(`Updated Mason ${original.version} → ${nextVersion}`));
+  assert(upgrade.stdout.includes('Restart running assistants'));
   assert.equal((await mason('--version')).stdout.trim(), nextVersion);
   assert.equal((await freshTerminal()).stdout.trim(), nextVersion);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, '.mason/local/setup.json'), 'utf8')), before);
@@ -262,6 +277,8 @@ try {
   corrupt = true;
   const failure = await mason('upgrade', nextVersion).then(() => null, error => error);
   assert(failure && failure.message.includes('checksum mismatch'));
+  assert(!failure.message.includes('Installing Mason'), 'A corrupt download must not reach installation.');
+  assert(!failure.message.includes('Restart running assistants'), 'A failed upgrade must not claim success.');
   assert.equal((await mason('--version')).stdout.trim(), nextVersion);
   corrupt = false;
   const record = JSON.parse(await fs.readFile(path.join(home, 'install.json'), 'utf8'));

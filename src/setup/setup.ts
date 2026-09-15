@@ -11,6 +11,7 @@ import { hookConfig } from "../automation/adapters.js";
 import { loadSetup, loadSetupReceipt, SETUP_PATH, type SetupConfig } from "./model.js";
 import { setupStatus } from "./status.js";
 import { ownershipEdit, completedHookOwnership } from "./ownership.js";
+import type { Progress } from "../utils/progress.js";
 
 export async function selectHost(root: string, explicit?: Host): Promise<Host> {
   if (explicit) return explicit;
@@ -22,7 +23,8 @@ export async function selectHost(root: string, explicit?: Host): Promise<Host> {
   throw new Error("Choose the assistant for setup with --host codex or --host claude.");
 }
 
-export async function setupProject(dir: string, options: { host?: Host; base?: string; evidence?: string[] } = {}) {
+export async function setupProject(dir: string, options: { host?: Host; base?: string; evidence?: string[]; progress?: Progress } = {}) {
+  options.progress?.step("Checking project configuration");
   const ws = await workspace(dir);
   const host = await selectHost(ws.root, options.host);
   return withLock(ws.root, ".mason/reports/setup-lock", async () => {
@@ -52,11 +54,14 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
 
     // Capture through the ordinary automation engine so later hooks resume the
     // same immutable baselines. This must precede instruction and ignore edits.
+    options.progress?.step("Auditing documentation and preserving original findings");
     const initial = await automate(ws.root, { event: "turn_start" });
+    options.progress?.step("Reviewing project context and committed changes");
     const findings = await inspectOnboarding(ws.root, options.base, options.evidence);
     const receiptPath = ws.directory + "/setup-" + host + ".json";
     const initialReportPath = previousReceipt?.initialReportPath ?? initial.report.reportPath;
     const initialBaselinePaths = previousReceipt?.initialBaselinePaths ?? initial.report.baselinePaths;
+    options.progress?.step(`Configuring ${host === "codex" ? "Codex" : "Claude Code"} integration`);
     await writeStoreJson(ws.root, receiptPath, { version: 1, host, status: "installing", initialReportPath,
       initialBaselinePaths, root: ws.root, revision });
     const changedFiles: string[] = [];
@@ -65,6 +70,7 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
     if (await applyEdit(ws.root, { path: SETUP_PATH, before: setupBefore, after: JSON.stringify(setup, null, 2) + "\n" })) changedFiles.push(SETUP_PATH);
     if (await applyEdit(ws.root, await completedHookOwnership(ws.root, hooks[0].path, configuredHook)) && !changedFiles.includes(ownership.path)) changedFiles.push(ownership.path);
     // Ensure a repo that initially had no instructions now has a baseline too.
+    options.progress?.step("Checking configuration and retained findings");
     const checked = await automate(ws.root, { event: "turn_start" });
     const configured = await inspectHostConfig(ws.root, host, undefined);
     await writeStoreJson(ws.root, receiptPath, { version: 1, host, status: "configured", initialReportPath,

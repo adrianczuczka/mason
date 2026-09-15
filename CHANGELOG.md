@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.17.2 — 2026-09-15
+
+- Show progress during standalone installation, upgrades, and project setup, with native download progress and elapsed-time spinners in interactive terminals. Keep redirected progress on stderr and JSON, MCP, and hook output unchanged.
+- Offer Codex and Claude Code setup instructions without assuming an assistant. Show the previous and installed version after an update and remind users to restart running assistants.
+
+Run `mason upgrade` for standalone installations, or `npm install -g mason-context@0.17.2` for npm installations, then restart running assistants. Existing project integrations do not need setup again for this release. The first upgrade from an older version still uses its bundled downloader; the new download display appears on subsequent upgrades and fresh installations.
+
 ## 0.17.1 — 2026-09-15
 
 - Keep MCP available in fresh clones, with actionable setup instructions and inactive automatic hooks until local setup. Preserve corrupt-setup diagnostics and checkout-specific activation.

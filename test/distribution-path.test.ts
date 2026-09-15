@@ -18,6 +18,21 @@ beforeEach(async () => {
 afterEach(async () => { vi.restoreAllMocks(); await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
 describe("standalone PATH ownership", () => {
+  it("offers both assistants and only requests a new terminal when needed", async () => {
+    const fresh = await configurePath(bin, [], save, options());
+    expect(fresh.message).toContain("Open a new terminal");
+    const ready = await configurePath(bin, changes, save, { ...options(), env: { SHELL: "/bin/bash", PATH: bin } });
+    const manual = await configurePath(bin, changes, save, { ...options(), env: { MASON_NO_MODIFY_PATH: "1" } });
+    expect(ready.message).not.toContain("Open a new terminal");
+    expect(manual.message).toContain(`Add ${bin} to your PATH`);
+    for (const result of [fresh, ready, manual]) {
+      expect(result.message).toContain("inside its directory");
+      expect(result.message).toContain("Codex:       mason setup --host codex");
+      expect(result.message).toContain("Claude Code: mason setup --host claude");
+      expect(result.message).not.toContain("Run: mason setup --host codex");
+    }
+  });
+
   it("preserves profile bytes and permissions through repeat install and uninstall", async () => {
     const file = path.join(root, ".bashrc"), original = "# existing settings\r\nexport EXAMPLE=value";
     await fs.writeFile(file, original, { mode: 0o640 });

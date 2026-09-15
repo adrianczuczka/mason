@@ -22,10 +22,13 @@ Windows PowerShell:
 irm https://github.com/adrianczuczka/mason/releases/latest/download/install.ps1 | iex
 # If prompted, close and reopen your terminal application, then run in your Git repository:
 mason setup --host codex
+# Use --host claude for Claude Code.
 mason status
 ```
 
 The installers download the archive for your operating system and architecture, verify its SHA-256 checksum, and install the application with its own Node runtime and production dependencies. System Node and npm are unnecessary. Git is still required for project setup and checks. Unix installation also uses curl, tar, and standard shell utilities; Windows uses PowerShell 5.1 or later.
+
+Install and upgrade show their current stage, including download, checksum verification, extraction, and installation. Interactive terminals show native download progress and a spinner with elapsed time during installation work. Redirected output uses plain progress lines on stderr. Setup instructions offer both Codex and Claude Code; choose the assistant you use and run setup inside your project.
 
 The default installation lives in `~/.local/share/mason`, with a launcher in `~/.local/bin`, or `%LOCALAPPDATA%\Mason` with a launcher in its `bin` directory on Windows. From 0.14.1, installation configures PATH automatically. If that directory is already on the current terminal's PATH, run setup immediately. Otherwise, the installer asks you to open a new terminal; on Windows, close and reopen the terminal application. Host trust settings remain separate. `MASON_HOME` and `MASON_BIN_DIR` select other installation locations. An existing unrelated or edited `mason` launcher is retained with an error.
 

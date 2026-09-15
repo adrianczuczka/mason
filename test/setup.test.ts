@@ -267,7 +267,27 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(setup.status).toBe("configured");
     const lines: string[] = [];
     expect(await runAutomationCli(["setup", "--dir", root, "--host", "codex", "--json"], "", { out: s => lines.push(s), err: s => lines.push(s) })).toBe(0);
+    expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0]).changedFiles).toEqual([]);
+  });
+
+  it("shows setup progress before configuration edits and keeps the final result on stdout", async () => {
+    const out: string[] = [], err: string[] = [];
+    const apply = setupFiles.applyEdit;
+    vi.spyOn(setupFiles, "applyEdit").mockImplementation(async (dir, edit) => {
+      expect(err.join("\n")).toContain("preserving original findings");
+      expect(err.join("\n")).toContain("Configuring Claude Code integration");
+      expect(out).toEqual([]);
+      return apply(dir, edit);
+    });
+    expect(await runAutomationCli(["setup", "--dir", root, "--host", "claude"], "", {
+      out: text => out.push(text), err: text => err.push(text),
+    })).toBe(0);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("Mason configured for claude.");
+    expect(out[0]).toContain("Activation: pending");
+    expect(err.join("\n")).toContain("Checking configuration and retained findings");
+    expect(err.join("\n")).not.toContain("\u001b");
   });
 
   it("requires a host when detection is ambiguous and preserves explicit disabled settings", async () => {

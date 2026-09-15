@@ -4,6 +4,7 @@ import { automate, automationStatus, summarize } from "./runtime.js";
 import { runAutomationHook, hookConfig } from "./adapters.js";
 import { installAutomation, installedAutomation } from "./install.js";
 import { hostSchema } from "./store.js";
+import { createProgress, type Progress } from "../utils/progress.js";
 
 const TEARDOWN_USAGE = `Usage: mason teardown [options]
 
@@ -49,10 +50,13 @@ export function isHookCommand(argv: string[]): boolean {
   catch { return false; }
 }
 
-export async function runAutomationCli(argv: string[], stdin = "", io = {
+const defaultIo = {
   out: (s: string) => process.stdout.write(s + "\n"), err: (s: string) => process.stderr.write(s + "\n"),
-}, options: { managedHost?: "codex" | "claude" } = {}): Promise<number> {
+};
+export async function runAutomationCli(argv: string[], stdin = "", io = defaultIo,
+  options: { managedHost?: "codex" | "claude" } = {}): Promise<number> {
   let action = "";
+  let progress: Progress | undefined;
   try {
     const { values, positionals } = parseCli(argv);
     if (values.help || !positionals.length) { io.out(positionals[0] === "teardown" ? TEARDOWN_USAGE : USAGE); return 0; }
@@ -77,7 +81,12 @@ export async function runAutomationCli(argv: string[], stdin = "", io = {
     if (action === "setup") {
       if (values.command) throw new Error("--command applies to install/config, not managed setup.");
       const { setupProject, summarizeSetup } = await import("../setup/setup.js");
-      const result = await setupProject(dir, { host: values.host ? hostSchema.parse(values.host) : undefined });
+      const host = values.host ? hostSchema.parse(values.host) : undefined;
+      if (!values.json) progress = createProgress(io === defaultIo ? {} : {
+        write: text => io.err(text.replace(/\n$/, "")), interactive: false,
+      });
+      const result = await setupProject(dir, { host, progress });
+      progress?.stop();
       io.out(values.json ? JSON.stringify(result, null, 2) : summarizeSetup(result));
       return 0;
     }
@@ -99,6 +108,7 @@ export async function runAutomationCli(argv: string[], stdin = "", io = {
     io.out(values.json ? JSON.stringify(report, null, 2) : summarize(report));
     return report.status === "verified" ? 0 : report.status === "issues-remain" ? 1 : 2;
   } catch (error) {
+    progress?.stop(false);
     const message = action === "setup" ? "Mason setup incomplete: " + automationFailure(error).message + ". Rerun the same setup command to resume; retained audit evidence is preserved."
       : action === "teardown" ? "Mason teardown incomplete: " + automationFailure(error).message + ". Inspect the reported input, then rerun teardown; knowledge and repair evidence are retained."
       : failureMessage(error);
