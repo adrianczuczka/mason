@@ -51,7 +51,7 @@ export function isHookCommand(argv: string[]): boolean {
 
 export async function runAutomationCli(argv: string[], stdin = "", io = {
   out: (s: string) => process.stdout.write(s + "\n"), err: (s: string) => process.stderr.write(s + "\n"),
-}): Promise<number> {
+}, options: { managedHost?: "codex" | "claude" } = {}): Promise<number> {
   let action = "";
   try {
     const { values, positionals } = parseCli(argv);
@@ -68,7 +68,9 @@ export async function runAutomationCli(argv: string[], stdin = "", io = {
       return result.status === "complete" ? 0 : 2;
     }
     if (action === "hook") {
-      const output = await runAutomationHook(hostSchema.parse(values.host), stdin);
+      const host = hostSchema.parse(values.host);
+      if (options.managedHost && options.managedHost !== host) throw new Error("Managed hook --host does not match its launcher.");
+      const output = await runAutomationHook(host, stdin, { managed: !!options.managedHost });
       if (output) io.out(JSON.stringify(output));
       return 0;
     }

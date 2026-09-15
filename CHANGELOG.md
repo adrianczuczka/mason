@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.1 — 2026-09-15
+
+- Keep MCP available in fresh clones, with actionable setup instructions and inactive automatic hooks until local setup. Preserve corrupt-setup diagnostics and checkout-specific activation.
+- Resolve hook setup and evidence from the host payload's checkout before using a launch/project fallback. Keep ambiguous roots and outside-repository events with multiple worktrees explicitly unverified.
+- Avoid aborting audits on references below regular files. Report `.git/` references as skipped metadata and share the same path observations with automation caches.
+- Ignore unexpected `.mason/` contents by default while allowing shared knowledge. Emit Claude's explicit stdio transport, recognize compatible older hook commands in status, and retain clone teardown support.
+- Exercise fresh-clone MCP, worktree setup, directory changes, original pre-edit evidence, and repeated setup in focused adoption regressions.
+
+Run `mason upgrade` for standalone installations, or `npm install -g mason-context@0.17.1` for npm installations, then restart running assistants. Existing PATH-based integrations receive the audit, MCP and hook fixes on their next launch. Rerun `mason setup --host codex` or `--host claude` to refresh the shared Git ignore rules and Claude's explicit stdio entry; review and commit those configuration changes. Fresh clones and linked worktrees still need their own local setup to activate automatic hooks. Decisions and retained repair evidence are preserved.
+
 ## 0.17.0 — 2026-09-11
 
 Mason can now retain an authorized advisory assessment through later sessions and commits, then reopen it when relevant evidence changes. Documentation audits cover nested instructions and README files with more precise reference and command scope.

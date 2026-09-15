@@ -3,7 +3,7 @@ import { parse, stringify } from "smol-toml";
 import { z } from "zod";
 import { CLAUDE_MD_SECTION } from "../mcp/init.js";
 import { DOC_CANDIDATES } from "../audit/docs.js";
-import { hookConfig } from "../automation/adapters.js";
+import { hookConfig, compatibleManagedHookCommands } from "../automation/adapters.js";
 import { configPath, automationConfigSchema, AUTOMATION_PATH } from "../automation/install.js";
 import type { Host } from "../automation/store.js";
 import { readText, managedBlock, type FileEdit } from "./files.js";
@@ -42,7 +42,7 @@ export async function instructionEdits(root: string, host?: Host) {
 function managedMcp(previous: unknown, host: Host) {
   const options = previous === undefined ? {} : object.parse(previous);
   for (const key of ["command", "args", "url", "type", "headers", "http_headers", "env_http_headers", "bearer_token_env_var"]) delete options[key];
-  return { ...options, ...mcpCommand(host) };
+  return { ...options, ...(host === "claude" ? { type: "stdio" } : {}), ...mcpCommand(host) };
 }
 
 export async function mcpEdit(root: string, host: Host): Promise<FileEdit> {
@@ -84,13 +84,7 @@ export async function hookEdits(root: string, host: Host): Promise<FileEdit[]> {
 
 export async function ancillaryEdits(root: string) {
   const ignore = await readText(root, ".gitignore");
-  const { git } = await import("../automation/evidence.js");
-  const { isGitRepo } = await import("../utils/git.js");
-  let parentIgnored = false;
-  try { if (await isGitRepo(root)) parentIgnored = !!(await git(root, "check-ignore", "--no-index", ".mason")).trim(); }
-  catch (error) { if ((error as { code?: number }).code !== 1) throw error; }
-  const retainParentRule = parentIgnored || !!ignore?.replace(/\r\n/g, "\n").includes("# mason:ignore:start\n!/.mason/\n/.mason/*");
-  const rules = [...(retainParentRule ? ["!/.mason/", "/.mason/*"] : []),
+  const rules = ["!/.mason/", "/.mason/*",
     "!/.mason/decisions/", "!/.mason/decisions/**", "!/.mason/reviews/", "!/.mason/reviews/**", "!/.mason/config.json", "!/.mason/snapshot.json",
     "/.mason/local/", "/.mason/reports/"].join("\n");
   return [{ path: ".gitignore", before: ignore, after: managedBlock(ignore ?? "", "# mason:ignore:start", "# mason:ignore:end", rules) }];
@@ -102,9 +96,10 @@ export async function inspectHostConfig(root: string, host: Host, plannedMcp?: s
   const servers = (host === "codex" ? config.mcp_servers : config.mcpServers) as Record<string, unknown> | undefined;
   const hooks = automationConfigSchema.parse(JSON.parse(await readText(root, configPath(host)) ?? "{}"));
   const expected = hookConfig(host, hookCommand(host));
+  const compatible = compatibleManagedHookCommands(host);
   const mcp = servers?.mason === undefined ? null : object.parse(servers.mason);
   return { mcp, mcpDisabled: mcp?.enabled === false, hooks: Object.fromEntries(Object.keys(expected.hooks).map(event => [event,
-    (hooks.hooks?.[event] ?? []).flatMap(group => group.hooks.filter(handler => handler.command === expected.hooks.SessionStart[0].hooks[0].command).map(handler => ({ ...group, hooks: [handler] })) ?? [])])),
+    (hooks.hooks?.[event] ?? []).flatMap(group => group.hooks.filter(handler => compatible.includes(handler.command ?? "")).map(handler => ({ ...group, hooks: [handler] })) ?? [])])),
     disabled: hooks.disableAllHooks === true || (config.features as Record<string, unknown> | undefined)?.hooks === false ||
       (config.features as Record<string, unknown> | undefined)?.codex_hooks === false };
 }

@@ -21,7 +21,7 @@ export async function setupStatus(dir: string) {
         : "Project hooks are inactive until local setup. Run mason setup --host codex or --host claude." };
   }
   const hosts: Record<string, { status: string; runtime: string; mcp: string; instructions: string; hookConfiguration: string;
-    observedEvents: string[]; contextCalls: number; verificationStatus: string; pending: string[] }> = {};
+    observedEvents: string[]; contextCalls: number; verificationStatus: string; pending: string[]; updates: string[] }> = {};
   const installed = await installedCommand();
   const automation = await automationStatus(ws.root);
   for (const host of ["codex", "claude"] as const) {
@@ -32,7 +32,12 @@ export async function setupStatus(dir: string) {
     const config = await inspectHostConfig(ws.root, host, undefined);
     const mcp = !config.mcpDisabled && hash(config.mcp) === entry.mcpFingerprint &&
       isDeepStrictEqual({ command: config.mcp?.command, args: config.mcp?.args }, mcpCommand(host));
-    const hooks = isDeepStrictEqual(config.hooks, hookConfig(host, hookCommand(host)).hooks) && !config.disabled;
+    const expectedHooks = hookConfig(host, hookCommand(host)).hooks;
+    const currentHooks = isDeepStrictEqual(config.hooks, expectedHooks);
+    const compatibleHooks = Object.fromEntries(Object.entries(config.hooks).map(([event, groups]) => [event,
+      groups.map(group => ({ ...group, hooks: group.hooks.map(handler => ({ ...handler,
+        command: expectedHooks.SessionStart[0].hooks[0].command })) }))]));
+    const hooks = isDeepStrictEqual(compatibleHooks, expectedHooks) && !config.disabled;
     const local = await loadSetupReceipt(ws.root, ws.directory, host);
     const configured = local?.status === "configured" && local.root === ws.root && local.revision === entry.revision;
     const observation = await readObservation(ws.root, ws.directory, host, entry.revision, installed.version ?? "unavailable");
@@ -49,9 +54,10 @@ export async function setupStatus(dir: string) {
     const healthy = installed.available && mcp && hooks && instructionsCurrent && configured && automation.status !== "unavailable";
     hosts[host] = { status: healthy ? complete && observation?.contextCalls ? "active" : "pending" : "attention",
       runtime: installed.available ? "global (" + installed.version + ")" : "unavailable-on-path", mcp: mcp ? "configured" : "changed",
-      instructions: instructionsCurrent ? "current" : "changed", hookConfiguration: hooks ? "configured" : "disabled-or-changed",
+      instructions: instructionsCurrent ? "current" : "changed", hookConfiguration: hooks ? currentHooks ? "configured" : "compatible" : "disabled-or-changed",
       observedEvents, contextCalls: observation?.contextCalls ?? 0,
-      verificationStatus: automation.status === "current" ? automation.verificationStatus ?? "unavailable" : "unavailable", pending };
+      verificationStatus: automation.status === "current" ? automation.verificationStatus ?? "unavailable" : "unavailable", pending,
+      updates: hooks && !currentHooks ? ["A newer hook template is available. Run mason setup --host " + host + " to update it when convenient; review and commit the configuration changes."] : [] };
   }
   const statuses = Object.values(hosts).map(host => host.status);
   const decisions = await loadDecisionStore(ws.root);
@@ -68,6 +74,7 @@ export function summarizeActivation(status: Awaited<ReturnType<typeof setupStatu
       `  Hooks: ${state.hookConfiguration}; observed: ${state.observedEvents.join(", ") || "none"}.`,
       `  Task context requests: ${state.contextCalls}; verification: ${state.verificationStatus}.`,
       ...state.pending.map(message => "  Next: " + message));
+    lines.push(...state.updates.map(message => "  Optional: " + message));
   }
   if ("decisionRecords" in status) lines.push(`Decision records: ${status.decisionRecords}.`);
   if (status.next) lines.push(status.next);

@@ -4,7 +4,7 @@ import { hash, workspace } from "../automation/evidence.js";
 import { withLock, events, type Host } from "../automation/store.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { loadSetup } from "./model.js";
-import { executingVersion } from "./launcher.js";
+import { executingVersion, inactiveSetupMessage } from "./launcher.js";
 
 const observationSchema = z.object({ version: z.literal(1), masonVersion: z.string(), root: z.string(), revision: z.string(), host: z.enum(["codex", "claude"]),
   contextCalls: z.number().int().nonnegative(), lastContextAt: z.string().optional(),
@@ -27,8 +27,14 @@ export async function observeActivation(dir: string, event: "context" | typeof e
   sessionId?: string; verificationStatus?: string; reportPath?: string; directory?: string;
 } = {}): Promise<string | null> {
   const host = process.env.MASON_SETUP_HOST, revision = process.env.MASON_SETUP_REVISION;
-  if ((host !== "codex" && host !== "claude") || !revision || !process.env.MASON_SETUP_ROOT) return null;
+  if ((host !== "codex" && host !== "claude") || !process.env.MASON_SETUP_ROOT) return null;
   try {
+    if (!revision) {
+      if ((await loadSetup(process.env.MASON_SETUP_ROOT))?.hosts[host]) {
+        return "Mason setup is now present. Restart the assistant to connect this MCP session to the configured integration; activation has not been established by this session.";
+      }
+      return inactiveSetupMessage();
+    }
     const capturedDirectory = options.directory?.match(/^\.mason\/reports\/automation\/[a-f0-9]{24}$/)?.[0]
       ?? options.reportPath?.match(/^(\.mason\/reports\/automation\/[a-f0-9]{24})\/checks\//)?.[1];
     const ws = capturedDirectory ? { root: await fs.realpath(dir), directory: capturedDirectory } : await workspace(dir);

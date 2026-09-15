@@ -31,15 +31,22 @@ export async function installedCommand() {
 }
 
 /** Replaces the environment previously supplied by generated project launchers. */
-export async function prepareLaunch(host: Host, options: { allowInactive?: boolean } = {}) {
-  const root = await fs.realpath((await git(process.cwd(), "rev-parse", "--show-toplevel")).trim());
+export async function prepareLaunch(host: Host, options: { dir?: string; allowInactive?: boolean } = {}) {
+  const root = await fs.realpath((await git(options.dir ?? process.cwd(), "rev-parse", "--show-toplevel")).trim());
   const entry = (await loadSetup(root))?.hosts[host];
+  process.env.MASON_SETUP_ROOT = root;
+  process.env.MASON_SETUP_HOST = host;
+  delete process.env.MASON_SETUP_REVISION;
   if (!entry) {
     if (options.allowInactive) return false;
     throw new Error(`Mason is not configured locally for ${host}. Run mason setup --host ${host} in this checkout.`);
   }
-  process.env.MASON_SETUP_ROOT = root;
-  process.env.MASON_SETUP_HOST = host;
   process.env.MASON_SETUP_REVISION = entry.revision;
   return true;
+}
+
+export function inactiveSetupMessage(): string | null {
+  const host = process.env.MASON_SETUP_HOST;
+  if (!process.env.MASON_SETUP_ROOT || process.env.MASON_SETUP_REVISION || (host !== "claude" && host !== "codex")) return null;
+  return `Mason MCP is available, but automatic hooks are inactive in ${process.env.MASON_SETUP_ROOT}. Run mason setup --host ${host} in that checkout, review the host configuration, then restart the assistant. Setup has not been performed automatically.`;
 }

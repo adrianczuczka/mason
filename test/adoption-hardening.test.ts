@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -20,6 +20,15 @@ import { commitAll, initGitRepo } from "./helpers.js";
 const exec = promisify(execFile);
 const binary = path.resolve("dist/mason.js");
 const networkGuard = path.resolve("test/support/deny-network.mjs");
+function managedHook(host: string, cwd: string) {
+  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    const child = spawn(process.execPath, [binary, "--setup-host", host, "auto", "hook", "--host", host], { cwd });
+    let stdout = "", stderr = "";
+    child.stdout.on("data", data => { stdout += data; }); child.stderr.on("data", data => { stderr += data; });
+    child.on("error", reject); child.on("close", code => code === 0 ? resolve({ stdout, stderr }) : reject(new Error(stderr)));
+    child.stdin.end(JSON.stringify({ cwd, session_id: "inactive", hook_event_name: "SessionStart" }));
+  });
+}
 let root: string;
 beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "mason-adoption-hardening-")));
@@ -42,15 +51,14 @@ it.each(["claude", "codex"] as const)("keeps generated %s hooks quiet when Mason
 });
 
 it.each(["claude", "codex"] as const)("keeps installed %s hooks inactive without setup, but reports corrupt setup", async host => {
-  const args = [binary, "--setup-host", host, "auto", "hook", "--host", host];
-  const quiet = await exec(process.execPath, args, { cwd: root });
+  const quiet = await managedHook(host, root);
   expect(quiet.stdout).toBe(""); expect(quiet.stderr).toBe("");
   expect((await setupStatus(root)).status).toBe("not-configured");
   await expect(fs.stat(path.join(root, ".mason"))).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(exec(process.execPath, [binary, "--setup-host", host, "mcp"], { cwd: root })).rejects.toMatchObject({ code: 2 });
   await fs.mkdir(path.join(root, ".mason/local"), { recursive: true });
   await fs.writeFile(path.join(root, ".mason/local/setup.json"), "{");
-  expect(JSON.parse((await exec(process.execPath, args, { cwd: root })).stdout).systemMessage).toContain("Verification was not established");
+  expect(JSON.parse((await managedHook(host, root)).stdout).systemMessage).toContain("verification was not established");
+  await expect(exec(process.execPath, [binary, "--setup-host", host, "mcp"], { cwd: root })).rejects.toMatchObject({ code: 2 });
 });
 
 it("replaces known generated hook variants in a clone while preserving custom hooks", async () => {

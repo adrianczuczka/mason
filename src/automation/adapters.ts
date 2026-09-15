@@ -2,6 +2,7 @@ import { failureMessage, hookFailureMessage } from "./execution.js";
 import { z } from "zod";
 import { automate, observeReadOnlyTool, type AutomationEvent } from "./runtime.js";
 import { hostSchema, type Host } from "./store.js";
+import { resolveHookRoot } from "./hook-root.js";
 
 const inputSchema = z.object({
   cwd: z.string().min(1), session_id: z.string().min(1).max(500),
@@ -25,7 +26,7 @@ export function normalizeHook(host: Host, raw: unknown): { cwd: string; name: st
   } };
 }
 
-export async function runAutomationHook(host: Host, stdin: string): Promise<Record<string, unknown> | null> {
+export async function runAutomationHook(host: Host, stdin: string, options: { managed?: boolean } = {}): Promise<Record<string, unknown> | null> {
   let name = "";
   let hook: ReturnType<typeof normalizeHook> | undefined;
   try {
@@ -36,6 +37,11 @@ export async function runAutomationHook(host: Host, stdin: string): Promise<Reco
     const input = normalizeHook(host, raw);
     hook = input;
     name = input.name;
+    if (options.managed) {
+      input.cwd = await resolveHookRoot(host, input.cwd);
+      const { prepareLaunch } = await import("../setup/launcher.js");
+      if (!await prepareLaunch(host, { dir: input.cwd, allowInactive: true })) return null;
+    }
     if (["before_tool", "after_tool"].includes(input.event.event) && input.readOnly) {
       const observed = await observeReadOnlyTool(input.cwd, input.event);
       const { observeActivation } = await import("../setup/observations.js");
@@ -73,6 +79,10 @@ export function managedHookCommand(host: Host, platform = process.platform) {
 }
 export function knownManagedHookCommands(host: Host) {
   return [managedHookCommand(host, "linux"), managedHookCommand(host, "win32"), `mason --setup-host ${host} auto hook --host ${host}`];
+}
+/** Migration recognizes both platforms; runtime compatibility is platform-specific. */
+export function compatibleManagedHookCommands(host: Host, platform = process.platform) {
+  return [managedHookCommand(host, platform), `mason --setup-host ${host} auto hook --host ${host}`];
 }
 export function hookConfig(host: Host, command = "npx --no-install --package mason-context mason-auto") {
   const handler = { type: "command", command: command === `mason --setup-host ${host} auto`

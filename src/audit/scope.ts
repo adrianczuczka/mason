@@ -23,12 +23,17 @@ export function pathClaimScope(doc: string, claim: PathClaim): ClaimScope | null
 
 /** Missing is distinct from unreadable/unsafe; cache and checks use the same observation. */
 export async function pathExists(root: string, file: string): Promise<boolean> {
-  const absolute = await auditInputPath(root, file);
-  try { await fs.access(absolute); return true; }
+  try { await fs.access(await auditInputPath(root, file)); return true; }
   catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    // A child of a regular file cannot exist either. Keep symlink and access
+    // failures distinct: neither establishes that a reference is missing.
+    if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) return false;
     throw error;
   }
+}
+
+export function gitMetadataPath(file: string): boolean {
+  return file.split("/").includes(".git");
 }
 
 export function optionalMasonPath(file: string): boolean {

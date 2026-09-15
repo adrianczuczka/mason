@@ -2,20 +2,22 @@
   "version": 2,
   "id": "shared-hooks-must-distinguish-inactive-installs-from-failure",
   "title": "Shared hooks must distinguish inactive installs from failures",
-  "body": "A shared hook configuration does not establish that each developer has installed Mason or initialized the checkout. In an isolated 0.16.1 reproduction, missing Mason exited 127; an installed command without local setup repeatedly warned. A PATH-only guard addresses only the first case. The 0.16.2 implementation makes both inactive cases quiet while preserving visible corrupt-setup and active-check failures. Status still distinguishes configuration from observed activation, and MCP remains strict. Regression tests cover these boundaries. Preserve pre-edit coverage for shell and unknown tools when reducing overhead: editor-only or post-only matching loses original evidence. Read-only observations must not advance audit freshness or imply a new passing check. This record captures the rationale and tested implementation, not an independently accepted constraint or a guarantee about every host configuration.",
+  "body": "Shared configuration is not local activation. Missing Mason and a checkout without local hook setup must stay quiet; corrupt setup and failed active checks remain visible. A PATH guard handles only an absent executable. The earlier strict managed MCP launch made fresh clones disconnect before explaining setup. MCP should serve context and explain the missing setup without creating local activation or authorizing hooks. Each checkout still runs setup explicitly. Resolve managed hooks from the event payload before checking local setup: the launch cwd can be outside the repo or belong to the original checkout. Claude's CLAUDE_PROJECT_DIR stays at that original checkout after entering a worktree. An outside-Git fallback is safe only with an unambiguous checkout; conflicting roots or multiple worktrees remain unknown. Preserve pre-edit coverage for shell and unknown tools. Read-only observations must not advance audit freshness or imply a passing check. Configuration, observed activation, and verification remain separate. These are proposed constraints supported by isolated regressions, not an independently accepted policy or proof of every host configuration.",
   "category": "gotcha",
   "files": [
     "src/setup/launcher.ts",
     "src/automation/adapters.ts",
     "src/setup/config.ts",
-    "test/adoption-hardening.test.ts"
+    "test/adoption-hardening.test.ts",
+    "src/automation/hook-root.ts",
+    "test/adoption-workflows.test.ts"
   ],
   "createdAt": "2026-09-09T11:35:19.914Z",
-  "updatedAt": "2026-09-09T12:02:18.675Z",
+  "updatedAt": "2026-09-14T17:31:09.953Z",
   "refreshedHash": "594c81f4c5964c128009d6615e34b7d9b9324144",
   "status": "active",
   "approval": "proposed",
-  "revision": 2,
+  "revision": 3,
   "sources": [
     {
       "kind": "document",
@@ -36,6 +38,16 @@
       "kind": "document",
       "reference": "test/adoption-hardening.test.ts",
       "note": "Inactive integrations, active failure visibility, read-only observations, and conservative pre-edit capture regressions."
+    },
+    {
+      "kind": "document",
+      "reference": "test/adoption-workflows.test.ts",
+      "note": "Fresh-clone MCP, payload checkout setup gates, unambiguous outside-Git fallback, and worktree isolation regressions."
+    },
+    {
+      "kind": "document",
+      "reference": "https://code.claude.com/docs/en/hooks",
+      "note": "CLAUDE_PROJECT_DIR stays at the original checkout; hook input cwd follows worktree and directory changes."
     }
   ],
   "history": [
@@ -110,6 +122,60 @@
             "kind": "document",
             "reference": "test/adoption-hardening.test.ts",
             "note": "Inactive integrations, active failure visibility, read-only observations, and conservative pre-edit capture regressions."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "594c81f4c5964c128009d6615e34b7d9b9324144"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-14T17:31:09.953Z",
+      "actor": "Codex",
+      "revision": 3,
+      "content": {
+        "title": "Shared hooks must distinguish inactive installs from failures",
+        "body": "Shared configuration is not local activation. Missing Mason and a checkout without local hook setup must stay quiet; corrupt setup and failed active checks remain visible. A PATH guard handles only an absent executable. The earlier strict managed MCP launch made fresh clones disconnect before explaining setup. MCP should serve context and explain the missing setup without creating local activation or authorizing hooks. Each checkout still runs setup explicitly. Resolve managed hooks from the event payload before checking local setup: the launch cwd can be outside the repo or belong to the original checkout. Claude's CLAUDE_PROJECT_DIR stays at that original checkout after entering a worktree. An outside-Git fallback is safe only with an unambiguous checkout; conflicting roots or multiple worktrees remain unknown. Preserve pre-edit coverage for shell and unknown tools. Read-only observations must not advance audit freshness or imply a passing check. Configuration, observed activation, and verification remain separate. These are proposed constraints supported by isolated regressions, not an independently accepted policy or proof of every host configuration.",
+        "category": "gotcha",
+        "files": [
+          "src/setup/launcher.ts",
+          "src/automation/adapters.ts",
+          "src/setup/config.ts",
+          "test/adoption-hardening.test.ts",
+          "src/automation/hook-root.ts",
+          "test/adoption-workflows.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": "src/setup/launcher.ts",
+            "note": "Generated global command and per-checkout setup requirement in 0.16.1."
+          },
+          {
+            "kind": "document",
+            "reference": "src/automation/adapters.ts",
+            "note": "Lifecycle normalization and conservative mutation coverage."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Codex isolated-repository reproduction, 2026-09-09, during maintainer review of shared-hook onboarding",
+            "note": "Two local invocations: missing PATH command and installed command without local setup. No private project source or review text is copied here."
+          },
+          {
+            "kind": "document",
+            "reference": "test/adoption-hardening.test.ts",
+            "note": "Inactive integrations, active failure visibility, read-only observations, and conservative pre-edit capture regressions."
+          },
+          {
+            "kind": "document",
+            "reference": "test/adoption-workflows.test.ts",
+            "note": "Fresh-clone MCP, payload checkout setup gates, unambiguous outside-Git fallback, and worktree isolation regressions."
+          },
+          {
+            "kind": "document",
+            "reference": "https://code.claude.com/docs/en/hooks",
+            "note": "CLAUDE_PROJECT_DIR stays at the original checkout; hook input cwd follows worktree and directory changes."
           }
         ]
       },

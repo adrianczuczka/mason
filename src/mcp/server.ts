@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { inactiveSetupMessage } from "../setup/launcher.js";
 import { attributionSchema } from "../decisions/provenance.js";
 import { advisoryReviewRequest } from "../audit/advisory-review.js";
 import { decisionTitleSchema, decisionBodySchema, BODY_RECOMMENDED_CHARS, BODY_MAX_CHARS, TITLE_MAX_CHARS } from "../decisions/decisions.js";
@@ -32,13 +33,14 @@ import {
 declare const PKG_VERSION: string;
 
 export function createMcpServer(): McpServer {
+  const setupNotice = inactiveSetupMessage();
   const server = new McpServer(
     {
       name: "mason",
       version: PKG_VERSION,
     },
     {
-      instructions:
+      instructions: (setupNotice ? setupNotice + "\n\n" : "") +
         "Mason retrieves recorded decisions, file impact, and optional feature/flow maps. Use get_context with the task and known files, and get_impact before editing. Save learned rationale and constraints with save_decision; review and commit the local records through the project workflow. These tools work without initialization or a concept map. Consult trust and diagnostics: changed or unknown freshness needs source inspection, failed verification needs correction, and proposals are suggestions and legacy records are unreviewed. Accepted decisions are recorded team constraints, still subject to freshness checks. Use review_decision to prepare code evidence and record only authorized acceptance, reaffirmation, or retirement. Never invent a reviewer or treat these recorded identities as authenticated approval. mason_init returns documentation audit and committed-diff review findings with a quickstart guide. Use mode: \"map\" only when a full architecture map is requested. A missing map is not a setup failure; use decisions and source evidence. get_snapshot provides architecture navigation when a map is available. The mason-audit and mason-review CLIs also work without setup.",
     }
   );

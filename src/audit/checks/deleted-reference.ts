@@ -1,6 +1,6 @@
 import path from "node:path";
 import { deletingCommitOf, lastCommitOf } from "../git.js";
-import { optionalMasonPath, pathClaimScope, pathExists } from "../scope.js";
+import { gitMetadataPath, optionalMasonPath, pathClaimScope, pathExists } from "../scope.js";
 import type { Evidence } from "../types.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
@@ -20,6 +20,11 @@ export async function checkDeletedReferences(ctx: CheckContext): Promise<CheckRe
         continue;
       }
       if (scope.candidates.some(optionalMasonPath)) continue;
+      if (scope.candidates.some(gitMetadataPath)) {
+        result.skipped.push({ check: "deleted-reference", doc: doc.path,
+          reason: `Reference ${claim.path} names Git metadata, whose layout varies between checkouts; it was not verified as a repository file.` });
+        continue;
+      }
       if ((await Promise.all(scope.candidates.map(file => pathExists(ctx.root, file)))).some(Boolean)) continue;
 
       const candidates = await Promise.all(scope.candidates.map(async file => ({ file,

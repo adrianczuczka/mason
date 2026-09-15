@@ -29,7 +29,7 @@ export async function readAuditInput(root: string, file: string): Promise<string
     if (value === null) throw new Error(`Unreadable or oversized audit input: ${file}`);
     return value;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) return null;
     throw error;
   }
 }

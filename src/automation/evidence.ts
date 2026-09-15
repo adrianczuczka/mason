@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import fg from "fast-glob";
 import { z } from "zod";
 import { discoverDocPaths } from "../audit/docs.js";
-import { pathClaimScope, pathExists, optionalMasonPath } from "../audit/scope.js";
+import { pathClaimScope, pathExists, optionalMasonPath, gitMetadataPath } from "../audit/scope.js";
 import { extractClaims } from "../audit/claims.js";
 import { checkResultSchema } from "../audit/repair.js";
 import { CHECKS, type CheckResult } from "../audit/checks/index.js";
@@ -66,6 +66,7 @@ export async function readInputs(root: string): Promise<Inputs> {
     docContents.push([file, text]);
     for (const claim of text ? extractClaims(text).paths : []) {
       const scope = pathClaimScope(file, claim);
+      if (scope?.candidates.some(gitMetadataPath)) continue;
       for (const candidate of scope?.candidates ?? []) {
         if (optionalMasonPath(candidate)) continue;
         claims.push([candidate, await pathExists(root, candidate), await pathExists(root, path.posix.dirname(candidate))]);

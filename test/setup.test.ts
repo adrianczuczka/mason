@@ -182,7 +182,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     const config = JSON.parse(await fs.readFile(path.join(root, ".mcp.json"), "utf8"));
     expect(config.mcpServers.mason.env).toEqual({ OPTION: "keep" });
     expect(config.mcpServers.mason.url).toBeUndefined();
-    expect(config.mcpServers.mason.type).toBeUndefined();
+    expect(config.mcpServers.mason.type).toBe("stdio");
     expect(config.mcpServers.other).toEqual({ command: "other" });
     expect(result.activation.hosts.claude.mcp).toBe("configured");
   });

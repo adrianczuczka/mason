@@ -79,8 +79,10 @@ async function planTeardown(root: string, selected: readonly Host[]) {
         if (host === "codex" && BLOCKS[2].some(marker => before.includes(marker))) throw new Error("The marked Mason MCP entry was removed or renamed; inspect the retained block manually.");
         return;
       }
-      const expected = ownership.files[mcpFile]?.mcpHash ?? hash(mcpCommand(host));
-      if (hash(servers.mason) !== expected) throw new Error("The Mason MCP entry was edited or its ownership is uncertain; retained for manual cleanup.");
+      const ownedHash = ownership.files[mcpFile]?.mcpHash;
+      const expected = ownedHash ? [ownedHash] : [hash(mcpCommand(host)),
+        ...(host === "claude" ? [hash({ type: "stdio", ...mcpCommand(host) })] : [])];
+      if (!expected.includes(hash(servers.mason))) throw new Error("The Mason MCP entry was edited or its ownership is uncertain; retained for manual cleanup.");
       delete servers.mason;
       const desired = { ...config, [key]: servers };
       if (!Object.keys(servers).length) delete desired[key];

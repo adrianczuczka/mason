@@ -4,7 +4,7 @@
 
 Mason's core checks run in your checkout using local files and Git. They do not call a model, send telemetry, or contact a Mason service. MCP results and hook messages are returned to your coding assistant, which may send that context to its configured model provider. Your assistant's data policy still applies.
 
-This describes the implementation in 0.16.2. It is not a promise that every optional feature, installer, dependency, or inherited system configuration is network-free.
+This describes the current source implementation. It is not a promise that every optional feature, installer, dependency, or inherited system configuration is network-free.
 
 ## Hook input and storage
 
@@ -54,7 +54,7 @@ sh ./install.sh
 
 The hostname is a placeholder. Both installers require `MASON_VERSION` when `MASON_RELEASE_BASE` is supplied, avoiding a public latest-version lookup. Set the mirror again for upgrades and specify the approved version: `MASON_RELEASE_BASE=… mason upgrade 0.16.2`. Mirror selection is not persisted. npm users should use their organization's registry configuration.
 
-Each developer runs `mason setup --host claude` or `--host codex` and reviews native host trust. Generated hooks stay quiet when the command is absent or that checkout lacks local host setup. `mason status` explains inactive setup. Corrupt setup and failures in active checks remain visible. MCP itself still requires installation and setup; quiet hooks do not fake a connected server.
+Each developer runs `mason setup --host claude` or `--host codex` in each checkout and reviews native host trust. Generated hooks stay quiet when the command is absent or that checkout lacks local host setup. `mason status` explains inactive setup. Corrupt setup and failures in active checks remain visible. MCP requires installation and host trust; in a fresh clone it can serve context and explain the missing local setup while automatic hooks remain inactive. Connecting never creates local setup or grants hook trust.
 
 Setup owns the inline guards; no project wrapper scripts are required. Commands are platform-specific, as is Windows MCP configuration. Rerun setup when changing operating systems. Custom manual commands remain the caller's responsibility. Refresh existing guards by rerunning setup after upgrading, then review and commit the configuration.
 

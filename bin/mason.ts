@@ -27,9 +27,12 @@ mason-audit, mason-review, mason-drift, mason-hook and mason-mcp.`;
 try {
   if (managedLaunch) {
     if (!setupHost || !["codex", "claude"].includes(setupHost) || !["mcp", "auto"].includes(command)) throw new Error("Invalid setup invocation.");
-    const { prepareLaunch } = await import("../src/setup/launcher.js");
-    const active = await prepareLaunch(setupHost as "codex" | "claude", { allowInactive: command === "auto" && isHookCommand(args) });
-    if (!active) process.exit(0);
+    // Hook setup is checked against the parsed payload's checkout, after stdin
+    // is read. MCP can explain missing setup over the protocol in a fresh clone.
+    if (!(command === "auto" && isHookCommand(args))) {
+      const { prepareLaunch } = await import("../src/setup/launcher.js");
+      await prepareLaunch(setupHost as "codex" | "claude", { allowInactive: command === "mcp" });
+    }
   }
   if (command === "internal-integration-version") console.log(JSON.stringify({ protocol: 1, version: PKG_VERSION }));
   else if (!command || ["--help", "-h", "help"].includes(command)) console.log(usage);
@@ -54,7 +57,8 @@ try {
     if (isHookCommand(forwarded) && !process.stdin.isTTY) for await (const chunk of process.stdin) {
       input += chunk.toString(); if (Buffer.byteLength(input) > 1024 * 1024) break;
     }
-    process.exitCode = await runAutomationCli(forwarded, input);
+    process.exitCode = await runAutomationCli(forwarded, input, undefined,
+      { managedHost: managedLaunch ? setupHost as "codex" | "claude" : undefined });
   } else if (["audit", "review", "drift", "hook", "mcp"].includes(command)) {
     const binary = new URL(`./mason-${command}.js`, import.meta.url);
     process.argv = [process.execPath, fileURLToPath(binary), ...args];
