@@ -1,7 +1,8 @@
+import { profilePhase } from "../utils/profile.js";
 import { recordExecution, executionStatus, failureNotifications } from "./execution.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { prepareRepair, verifyRepair, findingId, repairFindingSchema, type RepairFinding, type RepairVerification } from "../audit/repair.js";
+import { withRepairSession, reportSchema, findingId, repairFindingSchema, type RepairFinding, type RepairVerification } from "../audit/repair.js";
 import { ALL_CHECKS, type AuditReport } from "../audit/types.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { checkCache, git, hash, readInputs, workspace, type Inputs } from "./evidence.js";
@@ -25,7 +26,7 @@ export interface AutomationReport {
   reportPath: string;
   findings: RepairFinding[];
   diagnostics: string[];
-  checks: { ran: string[]; reused: string[]; skipped: NonNullable<AuditReport>["skippedChecks"]; shared?: boolean };
+  checks: { ran: string[]; reused: string[]; skipped: NonNullable<AuditReport>["skippedChecks"]; shared?: boolean; auditReused?: boolean };
   counts: RepairVerification["counts"];
   capture: "observed" | "unknown";
   scope: string;
@@ -37,7 +38,7 @@ const cleanText = (text: string) => text.replace(/[\u0000-\u001f\u007f-\u009f]/g
 
 /** Read tools cannot create repair evidence. Observe their lifecycle without rescanning the checkout. */
 export async function observeReadOnlyTool(dir: string, event: AutomationEvent) {
-  const ws = await workspace(dir);
+  const ws = await profilePhase("automation.workspace", () => workspace(dir));
   await withLock(ws.root, ws.directory, async () => {
     const statePath = ws.directory + "/state.json";
     const raw = await readStoreJson(ws.root, statePath);
@@ -85,46 +86,65 @@ async function loadState(ws: Workspace): Promise<State> {
 
 const analysisSchema = z.object({
   id: z.string(), fingerprint: z.string(), completedAt: z.number(), baselineDigest: z.string(),
+  currentAudit: reportSchema.nullable().optional(),
   report: z.object({
     version: z.literal(1), status: z.enum(["verified", "issues-remain", "incomplete", "unavailable"]),
     root: z.string(), branch: z.string(), head: z.string(), baselinePaths: z.array(z.string()), reportPath: z.string(),
     findings: z.array(repairFindingSchema), diagnostics: z.array(z.string()),
     checks: z.object({ ran: z.array(z.string()), reused: z.array(z.string()),
-      skipped: z.array(z.object({ check: z.string(), reason: z.string(), doc: z.string().optional() })) }),
+      skipped: z.array(z.object({ check: z.string(), reason: z.string(), doc: z.string().optional() })), auditReused: z.boolean().optional() }),
     counts: z.object({ resolved: z.number(), unresolved: z.number(), "review-required": z.number(), unverified: z.number() }),
     capture: z.enum(["observed", "unknown"]), scope: z.string(),
   }),
 });
 const sharedSchema = z.object({ analysis: analysisSchema, digest: z.string() });
 type Analysis = z.infer<typeof analysisSchema>;
-const baselineDigest = async (ws: Workspace, state: State) => hash(await Promise.all(
+const baselineDigest = async (ws: Workspace, state: State) => profilePhase("automation.baselines", async () => hash(await Promise.all(
   state.baselines.map(async b => [b.path, await readStoreJson(ws.root, b.path)]),
-));
+)));
 
-async function sharedAnalysis(ws: Workspace, state: State, inputs: Inputs, startedAt: number): Promise<Analysis | null> {
+async function matchingAnalysis(ws: Workspace, state: State, inputs: Inputs): Promise<{ analysis: Analysis | null; diagnostic?: string }> {
   const pointer = state.analysis;
-  // Share only overlapping calls, never treat an earlier check as a new verification.
-  if (!pointer || pointer.fingerprint !== inputs.fingerprint || pointer.completedAt < startedAt) return null;
-  const stored = sharedSchema.parse(await readStoreJson(ws.root, pointer.path));
+  if (!pointer || pointer.fingerprint !== inputs.fingerprint) return { analysis: null };
+  if (pointer.path !== ws.directory + "/checks/analysis-" + inputs.fingerprint + ".json") {
+    throw new Error("Invalid automation analysis cache path; inspect the retained state.");
+  }
+  // This is a derived cache, not original repair evidence. Missing or malformed
+  // data can be rebuilt, but storage/permission failures and unsafe paths remain
+  // errors. Never discard or replace an original baseline to recover a cache.
+  const invalid = { analysis: null, diagnostic: "Discarded an invalid current-audit cache; audit preparation and original verification were repeated." };
+  let raw: unknown;
+  try { raw = await readStoreJson(ws.root, pointer.path); }
+  catch (error) {
+    const cause = (error as Error).cause;
+    if (cause instanceof SyntaxError || cause instanceof Error && cause.message === "expected a JSON object, received null") return invalid;
+    throw error;
+  }
+  if (raw === null) return { analysis: null };
+  const parsed = sharedSchema.safeParse(raw);
+  if (!parsed.success) return invalid;
+  const stored = parsed.data;
   const a = stored.analysis;
   if (stored.digest !== hash(a) || a.id !== pointer.id || a.fingerprint !== inputs.fingerprint ||
       a.completedAt !== pointer.completedAt || a.report.root !== ws.root || a.report.branch !== ws.branch ||
       a.report.head !== inputs.head || hash(a.report.baselinePaths) !== hash(state.baselines.map(b => b.path))) {
-    throw new Error("Invalid shared automation evidence; run a new check.");
+    return invalid;
   }
   if (a.baselineDigest !== await baselineDigest(ws, state)) throw new Error("Repair baseline was modified; use the original baseline.");
-  return a;
+  return { analysis: a };
 }
 
 async function verifyInputs(ws: Workspace, inputs: Inputs) {
-  const [after, currentWs] = await Promise.all([readInputs(ws.root), workspace(ws.root)]);
-  if (after.fingerprint !== inputs.fingerprint || currentWs.directory !== ws.directory) {
-    throw new Error("Repository inputs or branch changed during automation; no current verification was recorded. Retry on a stable checkout.");
-  }
+  return profilePhase("automation.revalidate", async () => {
+    const [after, currentWs] = await Promise.all([readInputs(ws.root), workspace(ws.root)]);
+    if (after.fingerprint !== inputs.fingerprint || currentWs.directory !== ws.directory) {
+      throw new Error("Repository inputs or branch changed during automation; no current verification was recorded. Retry on a stable checkout.");
+    }
+  });
 }
 
 /** Expensive reads and checks never hold the shared state lock. */
-async function computeAnalysis(ws: Workspace, state: State, inputs: Inputs, event: AutomationEvent) {
+async function computeAnalysis(ws: Workspace, state: State, inputs: Inputs, event: AutomationEvent, previousAudit?: AuditReport | null, cacheDiagnostic?: string) {
   const baselines = [...state.baselines];
   const now = new Date().toISOString();
   const empty: AutomationReport = { version: 1, status: "unavailable", root: ws.root, branch: ws.branch, head: inputs.head,
@@ -140,26 +160,37 @@ async function computeAnalysis(ws: Workspace, state: State, inputs: Inputs, even
     catch { throw new Error("Detached checkout moved to a different history; original repair evidence was retained. Inspect that baseline explicitly."); }
   }
   let cached: unknown = null;
-  const diagnostics: string[] = [];
+  const diagnostics: string[] = cacheDiagnostic ? [cacheDiagnostic] : [];
   try { cached = await readStoreJson(ws.root, ws.directory + "/cache.json"); }
   catch { diagnostics.push("Unreadable automation cache; checks are being recomputed."); }
   const cache = checkCache(cached, inputs);
   if (cache.diagnostic) diagnostics.push(cache.diagnostic);
-  const saveBaseline = async () => {
-    if (baselines.length >= 128) throw new Error("128 retained baselines need review; automatic capture stopped without discarding original evidence.");
-    const prepared = await prepareRepair(ws.root, ALL_CHECKS, cache.options);
-    baselines.push({ path: prepared.baselinePath, at: now, event: event.event, fingerprint: inputs.fingerprint });
-  };
-  if (!baselines.length) await saveBaseline();
-  const verifications: RepairVerification[] = [];
-  for (const baseline of baselines) verifications.push(await verifyRepair(ws.root, baseline.path, cache.options));
-  const known = new Set(verifications.flatMap(v => v.findings.map(f => f.id)));
-  // A clean initial baseline cannot retain findings introduced by a later rename.
-  // Preserve those findings now, before another tool can edit or commit the docs.
-  if (verifications.some(v => v.newFindings.some(f => !known.has(findingId(f))))) {
-    await saveBaseline();
-    verifications.push(await verifyRepair(ws.root, baselines.at(-1)!.path, cache.options));
-  }
+  // Only complete, validated raw checks can bypass current-audit preparation.
+  // Retained history and review outcomes are still evaluated on every invocation.
+  const cachedAudit = previousAudit?.gitAvailable && previousAudit.headHash === inputs.head &&
+    previousAudit.root === ws.root && !previousAudit.skippedChecks.length &&
+    ALL_CHECKS.every(name => previousAudit.checksRun?.includes(name) && cache.has(name)) ? previousAudit : undefined;
+  if (cachedAudit) for (const name of ALL_CHECKS) cache.reused.add(name);
+  let currentAudit: AuditReport | null = null;
+  const verifications = await withRepairSession(ws.root, cache.options, async repairs => {
+    const saveBaseline = async () => {
+      if (baselines.length >= 128) throw new Error("128 retained baselines need review; automatic capture stopped without discarding original evidence.");
+      const prepared = await repairs.prepare();
+      baselines.push({ path: prepared.baselinePath, at: now, event: event.event, fingerprint: inputs.fingerprint });
+    };
+    if (!baselines.length) await saveBaseline();
+    const verifications: RepairVerification[] = [];
+    for (const baseline of baselines) verifications.push(await repairs.verify(baseline.path));
+    const known = new Set(verifications.flatMap(v => v.findings.map(f => f.id)));
+    // A clean initial baseline cannot retain findings introduced by a later rename.
+    // Preserve those findings now, before another tool can edit or commit the docs.
+    if (verifications.some(v => v.newFindings.some(f => !known.has(findingId(f))))) {
+      await saveBaseline();
+      verifications.push(await repairs.verify(baselines.at(-1)!.path));
+    }
+    currentAudit = await repairs.currentAudit();
+    return verifications;
+  }, cachedAudit);
   const merged = new Map<string, RepairFinding>();
   for (const verification of verifications) {
     for (const finding of verification.findings) {
@@ -175,25 +206,27 @@ async function computeAnalysis(ws: Workspace, state: State, inputs: Inputs, even
     version: 1, status: diagnostics.length || verifications.some(v => v.status === "incomplete") ? "incomplete" : counts.unresolved ? "issues-remain" : "verified",
     root: ws.root, branch: ws.branch, head: inputs.head, baselinePaths: baselines.map(b => b.path), reportPath: "",
     findings: [...merged.values()], diagnostics: [...new Set(diagnostics)],
-    checks: { ran: [...cache.ran], reused: [...cache.reused].filter(name => !cache.ran.has(name)), skipped: verifications.at(-1)!.currentAudit?.skippedChecks ?? [] },
+    checks: { ran: [...cache.ran], reused: [...cache.reused].filter(name => !cache.ran.has(name)), skipped: verifications.at(-1)!.currentAudit?.skippedChecks ?? [], ...(cachedAudit ? { auditReused: true } : {}) },
     counts, capture: "unknown", scope: SCOPE,
   };
-  return { baselines, report, cache: cache.ran.size || cached === null || cache.diagnostic ? cache.serialize() : null };
+  return { baselines, report, currentAudit, cache: cache.ran.size || cached === null || cache.diagnostic ? cache.serialize() : null };
 }
 
 /** Per-input coordination shares expensive work; unrelated inputs can be checked concurrently. */
 async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, startedAt: number) {
   return withLock(ws.root, ws.directory + "/analysis/" + inputs.fingerprint, async () => {
     const before = await loadState(ws);
-    const shared = await sharedAnalysis(ws, before, inputs, startedAt);
-    if (shared) return { analysis: shared, shared: true };
+    const { analysis: previous, diagnostic } = await matchingAnalysis(ws, before, inputs);
+    // Overlap may share the whole verification. Sequential calls reuse only its
+    // current audit: original history and review scopes need fresh inspection.
+    if (previous && previous.completedAt >= startedAt) return { analysis: previous, shared: true };
     const originalDigest = await baselineDigest(ws, before);
-    const computed = await computeAnalysis(ws, before, inputs, event);
+    const computed = await computeAnalysis(ws, before, inputs, event, previous?.currentAudit as AuditReport | undefined, diagnostic);
     await verifyInputs(ws, inputs);
     if (originalDigest !== await baselineDigest(ws, before)) throw new Error("Repair baseline was modified during automation; original evidence must be inspected.");
     const id = randomUUID();
     const analysis = analysisSchema.parse({ id, fingerprint: inputs.fingerprint, completedAt: Date.now(),
-      baselineDigest: await baselineDigest(ws, { ...before, baselines: computed.baselines }), report: computed.report });
+      baselineDigest: await baselineDigest(ws, { ...before, baselines: computed.baselines }), report: computed.report, currentAudit: computed.currentAudit });
     const analysisPath = ws.directory + "/checks/analysis-" + inputs.fingerprint + ".json";
     await withLock(ws.root, ws.directory, async () => {
       const state = await loadState(ws);
@@ -214,17 +247,17 @@ async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, st
 /** Durable lifecycle: read concurrently, then merge each call into the latest state. */
 export async function automate(dir: string, event: AutomationEvent) {
   const startedAt = Date.now();
-  const ws = await workspace(dir);
+  const ws = await profilePhase("automation.workspace", () => workspace(dir));
   return recordExecution(ws.root, ws.directory, event.event, async () => {
     const inputs = await readInputs(ws.root);
-    const result = await analyze(ws, inputs, event, startedAt);
+    const result = await profilePhase("automation.analysis", () => analyze(ws, inputs, event, startedAt));
     if (result.shared) {
       await verifyInputs(ws, inputs);
       if (result.analysis.baselineDigest !== await baselineDigest(ws, await loadState(ws))) {
         throw new Error("Repair baseline was modified during shared automation; original evidence must be inspected.");
       }
     }
-    return withLock(ws.root, ws.directory, async () => {
+    return profilePhase("automation.publish", () => withLock(ws.root, ws.directory, async () => {
       const state = await loadState(ws);
       if (state.analysis?.id !== result.analysis.id) throw new Error("Automation evidence changed during publication; retry against the current inputs.");
       const report = structuredClone(result.analysis.report) as AutomationReport;
@@ -276,13 +309,13 @@ export async function automate(dir: string, event: AutomationEvent) {
       if (persistReport) await writeStoreJson(ws.root, report.reportPath, report);
       await writeStoreJson(ws.root, ws.directory + "/state.json", state);
       return { report, message: notify ? summarize(report) : null, continueOnce };
-    });
+    }));
   });
 }
 
 /** Read-only inspection: configured hooks and observed runtime events are different facts. */
 export async function automationStatus(dir: string) {
-  const ws = await workspace(dir);
+  const ws = await profilePhase("automation.workspace", () => workspace(dir));
   const execution = await executionStatus(ws.root, ws.directory);
   const notifications = await failureNotifications(ws.root, ws.directory);
   const raw = await readStoreJson(ws.root, ws.directory + "/state.json");

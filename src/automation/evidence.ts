@@ -1,3 +1,4 @@
+import { profilePhase } from "../utils/profile.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -24,15 +25,15 @@ declare const PKG_VERSION: string;
 const engineVersion = typeof PKG_VERSION === "string" ? PKG_VERSION : "development";
 export const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export async function git(root: string, ...args: string[]): Promise<string> {
-  return (await exec("git", args, { cwd: root, maxBuffer: 16 * 1024 * 1024, timeout: 10000 })).stdout;
+  return profilePhase("automation.git", async () => (await exec("git", args, { cwd: root, maxBuffer: 16 * 1024 * 1024, timeout: 10000 })).stdout);
 }
 
 export async function workspace(dir: string) {
   const root = await fs.realpath((await git(dir, "rev-parse", "--show-toplevel")).trim());
-  const gitDir = await fs.realpath((await git(root, "rev-parse", "--absolute-git-dir")).trim());
-  let branch: string;
-  try { branch = (await git(root, "symbolic-ref", "--quiet", "HEAD")).trim(); }
-  catch { branch = "detached"; }
+  const [gitDir, branch] = await Promise.all([
+    git(root, "rev-parse", "--absolute-git-dir").then(value => fs.realpath(value.trim())),
+    git(root, "symbolic-ref", "--quiet", "HEAD").then(value => value.trim(), () => "detached"),
+  ]);
   return { root, gitDir, branch, directory: ".mason/reports/automation/" + hash([root, gitDir, branch]).slice(0, 24) };
 }
 
@@ -46,6 +47,10 @@ export interface Inputs {
 }
 
 export async function readInputs(root: string): Promise<Inputs> {
+  return profilePhase("automation.inputs", () => collectInputs(root));
+}
+
+async function collectInputs(root: string): Promise<Inputs> {
   const docPaths = await discoverDocPaths(root);
   const [headText, docStatus, shallowPath, replacements] = await Promise.all([
     git(root, "rev-parse", "HEAD"),
@@ -59,21 +64,29 @@ export async function readInputs(root: string): Promise<Inputs> {
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   const docs: Record<string, string | null> = {};
   const docContents: Array<[string, string | null]> = [];
+  const parsedDocs = [];
   const claims: Array<[string, boolean, boolean]> = [];
+  const presence = new Map<string, Promise<boolean>>();
+  const exists = (file: string) => {
+    if (!presence.has(file)) presence.set(file, pathExists(root, file));
+    return presence.get(file)!;
+  };
   for (const file of docPaths) {
     const text = await content(root, file);
     docs[file] = text === null ? null : hash(text);
     docContents.push([file, text]);
-    for (const claim of text ? extractClaims(text).paths : []) {
+    const parsed = { path: file, content: text ?? "", claims: extractClaims(text ?? "") };
+    parsedDocs.push(parsed);
+    for (const claim of parsed.claims.paths) {
       const scope = pathClaimScope(file, claim);
       if (scope?.candidates.some(gitMetadataPath)) continue;
       for (const candidate of scope?.candidates ?? []) {
         if (optionalMasonPath(candidate)) continue;
-        claims.push([candidate, await pathExists(root, candidate), await pathExists(root, path.posix.dirname(candidate))]);
+        const [filePresent, parentPresent] = await Promise.all([exists(candidate), exists(path.posix.dirname(candidate))]);
+        claims.push([candidate, filePresent, parentPresent]);
       }
     }
   }
-  const parsedDocs = docContents.map(([file, text]) => ({ path: file, content: text ?? "", claims: extractClaims(text ?? "") }));
   const combinedDocs = moduleDocumentation(parsedDocs);
   const countClaims = parsedDocs.flatMap(doc => doc.claims.counts.map(claim => ({ doc: doc.path, claim })));
   const decisionDirectory = await storePath(root, ".mason/decisions");
@@ -97,7 +110,7 @@ export async function readInputs(root: string): Promise<Inputs> {
     git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".", ":(exclude).mason/reports"),
     git(root, "ls-files", "--stage", "-z", "--", ".", ":(exclude).mason/reports"),
   ]) : ["", ""];
-  const common = [4, engineVersion, head, shallow, replacements, docContents];
+  const common = [5, engineVersion, head, shallow, replacements, docContents];
   const keys: Record<CheckName, string> = {
     "deleted-reference": hash([common, claims, docStatus]),
     "new-module": hash([common, modules]),
@@ -124,14 +137,16 @@ export function checkCache(raw: unknown, inputs: Inputs) {
       reused.add(name);
       return structuredClone(entries[name].result);
     }
-    const result = await CHECKS[name](ctx);
+    const result = await profilePhase("check." + name, () => CHECKS[name](ctx));
     ran.add(name);
     // An unavailable check must be retried even if the file inputs match.
     if (!result.skipped.length) entries[name] = { key: inputs.keys[name], result };
     else delete entries[name];
     return result;
   } };
-  return { options, ran, reused, diagnostic, serialize: () => {
+  return { options, ran, reused, diagnostic,
+    has: (name: CheckName) => entries[name]?.key === inputs.keys[name] && !entries[name].result.skipped.length,
+    serialize: () => {
     const canonical = cacheSchema.shape.entries.parse(entries);
     return { version: 1, entries: canonical, digest: hash(canonical) };
   } };

@@ -1,3 +1,4 @@
+import { profilePhase } from "../utils/profile.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -36,16 +37,28 @@ export interface AuditDoc {
   claims: DocClaims;
 }
 
-async function isDirty(resolvedRoot: string, relPath: string): Promise<boolean> {
+async function dirtyDocs(resolvedRoot: string, files: string[]): Promise<Set<string>> {
+  if (!files.length) return new Set();
   try {
-    const { stdout } = await exec(
-      "git",
-      ["status", "--porcelain", "--", `:(literal)${relPath}`],
-      { cwd: resolvedRoot }
-    );
-    return stdout.trim().length > 0;
+    const dirty = new Set<string>();
+    for (let offset = 0; offset < files.length; offset += 256) {
+      const { stdout } = await exec(
+        "git",
+        ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...files.slice(offset, offset + 256).map(file => `:(literal)${file}`)],
+        { cwd: resolvedRoot, maxBuffer: 16 * 1024 * 1024, timeout: 10000 }
+      );
+      const entries = stdout.split("\0");
+      for (let i = 0; i < entries.length; i++) {
+        if (!entries[i]) continue;
+        const status = entries[i].slice(0, 2);
+        dirty.add(entries[i].slice(3));
+        // Porcelain -z emits destination first, then the original rename/copy path.
+        if (/[RC]/.test(status) && entries[i + 1]) dirty.add(entries[++i]);
+      }
+    }
+    return dirty;
   } catch {
-    return true;
+    return new Set(files);
   }
 }
 
@@ -103,14 +116,23 @@ export function documentScope(file: string): string {
 }
 
 export async function discoverDocs(resolvedRoot: string): Promise<AuditDoc[]> {
+  return profilePhase("audit.documents", () => readDocs(resolvedRoot));
+}
+
+async function readDocs(resolvedRoot: string): Promise<AuditDoc[]> {
   const docs: AuditDoc[] = [];
-  for (const candidate of await discoverDocPaths(resolvedRoot)) {
-    const content = await readAuditInput(resolvedRoot, candidate);
-    if (content === null) throw new Error("Document disappeared during discovery: " + candidate);
-    const [lastCommit, dirty] = await Promise.all([lastCommitOf(resolvedRoot, candidate), isDirty(resolvedRoot, candidate)]);
-    docs.push({ path: candidate, content, scope: documentScope(candidate),
-      kind: /^readme\.md$/i.test(path.posix.basename(candidate)) ? "readme" : "instructions",
-      lineCount: content.split("\n").length, lastCommit, dirty, claims: extractClaims(content) });
+  const files = await discoverDocPaths(resolvedRoot);
+  const dirty = await dirtyDocs(resolvedRoot, files);
+  // Bound concurrent Git processes even when discovery reaches thousands of docs.
+  for (let offset = 0; offset < files.length; offset += 4) {
+    docs.push(...await Promise.all(files.slice(offset, offset + 4).map(async (candidate): Promise<AuditDoc> => {
+      const [content, lastCommit] = await Promise.all([readAuditInput(resolvedRoot, candidate),
+        profilePhase("audit.document-history", () => lastCommitOf(resolvedRoot, candidate))]);
+      if (content === null) throw new Error("Document disappeared during discovery: " + candidate);
+      return { path: candidate, content, scope: documentScope(candidate),
+        kind: /^readme\.md$/i.test(path.posix.basename(candidate)) ? "readme" : "instructions",
+        lineCount: content.split("\n").length, lastCommit, dirty: dirty.has(candidate), claims: extractClaims(content) };
+    })));
   }
   return docs;
 }

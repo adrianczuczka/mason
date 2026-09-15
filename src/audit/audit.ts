@@ -1,3 +1,4 @@
+import { profilePhase } from "../utils/profile.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getChangesWithStatus } from "../drift/drift.js";
@@ -27,6 +28,10 @@ export async function computeAudit(
   rootDir: string,
   options: AuditOptions = {}
 ): Promise<AuditReport | null> {
+  return profilePhase("audit.current", () => auditCurrent(rootDir, options));
+}
+
+async function auditCurrent(rootDir: string, options: AuditOptions): Promise<AuditReport | null> {
   const resolvedRoot = path.resolve(rootDir);
   const [docs, headHash] = await Promise.all([discoverDocs(resolvedRoot), getCurrentGitHash(resolvedRoot)]);
   if (docs.length === 0) return null;
@@ -58,13 +63,11 @@ export async function computeAudit(
   if (!report.gitAvailable) return report;
 
   const changesSinceDoc = new Map<string, FileChange[] | null>();
+  const changesByCommit = new Map<string, FileChange[] | null>();
   for (const doc of docs) {
-    changesSinceDoc.set(
-      doc.path,
-      doc.lastCommit
-        ? await getChangesWithStatus(resolvedRoot, doc.lastCommit.hash)
-        : null
-    );
+    const hash = doc.lastCommit?.hash;
+    if (hash && !changesByCommit.has(hash)) changesByCommit.set(hash, await getChangesWithStatus(resolvedRoot, hash));
+    changesSinceDoc.set(doc.path, hash ? changesByCommit.get(hash)! : null);
   }
 
   let decisionsPresent = false;

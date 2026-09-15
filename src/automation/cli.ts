@@ -5,6 +5,7 @@ import { runAutomationHook, hookConfig } from "./adapters.js";
 import { installAutomation, installedAutomation } from "./install.js";
 import { hostSchema } from "./store.js";
 import { createProgress, type Progress } from "../utils/progress.js";
+import { withProfile } from "../utils/profile.js";
 
 const TEARDOWN_USAGE = `Usage: mason teardown [options]
 
@@ -34,6 +35,7 @@ const USAGE = `Usage: mason-auto <setup|teardown|install|config|status|check|hoo
   --command <prefix>          Installed executable prefix for install/config
   --dry-run                   Preview teardown without writing
   --json                      Machine-readable output (status also uses JSON when piped)
+  --profile                   Local phase timings on stderr for check/hook; no file contents
 
 check exits 0 for verified checks, 1 for issues, 2 for incomplete/unavailable.
 teardown exits 0 for complete/no-op, 2 when cleanup needs attention (also in dry runs).
@@ -44,6 +46,7 @@ const parseCli = (argv: string[]) => parseArgs({ args: argv, allowPositionals: t
       dir: { type: "string" }, host: { type: "string" }, command: { type: "string" }, json: { type: "boolean" },
       help: { type: "boolean", short: "h" },
       "dry-run": { type: "boolean" },
+      profile: { type: "boolean" },
     } });
 export function isHookCommand(argv: string[]): boolean {
   try { const parsed = parseCli(argv); return parsed.positionals[0] === "hook" && !parsed.values.help; }
@@ -62,6 +65,8 @@ export async function runAutomationCli(argv: string[], stdin = "", io = defaultI
     if (values.help || !positionals.length) { io.out(positionals[0] === "teardown" ? TEARDOWN_USAGE : USAGE); return 0; }
     if (positionals.length !== 1) throw new Error("Expected one command.");
     [action] = positionals;
+    if (values.profile && !["check", "hook"].includes(action)) throw new Error("--profile applies only to check/hook.");
+    const measured = <T>(run: () => Promise<T>) => values.profile ? withProfile(run, io.err) : run();
     const dir = values.dir ?? process.cwd();
     if (values["dry-run"] !== undefined && action !== "teardown") throw new Error("--dry-run applies only to teardown.");
     if (action === "teardown") {
@@ -74,7 +79,7 @@ export async function runAutomationCli(argv: string[], stdin = "", io = defaultI
     if (action === "hook") {
       const host = hostSchema.parse(values.host);
       if (options.managedHost && options.managedHost !== host) throw new Error("Managed hook --host does not match its launcher.");
-      const output = await runAutomationHook(host, stdin, { managed: !!options.managedHost });
+      const output = await measured(() => runAutomationHook(host, stdin, { managed: !!options.managedHost }));
       if (output) io.out(JSON.stringify(output));
       return 0;
     }
@@ -104,7 +109,7 @@ export async function runAutomationCli(argv: string[], stdin = "", io = defaultI
       return 0;
     }
     if (action !== "check") throw new Error("Unknown automation command: " + action);
-    const { report } = await automate(dir, { event: "task_end" });
+    const { report } = await measured(() => automate(dir, { event: "task_end" }));
     io.out(values.json ? JSON.stringify(report, null, 2) : summarize(report));
     return report.status === "verified" ? 0 : report.status === "issues-remain" ? 1 : 2;
   } catch (error) {

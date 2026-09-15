@@ -1,3 +1,4 @@
+import { profilePhase } from "../utils/profile.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -16,7 +17,7 @@ import { assessAdvisory, advisoryReviewInventory, reviewSummarySchema, type Advi
 export { checkResultSchema, findingId } from "./findings.js";
 const count = z.number().int().nonnegative();
 
-const reportSchema = z.object({
+export const reportSchema = z.object({
   version: z.literal(1), root: z.string(), gitAvailable: z.literal(true),
   headHash: commitSchema.shape.hash, checksRun: z.array(checkSchema).nonempty(),
   docs: z.array(z.object({ path: z.string().refine(value => normalizeRepoPath(value) === value), scope: z.string().optional(),
@@ -89,7 +90,11 @@ async function docState(root: string): Promise<string> {
 }
 
 /** Refuse a verification assembled across a commit or instruction-file edit. */
-async function stableAudit(root: string, checks: CheckName[], options: AuditOptions = {}) {
+async function stableAudit(root: string, checks: CheckName[], options: AuditOptions = {}): Promise<AuditReport | null> {
+  return profilePhase("repair.audit", () => readStableAudit(root, checks, options));
+}
+
+async function readStableAudit(root: string, checks: CheckName[], options: AuditOptions) {
   const head = await getCurrentGitHash(root);
   const before = await docState(root);
   const report = await computeAudit(root, { ...options, checks });
@@ -101,9 +106,65 @@ async function stableAudit(root: string, checks: CheckName[], options: AuditOpti
 }
 
 export async function prepareRepair(rootDir: string, checks: CheckName[] = ALL_CHECKS, options: AuditOptions = {}) {
+  return prepareOriginal(rootDir, checks, options);
+}
+
+interface RepairSession {
+  audit: (checks: CheckName[]) => Promise<AuditReport | null>;
+  document: (file: string) => Promise<string | null>;
+  history: (head: string) => ReturnType<typeof getChangesWithStatus>;
+  assessment: typeof assessAdvisory;
+}
+
+/** Share current evidence only within one operation, then validate it again.
+ * Original baselines, their scope and their outcomes remain independent.
+ */
+export async function withRepairSession<T>(root: string, options: AuditOptions, run: (session: {
+  prepare: () => ReturnType<typeof prepareRepair>;
+  verify: (baselinePath: string) => Promise<RepairVerification>;
+  currentAudit: () => Promise<AuditReport | null>;
+}) => Promise<T>, cachedAudit?: AuditReport): Promise<T> {
+  const before = await Promise.all([getCurrentGitHash(root), docState(root), advisoryReviewInventory(root).then(digest)]);
+  const audits = new Map<string, Promise<AuditReport | null>>();
+  const documents = new Map<string, Promise<string | null>>();
+  const history = new Map<string, ReturnType<typeof getChangesWithStatus>>();
+  const assessments = new Map<string, ReturnType<typeof assessAdvisory>>();
+  const memo = <T>(cache: Map<string, Promise<T>>, key: string, read: () => Promise<T>): Promise<T> => {
+    if (!cache.has(key)) cache.set(key, read());
+    return cache.get(key)!;
+  };
+  const session: RepairSession = {
+    audit: checks => memo(audits, [...checks].sort().join(","), async () => {
+      if (cachedAudit && cachedAudit.headHash === before[0] && cachedAudit.root === root &&
+          digest([...checks].sort()) === digest([...(cachedAudit.checksRun ?? [])].sort())) {
+        // Raw audit results are cached, never their approval assessments. Original
+        // baselines may refer to scopes no longer mentioned in the current docs.
+        const current = structuredClone(cachedAudit);
+        const reviews = (await Promise.all(allFindings(current).map(f => assessAdvisory(root, f, before[0])))).filter(r => r !== null);
+        delete current.advisoryReviews;
+        if (reviews.length) current.advisoryReviews = reviews;
+        return current;
+      }
+      return computeAudit(root, { ...options, checks });
+    }),
+    document: file => memo(documents, file, async () => readBoundedFile(await storePath(root, file), 10 * 1024 * 1024)),
+    history: head => memo(history, head, () => getChangesWithStatus(root, head)),
+    assessment: (dir, finding, head) => memo(assessments, digest([dir, finding, head]), () => assessAdvisory(dir, finding, head)),
+  };
+  const result = await run({
+    prepare: () => prepareOriginal(root, ALL_CHECKS, options, session),
+    verify: baseline => profilePhase("repair.verify", () => verifyOriginal(root, baseline, options, session)),
+    currentAudit: () => session.audit(ALL_CHECKS),
+  });
+  const after = await Promise.all([getCurrentGitHash(root), docState(root), advisoryReviewInventory(root).then(digest)]);
+  if (digest(before) !== digest(after)) throw new Error("HEAD, context files or advisory review records changed during verification; retry against stable evidence.");
+  return result;
+}
+
+async function prepareOriginal(rootDir: string, checks: CheckName[], options: AuditOptions, session?: RepairSession) {
   const root = await fs.realpath(rootDir);
   const selected = z.array(checkSchema).nonempty().parse(checks);
-  const report = await stableAudit(root, selected, options);
+  const report = await (session ? session.audit(selected) : stableAudit(root, selected, options));
   if (!report) throw new Error("No context files found to prepare a repair.");
   if (!report.gitAvailable) throw new Error("Readable Git history is required to prepare a repair.");
   // Canonicalize before hashing; validation on read must yield the same bytes.
@@ -130,23 +191,27 @@ export async function loadRepairBaseline(rootDir: string, baselinePath: string) 
 }
 
 export async function verifyRepair(rootDir: string, baselinePath: string, options: AuditOptions = {}): Promise<RepairVerification> {
+  return profilePhase("repair.verify", () => verifyOriginal(rootDir, baselinePath, options));
+}
+
+async function verifyOriginal(rootDir: string, baselinePath: string, options: AuditOptions, session?: RepairSession): Promise<RepairVerification> {
   const { root, relative, original } = await loadRepairBaseline(rootDir, baselinePath);
   const diagnostics: string[] = [];
   let reviewDigest: string | undefined;
   let current: AuditReport | null = null;
   try {
-    reviewDigest = digest(await advisoryReviewInventory(root));
-    current = await stableAudit(root, original.checksRun!, options);
+    if (!session) reviewDigest = digest(await advisoryReviewInventory(root));
+    current = await (session ? session.audit(original.checksRun!) : stableAudit(root, original.checksRun!, options));
     if (!current) diagnostics.push("No context files remain available to audit.");
     else if (!current.gitAvailable) diagnostics.push("Git history is unavailable.");
     for (const doc of original.docs) {
       if (!allFindings(original).some(f => f.anchor.doc === doc.path) || !current?.docs.some(d => d.path === doc.path)) continue;
-      const content = await readBoundedFile(await storePath(root, doc.path), 10 * 1024 * 1024);
+      const content = await (session ? session.document(doc.path) : readBoundedFile(await storePath(root, doc.path), 10 * 1024 * 1024));
       if (content === null || !content.trim()) {
         diagnostics.push("Original context file " + doc.path + " is empty or unreadable; losing its claims does not verify a repair.");
       }
     }
-    if (await getChangesWithStatus(root, original.headHash!) === null) {
+    if (await (session ? session.history(original.headHash!) : getChangesWithStatus(root, original.headHash!)) === null) {
       diagnostics.push("The original audit commit is unavailable; repair history cannot be verified.");
     }
   } catch (error) {
@@ -171,7 +236,7 @@ export async function verifyRepair(rootDir: string, baselinePath: string, option
     if (!current.checksRun?.includes(finding.type) || skipped.length) {
       return { ...base, status: "unverified", reason: skipped.map(s => s.reason).join("; ") || "The original check did not run." };
     }
-    const review = await assessAdvisory(root, now ?? finding, original.headHash!);
+    const review = await (session?.assessment ?? assessAdvisory)(root, now ?? finding, original.headHash!);
     if (review) {
       if (review.status === "unverified") return { ...base, review, status: "unverified", reason: review.reason };
       if (review.status === "current") return { ...base, review, status: "resolved", reason: review.reason };
@@ -183,7 +248,7 @@ export async function verifyRepair(rootDir: string, baselinePath: string, option
     }
     return { ...base, status: "resolved", reason: "The original check ran and no longer reports this claim. Inspect the edit for semantic correctness." };
   }));
-  try {
+  if (!session) try {
     if (reviewDigest !== digest(await advisoryReviewInventory(root)) || current?.headHash !== await getCurrentGitHash(root)) {
       diagnostics.push("HEAD or advisory review records changed during verification; repeat against stable evidence.");
       for (const finding of findings) { finding.status = "unverified"; finding.reason = diagnostics.at(-1)!; }

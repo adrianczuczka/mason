@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.17.3 — 2026-09-15
+
+- Reduce repeated hook work by sharing the current audit across repair baselines and reusing complete current audits on unchanged sequential calls. Keep original history, review assessments, skipped-check retries and per-tool evidence receipts independent.
+- Rebuild missing or damaged derived audit caches without clearing original repair evidence; retain failures for unsafe paths or damaged baselines.
+- Batch document status checks, bound concurrent document-history reads, and reuse changes from shared document commits.
+- Add opt-in `--profile` timing output for checks/hooks and larger hook benchmarks covering retained repairs, ignored build output, decision records and final-commit verification. See [hook performance](docs/hook-performance.md) for scope and measurements.
+
+Run `mason upgrade` for standalone installations, or `npm install -g mason-context@0.17.3` for npm installations, then restart running assistants. Existing project integrations do not need setup again for this release. Decisions and retained repair evidence are preserved.
+
 ## 0.17.2 — 2026-09-15
 
 - Show progress during standalone installation, upgrades, and project setup, with native download progress and elapsed-time spinners in interactive terminals. Keep redirected progress on stderr and JSON, MCP, and hook output unchanged.
