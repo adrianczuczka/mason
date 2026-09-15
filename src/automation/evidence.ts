@@ -1,9 +1,8 @@
+import { execGit } from "../utils/git-read.js";
 import { profilePhase } from "../utils/profile.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import fg from "fast-glob";
 import { z } from "zod";
 import { discoverDocPaths } from "../audit/docs.js";
@@ -20,12 +19,11 @@ import { commandInputs } from "../audit/checks/dead-command.js";
 import { storePath } from "../utils/storage.js";
 import { advisoryReviewInventory } from "../audit/advisory-review.js";
 
-const exec = promisify(execFile);
 declare const PKG_VERSION: string;
 const engineVersion = typeof PKG_VERSION === "string" ? PKG_VERSION : "development";
 export const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export async function git(root: string, ...args: string[]): Promise<string> {
-  return profilePhase("automation.git", async () => (await exec("git", args, { cwd: root, maxBuffer: 16 * 1024 * 1024, timeout: 10000 })).stdout);
+  return profilePhase("automation.git", async () => (await execGit(args, { cwd: root, maxBuffer: 16 * 1024 * 1024, timeout: 10000 })).stdout);
 }
 
 export async function workspace(dir: string) {

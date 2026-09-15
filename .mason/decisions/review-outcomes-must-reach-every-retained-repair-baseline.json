@@ -2,7 +2,7 @@
   "version": 2,
   "id": "review-outcomes-must-reach-every-retained-repair-baseline",
   "title": "Review outcomes must reach every retained repair baseline",
-  "body": "An initially clean repair baseline can later report the same advisory as new while another baseline owns it as original. Closing only the latter leaves automation incomplete. Apply assessments by stable finding identity to both original and new findings without deleting raw evidence. Share the current audit across baselines, but verify each original scope and history. Sequential hooks can reuse complete current audits; skipped checks must retry. Never reuse approval outcomes just because the current audit fingerprint matches: an assessment may cover an ignored path no longer mentioned in the current docs. The performance regression demonstrates that path appearing with an unchanged current-input fingerprint, and requires the original review to reopen. Keep raw check caching separate from review status, include review-record contents in publication fingerprints, and recheck original history and assessments on each invocation. Scope reviews to relevant document/manifest history so final metadata and unrelated commits preserve them. Explicit ignored-path presence needs its own observation because Git misses it. Decision findings consume existing authorized decision reviews, not a second approval path. Regressions cover multi-baseline closure, final commits, concurrent input changes and ignored review scopes; they do not establish semantic correctness or authenticated approval.",
+  "body": "An initially clean baseline can later report the same advisory as new while another owns it as original. Apply assessments by stable finding identity to both without deleting raw evidence. Share current audits across baselines; verify each original scope and history. Sequential hooks may reuse complete audits, but skipped checks must retry. Never reuse approval outcomes solely from the current audit fingerprint: a review can cover an ignored path no longer mentioned in current docs. That path can change without changing the current fingerprint, so recheck original history and assessments on every invocation. Keep raw check caching separate from review status and include review-record contents in publication fingerprints. Scope reviews to relevant document/manifest history so metadata and unrelated commits preserve them. Observe explicit ignored paths because Git misses them. Decision findings consume existing authorized decision reviews. Share document/source inventory and exact history reads only within one inspection; final validation must use a new inspection, and failed reads must retry. Reusing initial discovery for validation can hide new documents, source deletions or ignore changes. Automation owns the final full-input guard; standalone repairs retain their guards. Regressions cover these boundaries, retained baselines, final commits and concurrent changes; they do not establish semantic correctness or authenticated approval.",
   "category": "gotcha",
   "files": [
     "src/audit/repair.ts",
@@ -10,14 +10,16 @@
     "src/automation/evidence.ts",
     "src/automation/runtime.ts",
     "test/advisory-review.test.ts",
-    "test/automation-performance.test.ts"
+    "test/automation-performance.test.ts",
+    "src/audit/inspection.ts",
+    "test/git-inspection.test.ts"
   ],
   "createdAt": "2026-09-11T07:57:32.382Z",
-  "updatedAt": "2026-09-15T12:34:05.193Z",
+  "updatedAt": "2026-09-15T17:17:29.570Z",
   "refreshedHash": "e9f04c4ef580195705a322c9a03d35fdad1b1a78",
   "status": "active",
   "approval": "proposed",
-  "revision": 2,
+  "revision": 3,
   "sources": [
     {
       "kind": "document",
@@ -33,6 +35,16 @@
       "kind": "document",
       "reference": "test/automation-performance.test.ts",
       "note": "Cached current audits must still recheck original history and reopen reviews for ignored scopes absent from current documentation."
+    },
+    {
+      "kind": "document",
+      "reference": "test/git-inspection.test.ts",
+      "note": "Fresh final inventories detect new documents/modules, source deletions, ignore changes and unavailable reads; concurrent inspections are independent."
+    },
+    {
+      "kind": "document",
+      "reference": "docs/hook-performance.md",
+      "note": "Git inventory measurements and the distinction between shared initial reads and independent final validation."
     }
   ],
   "history": [
@@ -100,6 +112,57 @@
             "kind": "document",
             "reference": "test/automation-performance.test.ts",
             "note": "Cached current audits must still recheck original history and reopen reviews for ignored scopes absent from current documentation."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "e9f04c4ef580195705a322c9a03d35fdad1b1a78"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-15T17:17:29.570Z",
+      "actor": "Codex",
+      "revision": 3,
+      "content": {
+        "title": "Review outcomes must reach every retained repair baseline",
+        "body": "An initially clean baseline can later report the same advisory as new while another owns it as original. Apply assessments by stable finding identity to both without deleting raw evidence. Share current audits across baselines; verify each original scope and history. Sequential hooks may reuse complete audits, but skipped checks must retry. Never reuse approval outcomes solely from the current audit fingerprint: a review can cover an ignored path no longer mentioned in current docs. That path can change without changing the current fingerprint, so recheck original history and assessments on every invocation. Keep raw check caching separate from review status and include review-record contents in publication fingerprints. Scope reviews to relevant document/manifest history so metadata and unrelated commits preserve them. Observe explicit ignored paths because Git misses them. Decision findings consume existing authorized decision reviews. Share document/source inventory and exact history reads only within one inspection; final validation must use a new inspection, and failed reads must retry. Reusing initial discovery for validation can hide new documents, source deletions or ignore changes. Automation owns the final full-input guard; standalone repairs retain their guards. Regressions cover these boundaries, retained baselines, final commits and concurrent changes; they do not establish semantic correctness or authenticated approval.",
+        "category": "gotcha",
+        "files": [
+          "src/audit/repair.ts",
+          "src/audit/advisory-review.ts",
+          "src/automation/evidence.ts",
+          "src/automation/runtime.ts",
+          "test/advisory-review.test.ts",
+          "test/automation-performance.test.ts",
+          "src/audit/inspection.ts",
+          "test/git-inspection.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": "test/advisory-review.test.ts",
+            "note": "Original/new findings across retained baselines, final metadata commit, concurrent reviews and ignored output changes."
+          },
+          {
+            "kind": "document",
+            "reference": "docs/checks.md",
+            "note": "Explicit assessments preserve original evidence and remain separate from decision approval."
+          },
+          {
+            "kind": "document",
+            "reference": "test/automation-performance.test.ts",
+            "note": "Cached current audits must still recheck original history and reopen reviews for ignored scopes absent from current documentation."
+          },
+          {
+            "kind": "document",
+            "reference": "test/git-inspection.test.ts",
+            "note": "Fresh final inventories detect new documents/modules, source deletions, ignore changes and unavailable reads; concurrent inspections are independent."
+          },
+          {
+            "kind": "document",
+            "reference": "docs/hook-performance.md",
+            "note": "Git inventory measurements and the distinction between shared initial reads and independent final validation."
           }
         ]
       },

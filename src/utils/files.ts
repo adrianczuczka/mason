@@ -1,12 +1,10 @@
+import { execGit } from "./git-read.js";
 import fs from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import fg from "fast-glob";
 import { isWithinRoot, normalizeRepoPath } from "./paths.js";
 
-const exec = promisify(execFile);
 export const SOURCE_EXTENSIONS = ["ts", "tsx", "js", "jsx", "mts", "cts", "mjs", "cjs", "vue", "svelte", "kt", "kts", "java", "py", "go", "rs", "swift", "rb", "cs", "cpp", "c", "h", "hpp", "dart", "php"];
 export const SOURCE_GLOB = `**/*.{${SOURCE_EXTENSIONS.join(",")}}`;
 export const SOURCE_IGNORE = [
@@ -76,12 +74,12 @@ export async function createFileAccess(rootDir: string) {
   const ignore = [...SOURCE_IGNORE, ...(config.ignore ?? [])];
   let gitFiles: Set<string> | null = null;
   try {
-    const { stdout } = await exec("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root, maxBuffer: 50 * 1024 * 1024 });
+    const { stdout } = await execGit(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root, maxBuffer: 50 * 1024 * 1024 });
     gitFiles = new Set(stdout.split("\0").filter(Boolean));
   } catch {
     // File-system projects are supported. Fail closed if this IS a Git repo.
     let inGit = false;
-    try { await exec("git", ["rev-parse", "--git-dir"], { cwd: root }); inGit = true; } catch { /* no Git */ }
+    try { await execGit(["rev-parse", "--git-dir"], { cwd: root }); inGit = true; } catch { /* no Git */ }
     if (inGit) throw new Error("Cannot enumerate Git files safely");
   }
 

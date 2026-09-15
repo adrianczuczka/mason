@@ -116,15 +116,16 @@ interface RepairSession {
   assessment: typeof assessAdvisory;
 }
 
-/** Share current evidence only within one operation, then validate it again.
- * Original baselines, their scope and their outcomes remain independent.
+/** Automation shares one inspection across its audit and original baselines.
+ * Its required validator re-reads the full input inventory before this returns.
+ * Standalone prepare/verify retain their own stability guards below.
  */
 export async function withRepairSession<T>(root: string, options: AuditOptions, run: (session: {
   prepare: () => ReturnType<typeof prepareRepair>;
   verify: (baselinePath: string) => Promise<RepairVerification>;
   currentAudit: () => Promise<AuditReport | null>;
-}) => Promise<T>, cachedAudit?: AuditReport): Promise<T> {
-  const before = await Promise.all([getCurrentGitHash(root), docState(root), advisoryReviewInventory(root).then(digest)]);
+}) => Promise<T>, validate: () => Promise<void>, cachedAudit?: AuditReport): Promise<T> {
+  const head = await getCurrentGitHash(root);
   const audits = new Map<string, Promise<AuditReport | null>>();
   const documents = new Map<string, Promise<string | null>>();
   const history = new Map<string, ReturnType<typeof getChangesWithStatus>>();
@@ -135,12 +136,12 @@ export async function withRepairSession<T>(root: string, options: AuditOptions, 
   };
   const session: RepairSession = {
     audit: checks => memo(audits, [...checks].sort().join(","), async () => {
-      if (cachedAudit && cachedAudit.headHash === before[0] && cachedAudit.root === root &&
+      if (cachedAudit && cachedAudit.headHash === head && cachedAudit.root === root &&
           digest([...checks].sort()) === digest([...(cachedAudit.checksRun ?? [])].sort())) {
         // Raw audit results are cached, never their approval assessments. Original
         // baselines may refer to scopes no longer mentioned in the current docs.
         const current = structuredClone(cachedAudit);
-        const reviews = (await Promise.all(allFindings(current).map(f => assessAdvisory(root, f, before[0])))).filter(r => r !== null);
+        const reviews = (await Promise.all(allFindings(current).map(f => assessAdvisory(root, f, head)))).filter(r => r !== null);
         delete current.advisoryReviews;
         if (reviews.length) current.advisoryReviews = reviews;
         return current;
@@ -156,8 +157,7 @@ export async function withRepairSession<T>(root: string, options: AuditOptions, 
     verify: baseline => profilePhase("repair.verify", () => verifyOriginal(root, baseline, options, session)),
     currentAudit: () => session.audit(ALL_CHECKS),
   });
-  const after = await Promise.all([getCurrentGitHash(root), docState(root), advisoryReviewInventory(root).then(digest)]);
-  if (digest(before) !== digest(after)) throw new Error("HEAD, context files or advisory review records changed during verification; retry against stable evidence.");
+  await validate();
   return result;
 }
 

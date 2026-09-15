@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.17.4 — 2026-09-15
+
+- Share Git document/source inventories within each automation inspection, with a separate fresh inventory before publication. Batch module ignore checks by directory level and reuse only identical scoped history queries.
+- Let automation's complete input validation replace overlapping repair discovery while retaining standalone repair guards, original evidence, skipped-check retries and per-tool receipts.
+- Include automation's Git subprocess counts and timings in opt-in profiles. Extend hook benchmarks with many top-level modules, incomplete checks, selectable Node runtimes and optional delayed Git reads.
+- Clarify that each developer runs setup once per checkout; upgrading an existing integration normally requires restarting the assistant.
+
+Synthetic measurements reduced a warm pre/post pair from 0.83 s to 0.60 s with native Git, and from 2.93 s to 1.19 s with deliberately delayed inventories. These are local benchmarks, not workplace latency guarantees; see [method and limitations](docs/hook-performance.md#git-inventory-follow-up-2026-09-15).
+
+Run `mason upgrade` for standalone installations, or `npm install -g mason-context@0.17.4` for npm installations, then restart running assistants. Existing integrations do not need setup again for this release. Decisions and retained repair evidence are preserved.
+
 ## 0.17.3 — 2026-09-15
 
 - Reduce repeated hook work by sharing the current audit across repair baselines and reusing complete current audits on unchanged sequential calls. Keep original history, review assessments, skipped-check retries and per-tool evidence receipts independent.

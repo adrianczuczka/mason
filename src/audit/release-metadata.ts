@@ -1,10 +1,8 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execGit } from "../utils/git-read.js";
 import type { RangeCommits } from "./git.js";
 
-const exec = promisify(execFile);
 async function git(root: string, args: string[]) {
-  return (await exec("git", args, { cwd: root, timeout: 10000, maxBuffer: 2 * 1024 * 1024 })).stdout;
+  return (await execGit(args, { cwd: root, timeout: 10000, maxBuffer: 2 * 1024 * 1024 })).stdout;
 }
 
 /** A deliberately narrow recognizer, not a Gradle evaluator. Unknown syntax stays advisory. */

@@ -32,6 +32,8 @@ mason status
 
 Run setup once for each host in each checkout you use, including fresh clones and linked worktrees. Mason must be installed on PATH before setup; a temporary `npx` invocation alone does not install a persistent command. For a local source build, run `npm run build` and `npm link` in Mason's checkout, then use `mason setup --dir /absolute/path/to/project --host codex`.
 
+**For teams:** committing Mason's configuration does not activate hooks for everyone. Each developer installs Mason and runs `mason setup --host claude` or `--host codex` in their own checkout, then completes the host activation steps below. Until local setup, the shared automatic hooks stay silent. Once configured, normal upgrades require restarting the assistant; rerun setup when release notes require a configuration update or when repairing configuration.
+
 Setup retains the initial audit before editing instruction files and configures MCP and lifecycle hooks to call the installed `mason` command. It creates no project launch scripts, runtime copy, or npm dependencies. Git is required. Standalone installations include Node in the user installation; npm installations use system Node. Neither hooks nor MCP download packages when they run.
 
 The setup CLI shows progress while checking configuration, retaining the original audit, reviewing context, and configuring the selected assistant. Interactive terminals show a spinner and elapsed time; redirected output uses plain stderr lines. `mason setup --json` and MCP setup keep their structured output without human progress. A completed setup still needs the activation steps below.

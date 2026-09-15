@@ -1,14 +1,13 @@
 import fs from "node:fs/promises";
 import * as nativeFs from "node:fs";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { Readable } from "node:stream";
 import fg from "fast-glob";
-import { readBoundedFile, SOURCE_EXTENSIONS } from "../utils/files.js";
+import { readBoundedFile } from "../utils/files.js";
 import { storePath } from "../utils/storage.js";
+import { execGit } from "../utils/git-read.js";
+import { auditGitPaths } from "./inspection.js";
 
-const execute = promisify(execFile);
 const MAX_INPUTS = 100_000;
 
 /** Check the paths a particular audit actually reads, including their parents. */
@@ -85,22 +84,22 @@ export async function auditGlob(root: string, patterns: string | string[], optio
 
 /** Git prunes ignored trees before discovery; tracked source remains visible. */
 export async function gitSourcePaths(root: string): Promise<string[]> {
-  const { stdout } = await execute("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--",
-    ...SOURCE_EXTENSIONS.map(extension => `:(glob)**/*.${extension}`)],
-  { cwd: root, maxBuffer: 32 * 1024 * 1024, timeout: 10_000 });
-  return [...new Set(stdout.split("\0").filter(Boolean))].sort();
+  return auditGitPaths(root, "sources");
 }
 
 /** Small directory batches, never a repository-wide inventory of ignored files. */
 export async function gitIgnoredPaths(root: string, files: string[]): Promise<Set<string>> {
   if (!files.length) return new Set();
-  const operation = execute("git", ["check-ignore", "-z", "--stdin"],
-    { cwd: root, maxBuffer: 4 * 1024 * 1024, timeout: 10_000 });
-  operation.child.stdin!.on("error", () => { /* The child exit reports a failed query. */ });
-  operation.child.stdin!.end(files.join("\0") + "\0");
-  try { return new Set((await operation).stdout.split("\0").filter(Boolean)); }
-  catch (error) {
-    if ((error as { code?: number }).code === 1) return new Set(); // No ignored paths.
-    throw error;
+  const ignored = new Set<string>();
+  for (let offset = 0; offset < files.length; offset += 1000) {
+    try {
+      const { stdout } = await execGit(["check-ignore", "-z", "--stdin"], {
+        cwd: root, maxBuffer: 4 * 1024 * 1024, timeout: 10_000, input: files.slice(offset, offset + 1000).join("\0") + "\0",
+      });
+      for (const file of stdout.split("\0").filter(Boolean)) ignored.add(file);
+    } catch (error) {
+      if ((error as { code?: number }).code !== 1) throw error;
+    }
   }
+  return ignored;
 }

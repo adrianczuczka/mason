@@ -1,6 +1,5 @@
+import { execGit } from "../utils/git-read.js";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { createFileAccess } from "../utils/files.js";
 export { SOURCE_GLOB, SOURCE_IGNORE } from "../utils/files.js";
 import { readStoreJson, writeStoreJson, type StoreDiagnostic } from "../utils/storage.js";
@@ -8,7 +7,6 @@ import { z } from "zod";
 import { normalizeRepoPath } from "../utils/paths.js";
 import { buildTestMap } from "../test-map.js";
 
-const exec = promisify(execFile);
 
 export interface FeatureEntry {
   description: string;
@@ -122,7 +120,7 @@ export async function saveSnapshot(rootDir: string, snapshot: Snapshot): Promise
 
 export async function getCurrentGitHash(rootDir: string): Promise<string> {
   try {
-    const { stdout } = await exec("git", ["rev-parse", "HEAD"], {
+    const { stdout } = await execGit(["rev-parse", "HEAD"], {
       cwd: rootDir,
     });
     return stdout.trim();

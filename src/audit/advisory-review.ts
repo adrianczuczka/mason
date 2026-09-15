@@ -1,6 +1,6 @@
+import { inspectionGit } from "./inspection.js";
+import { execGit } from "../utils/git-read.js";
 import fs from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { z } from "zod";
 import { advisorySchema, digest, findingId, type Finding } from "./findings.js";
 import { manifestPathspecs } from "./checks/deps-changed.js";
@@ -12,8 +12,9 @@ import { withLock } from "../automation/store.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
 
-const execute = promisify(execFile);
-const git = async (root: string, ...args: string[]) => (await execute("git", args, { cwd: root, timeout: 10_000, maxBuffer: 8 * 1024 * 1024 })).stdout;
+const git = async (root: string, ...args: string[]) => (await (
+  ["log", "ls-tree", "ls-files", "merge-base"].includes(args[0]) ? inspectionGit : execGit
+)(args, { cwd: root, timeout: 10_000, maxBuffer: 8 * 1024 * 1024 })).stdout;
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const commitSchema = z.string().regex(/^[a-f0-9]{40,64}$/);
 const evidenceSchema = z.object({

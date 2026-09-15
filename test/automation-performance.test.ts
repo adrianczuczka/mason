@@ -172,7 +172,7 @@ it("rejects input changes during cached verification and keeps the failed receip
     await write("AGENTS.md", "The src directory. Changed during verification.\n");
     return result;
   });
-  await expect(automate(root, { event: "task_end" })).rejects.toThrow("changed during verification");
+  await expect(automate(root, { event: "task_end" })).rejects.toMatchObject({ failure: { code: "inputs-changed", receiptRecorded: true } });
   expect((await automationStatus(root)).verificationStatus).toBe("unavailable");
 });
 

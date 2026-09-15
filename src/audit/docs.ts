@@ -1,16 +1,15 @@
+import { execGit } from "../utils/git-read.js";
 import { profilePhase } from "../utils/profile.js";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { extractClaims } from "./claims.js";
 import { lastCommitOf } from "./git.js";
 import fg from "fast-glob";
 import { auditGlob, auditInputPath, readAuditInput } from "./inputs.js";
 import { loadProjectConfig } from "../utils/files.js";
+import { auditGitPaths } from "./inspection.js";
 import type { CommitRef, DocClaims } from "./types.js";
 
-const exec = promisify(execFile);
 
 /**
  * Instruction entry points written by setup. Audit discovery is broader and
@@ -42,8 +41,7 @@ async function dirtyDocs(resolvedRoot: string, files: string[]): Promise<Set<str
   try {
     const dirty = new Set<string>();
     for (let offset = 0; offset < files.length; offset += 256) {
-      const { stdout } = await exec(
-        "git",
+      const { stdout } = await execGit(
         ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...files.slice(offset, offset + 256).map(file => `:(literal)${file}`)],
         { cwd: resolvedRoot, maxBuffer: 16 * 1024 * 1024, timeout: 10000 }
       );
@@ -66,13 +64,10 @@ async function dirtyDocs(resolvedRoot: string, files: string[]): Promise<Set<str
 export async function discoverDocPaths(root: string): Promise<string[]> {
   let candidates: string[] = [];
   try {
-    const { stdout } = await exec("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--",
-      ":(icase,glob)**/readme.md", ":(icase,glob)**/agents.md", ":(icase,glob)**/claude.md"],
-    { cwd: root, maxBuffer: 16 * 1024 * 1024, timeout: 10000 });
-    candidates = stdout.split("\0").filter(Boolean);
+    candidates = await auditGitPaths(root, "documents");
   } catch (error) {
     // Outside Git we still discover documents so the audit can report Git unavailable.
-    try { await exec("git", ["rev-parse", "--git-dir"], { cwd: root }); }
+    try { await execGit(["rev-parse", "--git-dir"], { cwd: root }); }
     catch { return localDocPaths(root); }
     throw error;
   }

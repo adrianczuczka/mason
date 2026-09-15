@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { inspectionGit } from "./inspection.js";
 import type { CommitRef } from "./types.js";
 
-const exec = promisify(execFile);
 
 const COMMIT_FORMAT = "%H%x09%cI%x09%s";
 
@@ -18,8 +16,7 @@ export async function lastCommitOf(
   relPath: string
 ): Promise<CommitRef | null> {
   try {
-    const { stdout } = await exec(
-      "git",
+    const { stdout } = await inspectionGit(
       ["log", "-1", `--format=${COMMIT_FORMAT}`, "--", `:(literal)${relPath}`],
       { cwd: resolvedRoot }
     );
@@ -36,8 +33,7 @@ export async function deletingCommitOf(
   relPath: string
 ): Promise<CommitRef | null> {
   try {
-    const { stdout } = await exec(
-      "git",
+    const { stdout } = await inspectionGit(
       [
         "log",
         "-1",
@@ -61,8 +57,7 @@ export async function firstCommitOf(
   relPath: string
 ): Promise<CommitRef | null> {
   try {
-    const { stdout } = await exec(
-      "git",
+    const { stdout } = await inspectionGit(
       ["log", "--reverse", `--format=${COMMIT_FORMAT}`, "--", `:(literal)${relPath}`],
       { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }
     );
@@ -91,8 +86,7 @@ export async function commitsTouchingSince(
 ): Promise<RangeCommits | null> {
   if (!fromHash || fromHash === "unknown") return null;
   try {
-    const { stdout } = await exec(
-      "git",
+    const { stdout } = await inspectionGit(
       [
         "log",
         `${fromHash}..HEAD`,

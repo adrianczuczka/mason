@@ -1,4 +1,5 @@
 import { profilePhase } from "../utils/profile.js";
+import { withRepositoryInspection } from "../audit/inspection.js";
 import { recordExecution, executionStatus, failureNotifications } from "./execution.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -135,12 +136,12 @@ async function matchingAnalysis(ws: Workspace, state: State, inputs: Inputs): Pr
 }
 
 async function verifyInputs(ws: Workspace, inputs: Inputs) {
-  return profilePhase("automation.revalidate", async () => {
+  return profilePhase("automation.revalidate", () => withRepositoryInspection(ws.root, async () => {
     const [after, currentWs] = await Promise.all([readInputs(ws.root), workspace(ws.root)]);
     if (after.fingerprint !== inputs.fingerprint || currentWs.directory !== ws.directory) {
       throw new Error("Repository inputs or branch changed during automation; no current verification was recorded. Retry on a stable checkout.");
     }
-  });
+  }));
 }
 
 /** Expensive reads and checks never hold the shared state lock. */
@@ -152,7 +153,10 @@ async function computeAnalysis(ws: Workspace, state: State, inputs: Inputs, even
     diagnostics: ["No README.md or agent instruction files were discovered. Documentation capture is unavailable; other Mason tools remain usable."],
     checks: { ran: [], reused: [], skipped: [] }, counts: { resolved: 0, unresolved: 0, "review-required": 0, unverified: 0 },
     capture: "unknown", scope: SCOPE };
-  if (!baselines.length && Object.values(inputs.docs).every(value => value === null)) return { baselines, report: empty, cache: null };
+  if (!baselines.length && Object.values(inputs.docs).every(value => value === null)) {
+    await verifyInputs(ws, inputs);
+    return { baselines, report: empty, cache: null };
+  }
   if (ws.branch === "detached" && state.latest) {
     const previous = await readStoreJson(ws.root, state.latest) as AutomationReport | null;
     if (!previous?.head || !/^[a-f0-9]{40,64}$/.test(previous.head)) throw new Error("The previous detached checkout evidence is unavailable.");
@@ -190,7 +194,7 @@ async function computeAnalysis(ws: Workspace, state: State, inputs: Inputs, even
     }
     currentAudit = await repairs.currentAudit();
     return verifications;
-  }, cachedAudit);
+  }, () => verifyInputs(ws, inputs), cachedAudit);
   const merged = new Map<string, RepairFinding>();
   for (const verification of verifications) {
     for (const finding of verification.findings) {
@@ -222,7 +226,6 @@ async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, st
     if (previous && previous.completedAt >= startedAt) return { analysis: previous, shared: true };
     const originalDigest = await baselineDigest(ws, before);
     const computed = await computeAnalysis(ws, before, inputs, event, previous?.currentAudit as AuditReport | undefined, diagnostic);
-    await verifyInputs(ws, inputs);
     if (originalDigest !== await baselineDigest(ws, before)) throw new Error("Repair baseline was modified during automation; original evidence must be inspected.");
     const id = randomUUID();
     const analysis = analysisSchema.parse({ id, fingerprint: inputs.fingerprint, completedAt: Date.now(),
@@ -248,7 +251,7 @@ async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, st
 export async function automate(dir: string, event: AutomationEvent) {
   const startedAt = Date.now();
   const ws = await profilePhase("automation.workspace", () => workspace(dir));
-  return recordExecution(ws.root, ws.directory, event.event, async () => {
+  return recordExecution(ws.root, ws.directory, event.event, () => withRepositoryInspection(ws.root, async () => {
     const inputs = await readInputs(ws.root);
     const result = await profilePhase("automation.analysis", () => analyze(ws, inputs, event, startedAt));
     if (result.shared) {
@@ -310,7 +313,7 @@ export async function automate(dir: string, event: AutomationEvent) {
       await writeStoreJson(ws.root, ws.directory + "/state.json", state);
       return { report, message: notify ? summarize(report) : null, continueOnce };
     }));
-  });
+  }));
 }
 
 /** Read-only inspection: configured hooks and observed runtime events are different facts. */

@@ -1,6 +1,6 @@
 {
   "name": "mason-context",
-  "version": "0.17.3",
+  "version": "0.17.4",
   "description": "MCP server for engineering decisions, task context, change impact, and documentation audits, with optional architecture maps",
   "type": "module",
   "mcpName": "com.adrianczuczka/mason",

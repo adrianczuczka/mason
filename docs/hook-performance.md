@@ -8,6 +8,10 @@ Lifecycle hooks are synchronous and still spawn a process for each event. Known 
 
 One invocation shares its current audit across retained repair baselines. Document status is collected in bounded batches, document history reads have bounded concurrency, and documents with the same last commit share their change history. Each baseline keeps its original findings, scope, and outcomes.
 
+The development implementation also shares a Git inventory between document and source discovery within the initial inspection. Module ignore queries are collected by directory level in bounded batches. Identical history queries share their raw output only within that inspection, preserving exact arguments, scope and read limits; failed queries are not retained. Distinct document histories are not collapsed into one broader history query.
+
+Automation performs a separate, fresh final inspection before publishing evidence. Its full input validation replaces overlapping repair discovery; standalone repair commands retain their own stability guards. The final inventory, ignore rules, document contents and review records cannot be served from the initial inspection's memoized reads. Each invocation has independent inspection state, including concurrent calls on the same repository. Explicit ignored paths and selected symlinks retain their original checks.
+
 Consecutive calls with matching inputs can reuse a complete current audit. The stored audit and check cache must validate; skipped checks are retried. Missing derived audit caches are rebuilt. Invalid JSON, schema or checksums are reported while rebuilding; the next successful check clears that diagnostic. Original baselines are retained and validated independently. Unsafe cache paths, symlinks and storage-access failures remain errors. Input fingerprints include documentation contents, scoped repository dependencies, decision records, review records, Git state and the engine version. Relevant ignored paths are still observed explicitly. File timestamps or an unchanged Git status alone do not establish reuse.
 
 Review outcomes and original history are checked again even when the current audit is reused. A review can refer to a path that newer documentation no longer mentions: reusing an earlier resolved verdict could miss that original scope changing. Results expose `checks.auditReused` separately from individual reused checks and overlapping-call sharing. Every mutating event still records its own lifecycle and execution receipt. Changed inputs, modified original baselines, and concurrent review edits prevent publication as current evidence.
@@ -50,6 +54,23 @@ The Codex adapter's development run measured 986.4 / 1,046.4 ms with one baselin
 
 These are short sequential measurements on one machine; with three pairs, p95 is the maximum observed pair. They include startup and managed hook setup lookup, but exclude host dispatch and the outer shell guard. They are not workplace-repository or live-agent measurements. The large fixture is around one second per unchanged pair; it has **not** established the target of comfortably below one second across representative repositories. Validate the actual host workflow before broad rollout.
 
+## Git inventory follow-up: 2026-09-15
+
+The workplace profile of 0.17.3 exposed repeated discovery even when the audit was reusable. A new wide fixture reproduces seven document/source inventory calls and 26 ignore queries per warm event. The development implementation reduces those to two inventories (initial and final) and four ignore queries. In the partial-check fixture, total Git calls fall from 74 to 46; its 14 distinct history queries remain necessary and are not combined.
+
+The comparison below uses Apple Silicon macOS, the packaged Node v24.20.0 runtime, the Claude adapter, 12 top-level modules and one deliberately skipped command check. Both builds use the same fixtures and benchmark instrumentation, run sequentially with three pre/post pairs per category. Values are **combined pre/post overhead**. The baseline is the unmodified 0.17.3 build.
+
+| Wide fixture with a skipped check | 0.17.3 p50 / p95 | Development p50 / p95 |
+|---|---|---|
+| Native Git, one baseline | 832.9 / 838.5 ms | 604.7 / 606.2 ms |
+| Native Git, four baselines | 854.3 / 860.6 ms | 662.5 / 663.2 ms |
+| Delayed inventory, one baseline | 2,926.1 / 2,946.5 ms | 1,189.9 / 1,193.2 ms |
+| Delayed inventory, four baselines | 2,961.4 / 2,965.6 ms | 1,218.7 / 1,227.5 ms |
+
+The delayed case adds 100 ms and a Node worker's startup to each inventory call. It demonstrates sensitivity to repeated Git reads, not the latency expected on another machine. Three pairs make p95 the maximum observed pair. All runs preserved original baseline bytes, resolved the three reference deletions through the final commit, and retained three decision advisories plus the skipped check. Final status correctly remained incomplete.
+
+These measurements show reduced subprocess work, but do not establish comfortably subsecond pairs on the workplace repository. That repository and the actual host still need a follow-up measurement. No hook lifecycle stage or pre-edit evidence capture was removed to obtain these results.
+
 ## Reproduce
 
 ```sh
@@ -59,11 +80,21 @@ npm run bench:hooks
 node scripts/bench-hooks.mjs --fixture large --samples 3 --profile
 # Compare a separately saved build, preserving its neighboring dist files:
 node scripts/bench-hooks.mjs --binary /path/to/previous/dist/mason.js --label before
+# Many top-level modules, including a check that must retry:
+node scripts/bench-hooks.mjs --fixture wide --host claude --samples 3 --partial-check --git-metrics
+# Repeat against both builds with slower inventory reads:
+node scripts/bench-hooks.mjs --fixture wide --host claude --samples 3 --partial-check --git-delay-ms 100 --git-delay-command inventory
+# Select a packaged Node runtime for both sides of a comparison:
+node scripts/bench-hooks.mjs --runtime /path/to/bundle/node --fixture wide --samples 3
 ```
 
-The benchmark uses isolated temporary Git repositories and the built CLI, makes no model calls, reports p50/p95/max and paired pre/post overhead, and removes its fixtures. By default it runs both host adapters with small and large fixtures. The large fixture contains 1,001 source files, 20 package READMEs, 20 valid decision records and 10,000 ignored build-cache files. It measures one baseline, then four retained baselines created by actual source deletions. Both fixtures exercise documentation repair through a final commit and assert that original baseline bytes remain intact. Outstanding decision reviews remain outstanding.
+The benchmark uses isolated temporary Git repositories and the built CLI, makes no model calls, reports p50/p95/max and paired pre/post overhead, and removes its fixtures. By default it runs both host adapters with small, large and wide fixtures. The large fixture contains 1,001 source files, 20 package READMEs, 20 valid decision records and 10,000 ignored build-cache files. The wide fixture has 12 top-level modules with their own README and ignore file, 601 source files, 12 decision records and 10,000 ignored files. Expanded fixtures measure one baseline, then four retained baselines created by actual source deletions. All fixtures exercise documentation repair through a final commit and assert that original baseline bytes remain intact. Outstanding decision reviews remain outstanding.
 
-`--samples 10` produces 20 pre/post invocations per category. `--fixture small|large|all` and `--host claude|codex|all` select workloads. Version and platform are included in its JSON. It does not read the caller's project or automatically report metrics anywhere. Use the same fixtures, sample count, runtime and environment for comparisons. Wall-clock results are measurements, not portable CI thresholds; the regression tests separately enforce audit reuse and evidence correctness.
+`--partial-check` adds one command whose directory cannot be resolved. The benchmark requires that specific skipped check, retries it on subsequent calls, and retains incomplete status through the final commit. It does not count that scenario as fully verified. `--git-metrics` records each Git subprocess's command family, duration and inventory classification without arguments, paths or output. Unlike the in-CLI profile, this benchmark instrumentation also sees Git calls during the managed setup lookup.
+
+`--git-delay-ms 0..500` enables metrics and adds a delay to Git subprocesses. `--git-delay-command inventory` limits it to document/source inventories; the default `all` delays every Git command. Delayed queries run through an additional Node worker, which also adds startup overhead. These are comparative stress scenarios, not estimates of workplace latency. Use the same delay, fixture and runtime for both builds. The instrumentation lives only in the benchmark and is not shipped or enabled in normal Mason commands.
+
+`--samples 10` produces 20 pre/post invocations per category. `--fixture small|large|wide|all` and `--host claude|codex|all` select workloads. Version, platform and the selected runtime's version are included in its JSON. It does not read the caller's project or automatically report metrics anywhere. Use the same fixtures, sample count, runtime and environment for comparisons. Wall-clock results are measurements, not portable CI thresholds; the regression tests separately enforce inventory/query budgets, audit reuse and evidence correctness.
 
 ## Profile a local check
 
@@ -73,6 +104,6 @@ mason check --json --profile
 
 `--profile` adds one `mason-profile` JSON record on stderr. Normal results remain on stdout. It reports fixed phase names, invocation counts and elapsed milliseconds without document contents, paths, commands or session identifiers. It performs the normal check, including local evidence writes; it does not upload metrics. Profiling is off by default and also works on `mason auto hook --host claude|codex --profile` with a normal hook payload on stdin. Generated hook configuration is unchanged.
 
-Phase times are inclusive and can overlap, especially parallel Git reads; do not add them together. The CLI profile starts after argument parsing and input reading, so use the external benchmark for process startup and total invocation overhead. `automation.git` measures the automation module's Git calls; document-history timing is reported separately and is not a count of every Git command in Mason.
+Phase times are inclusive and can overlap, especially parallel Git reads; do not add them together. The CLI profile starts after argument parsing and input reading, so use the external benchmark for process startup and total invocation overhead. The development build adds `git.ls-files`, `git.check-ignore`, `git.log` and other fixed command-family labels for the Git subprocesses used by automation. Their `calls` counts exclude memoized reuse. `automation.git` and document-history timings remain inclusive parent phases; do not add them to their child Git times. These labels cover the profiled check/hook operation, not earlier managed setup lookup or unrelated Mason commands.
 
 `mason status` execution durations now include receipt work, coordination waits, and checking after workspace discovery. The historical measurements above used the earlier duration boundary after lock acquisition. Read-only observations do not add a check execution receipt. Use the benchmark for total CLI overhead, and real host trials for perceived task latency and activation behavior.

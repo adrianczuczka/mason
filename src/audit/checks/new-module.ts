@@ -1,3 +1,4 @@
+import { inspectionRead } from "../inspection.js";
 import fg from "fast-glob";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -91,25 +92,40 @@ export function moduleDocumentation(docs: Array<{ path: string; content: string 
 }
 
 /** Shared dependency witness: cache exactly the module candidates the audit observes. */
-export async function moduleCandidates(root: string, combinedDocs: string) {
+export function moduleCandidates(root: string, combinedDocs: string) {
+  return inspectionRead(root, "modules:" + combinedDocs, () => collectModuleCandidates(root, combinedDocs));
+}
+
+async function collectModuleCandidates(root: string, combinedDocs: string) {
   const [config, sourcePaths] = await Promise.all([loadProjectConfig(root), gitSourcePaths(root)]);
   const ignore = [...SOURCE_IGNORE, ...(config.ignore ?? [])];
   const sources = sourcePaths.filter(file => !file.split("/").some(part => part.startsWith(".")));
-  const listSubdirs = async (dir: string): Promise<string[]> => {
-    const entries = await fs.readdir(await auditInputPath(root, dir), { withFileTypes: true });
-    // A directory alias is not another source module. Only inspect a link
-    // when Git's source inventory actually requires paths beneath it (for
-    // example, a tracked source directory replaced by a local symlink).
-    const dirs = entries.filter(entry => (entry.isDirectory() || entry.isSymbolicLink()
-      && sources.some(file => file.startsWith(path.posix.join(dir, entry.name) + "/")))
-      && !entry.name.startsWith(".") && !DIR_DENYLIST.has(entry.name))
-      .map(entry => path.posix.join(dir, entry.name));
-    const ignored = await gitIgnoredPaths(root, dirs);
-    // An ignore rule does not remove already tracked source from the audit.
-    const visible = new Set(dirs.filter(dir => !ignored.has(dir) || sources.some(file => file.startsWith(dir + "/"))));
-    return (await auditGlob(root, dir === "." ? "*" : `${fg.escapePath(dir)}/*`, {
-      ignore, onlyDirectories: true, label: "Module directory discovery", select: file => visible.has(file),
-    })).map(file => path.posix.basename(file));
+  const listSubdirs = async (parents: string[]): Promise<Map<string, string[]>> => {
+    const byParent = new Map<string, string[]>();
+    // Gather one level before asking Git about ignores, with bounded directory reads.
+    for (let offset = 0; offset < parents.length; offset += 16) {
+      await Promise.all(parents.slice(offset, offset + 16).map(async dir => {
+        const entries = await fs.readdir(await auditInputPath(root, dir), { withFileTypes: true });
+        // An unrelated directory alias is not a source module. Selected links
+        // still pass through auditGlob's path and parent validation.
+        const dirs = entries.filter(entry => (entry.isDirectory() || entry.isSymbolicLink()
+          && sources.some(file => file.startsWith(path.posix.join(dir, entry.name) + "/")))
+          && !entry.name.startsWith(".") && !DIR_DENYLIST.has(entry.name))
+          .map(entry => path.posix.join(dir, entry.name));
+        byParent.set(dir, dirs);
+      }));
+    }
+    const ignored = await gitIgnoredPaths(root, [...byParent.values()].flat());
+    const result = new Map<string, string[]>();
+    for (const dir of parents) {
+      // An ignore rule does not remove already tracked source from the audit.
+      const visible = new Set(byParent.get(dir)!.filter(candidate => !ignored.has(candidate)
+        || sources.some(file => file.startsWith(candidate + "/"))));
+      result.set(dir, (await auditGlob(root, dir === "." ? "*" : `${fg.escapePath(dir)}/*`, {
+        ignore, onlyDirectories: true, label: "Module directory discovery", select: file => visible.has(file),
+      })).map(file => path.posix.basename(file)));
+    }
+    return result;
   };
   const countSourceFiles = async (dir: string): Promise<number> => {
     const files = sources.filter(file => file.startsWith(dir + "/"));
@@ -125,7 +141,9 @@ export async function moduleCandidates(root: string, combinedDocs: string) {
     return count;
   };
   const candidates: Array<{ dir: string; sourceFileCount: number }> = [];
-  for (const topDir of await listSubdirs(".")) {
+  const topDirs = (await listSubdirs(["."])).get(".")!;
+  const nested = await listSubdirs(topDirs.filter(dir => isMentioned(combinedDocs, dir)));
+  for (const topDir of topDirs) {
     const topMentioned = isMentioned(combinedDocs, topDir);
 
     if (!topMentioned) {
@@ -137,7 +155,7 @@ export async function moduleCandidates(root: string, combinedDocs: string) {
     // The docs know this dir. If they enumerate its children (several
     // subdirs already mentioned), an unmentioned sibling is drift — this is
     // how a freshly added module under src/ gets caught.
-    const subdirs = await listSubdirs(topDir);
+    const subdirs = nested.get(topDir)!;
     const mentioned = subdirs.filter((s) => isMentioned(combinedDocs, s));
     if (mentioned.length < ENUMERATION_THRESHOLD) continue;
 

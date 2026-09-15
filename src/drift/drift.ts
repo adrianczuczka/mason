@@ -1,7 +1,6 @@
+import { execGit } from "../utils/git-read.js";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   loadSnapshot,
   getCurrentGitHash,
@@ -11,7 +10,6 @@ import type { Snapshot } from "../snapshot/snapshot.js";
 import type { Freshness } from "../context/trust.js";
 import { matchingPaths } from "../utils/paths.js";
 
-const exec = promisify(execFile);
 
 // Incremental refresh stops paying off once a large share of the map is
 // touched — but small absolute counts are always cheap to refresh in place,
@@ -93,7 +91,7 @@ export function touchedPaths(changes: FileChange[]): string[] {
 export async function getChangesWithStatus(resolvedRoot: string, fromHash: string, toHash = "HEAD"): Promise<FileChange[] | null> {
   if (!fromHash || fromHash === "unknown" || fromHash.startsWith("-") || !toHash || toHash === "unknown" || toHash.startsWith("-")) return null;
   try {
-    const { stdout } = await exec("git", ["diff", "--name-status", "-z", "-M", fromHash, toHash, "--"], { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 });
+    const { stdout } = await execGit(["diff", "--name-status", "-z", "-M", fromHash, toHash, "--"], { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 });
     return parseChanges(stdout);
   } catch { return null; }
 }
@@ -101,8 +99,8 @@ export async function getChangesWithStatus(resolvedRoot: string, fromHash: strin
 export async function getWorkingTree(resolvedRoot: string): Promise<WorkingTreeReport> {
   try {
     const [diff, untracked] = await Promise.all([
-      exec("git", ["diff", "--name-status", "-z", "-M", "HEAD", "--"], { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }),
-      exec("git", ["ls-files", "-z", "--others", "--exclude-standard"], { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }),
+      execGit(["diff", "--name-status", "-z", "-M", "HEAD", "--"], { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }),
+      execGit(["ls-files", "-z", "--others", "--exclude-standard"], { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }),
     ]);
     const untrackedFiles = untracked.stdout.split("\0").filter(f => f && !f.startsWith(".mason/"));
     return { available: true, changedFiles: [...new Set([...touchedPaths(parseChanges(diff.stdout)), ...untrackedFiles])].sort(), untrackedFiles };
@@ -115,8 +113,7 @@ async function countCommitsBehind(
 ): Promise<number | null> {
   if (!fromHash || fromHash === "unknown" || fromHash.startsWith("-")) return null;
   try {
-    const { stdout } = await exec(
-      "git",
+    const { stdout } = await execGit(
       ["rev-list", "--count", `${fromHash}..HEAD`],
       { cwd: resolvedRoot }
     );
@@ -214,7 +211,7 @@ export async function computeDrift(rootDir: string): Promise<DriftReport | null>
   const sourceFiles = new Set(await listSourceFiles(root));
   let committedFiles: Set<string> = new Set();
   try {
-    const { stdout } = await exec("git", ["ls-tree", "-r", "--name-only", "-z", "HEAD"], { cwd: root, maxBuffer: 50 * 1024 * 1024 });
+    const { stdout } = await execGit(["ls-tree", "-r", "--name-only", "-z", "HEAD"], { cwd: root, maxBuffer: 50 * 1024 * 1024 });
     committedFiles = new Set(stdout.split("\0").filter(Boolean));
   } catch { report.historyAvailable = false; report.stale = true; }
   report.unmappedFiles = [...sourceFiles].filter(f => committedFiles.has(f) && !mappedFiles.has(f)).sort();
