@@ -1,12 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 — 2026-09-16
 
 - Fix overlapping snapshot writes restoring old descriptions and deleted flows. Snapshot saves, verdicts, and partial writes share a per-checkout cross-process lock; reads, replacement, and consolidation cleanup stay within the protected operation.
-- Bind map verification to entry kind, content, and bounded source evidence through review tokens. Changed or deleted entries return conflicts; older calls without tokens request a fresh review without recording a verdict. This tool-contract change is intended for the next minor release. Existing snapshot files remain compatible. Restart all Mason MCP processes for a checkout after upgrading; older binaries do not honor the new snapshot lock.
+- Bind map verification to entry kind, content, and bounded source evidence through review tokens. Changed or deleted entries return conflicts; older calls without tokens request a fresh review without recording a verdict. Existing snapshot files remain compatible; callers must include the returned entry kind and review token to record a verdict. Restart all Mason MCP processes for a checkout after upgrading; older binaries do not honor the new snapshot lock.
 - Recheck saved map verification evidence on retrieval. Changed evidence reports stale verification; unavailable evidence and legacy verdicts without tokens report unknown. Preserve historical verdicts and failure reasons, including when reviewed local edits are reverted to a clean checkout.
 - Diagnose incomplete lock owners and interrupted recovery guards, document safe manual cleanup after writers stop, and cover both interruption windows with controlled process-termination tests.
 - Cover the reported overwrite with a controlled regression, exercise both call orders through one MCP session and separate processes, and test interrupted writers, contention, partial cleanup, and stale review evidence. Run the snapshot regressions in the existing macOS, Linux, and Windows distribution matrix before publishing.
+
+Run `mason upgrade` for standalone installations, or `npm install -g mason-context@0.18.0` for npm installations. Restart **every Mason MCP process** sharing a checkout after upgrading: older processes do not participate in the new snapshot lock. Existing decisions and snapshot files are preserved. Older snapshot verdicts remain visible but report unknown verification until reviewed again with an evidence token. Existing integrations do not need setup again.
 
 ## 0.17.4 — 2026-09-15
 
