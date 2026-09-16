@@ -25,7 +25,7 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - name: Verify release version
-        run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + JSON.parse(require("fs").readFileSync("package.json")).version) process.exit(1)'
+        run: node scripts/verify-release.mjs "$GITHUB_REF_NAME" .
       - name: Configure native knowledge validation
         run: |
           r8_jar="${ANDROID_HOME:?}/build-tools/36.0.0/lib/d8.jar"
@@ -36,6 +36,14 @@ jobs:
           printf 'MASON_EVAL_R8_JAR=%s\nMASON_EVAL_JAVA_HOME=%s\n' "$r8_jar" "$jdk_home" >> "$GITHUB_ENV"
       - run: npm test
       - run: NODE_AUTH_TOKEN="" npm publish --provenance --access public
+
+  mcp-registry:
+    needs: publish
+    uses: ./.github/workflows/publish-mcp.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets:
+      MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
 
   downloads:
     needs: [standalone, publish]

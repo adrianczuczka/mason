@@ -88,3 +88,17 @@ The smoke harness serves release archives locally and runs the actual installers
 [The standalone workflow](../.github/workflows/standalone.yml) runs that harness on six native runners. Tag publishing waits for all six, then uploads the checked archives, `SHA256SUMS`, and both installers to the GitHub release. Existing release assets are never overwritten. [GitHub runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) lists the runner labels.
 
 `MASON_VERSION` selects a version and `MASON_RELEASE_BASE` overrides the archive download base. A custom base requires an explicit version, avoiding public latest-version discovery. Production defaults use this repository's GitHub releases. For company distribution, mirror the reviewed installer and artifacts as described in [data and network behavior](data-and-network.md#company-installation-and-mcp).
+
+## Official MCP Registry publishing
+
+The [release workflow](../.github/workflows/publish.yml) checks that the tag, `package.json`, `server.json`, and its npm package entry have the same version before publishing to npm. It then calls the [Official MCP Registry workflow](../.github/workflows/publish-mcp.yml). Registry publication checks the released package on npm, publishes the tagged manifest, and verifies that the exact version is active with the expected package metadata. Metadata checks retry briefly to allow for propagation and fail the job if the expected release never appears.
+
+The existing `com.adrianczuczka/mason` name uses DNS authentication for `adrianczuczka.com`. Configure the repository secret `MCP_PRIVATE_KEY` with the existing Ed25519 private key as 64 hexadecimal characters, matching the domain's `v=MCPv1` TXT record. GitHub OIDC authenticates `io.github.*` names and cannot publish this domain namespace. Never commit the private key. The workflow pins the publisher version and verifies its download checksum; update both together when upgrading it.
+
+To backfill or retry a published npm version without republishing npm or rebuilding standalone downloads, run **Publish to Official MCP Registry** from the default branch and supply the existing release tag:
+
+```sh
+gh workflow run publish-mcp.yml --ref main -f tag=v0.17.4
+```
+
+The workflow takes release metadata from that tag, including tags created before the workflow existed. A retry skips publication if the exact version is already active with matching package metadata, and fails if an existing entry differs. Publication is serialized per tag and verified against that version rather than `latest`, so an older release can be retried after a newer one exists. A failure here remains visible as a failed workflow and does not undo a successful npm release.

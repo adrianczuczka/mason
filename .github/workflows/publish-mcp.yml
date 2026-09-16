@@ -1,0 +1,79 @@
+name: Publish to Official MCP Registry
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing npm release tag to publish
+        required: true
+        type: string
+    secrets:
+      MCP_PRIVATE_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing npm release tag to publish (for example, v0.17.4)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-registry-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      # Keep current publishing tools when manually backfilling an older tag.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check out release metadata
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          path: .mcp-release
+          persist-credentials: false
+      - name: Verify release metadata and published npm package
+        run: node scripts/verify-release.mjs "$RELEASE_TAG" .mcp-release --npm
+      - name: Check whether this version is already published
+        id: registry
+        run: node scripts/verify-release.mjs "$RELEASE_TAG" .mcp-release --registry-plan
+      - name: Install mcp-publisher
+        if: steps.registry.outputs.published != 'true'
+        env:
+          PUBLISHER_VERSION: v1.8.1
+          PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+        run: |
+          archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
+          curl --fail --show-error --location --retry 3 \
+            "https://github.com/modelcontextprotocol/registry/releases/download/$PUBLISHER_VERSION/mcp-publisher_linux_amd64.tar.gz" \
+            --output "$archive"
+          printf '%s  %s\n' "$PUBLISHER_SHA256" "$archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" mcp-publisher
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Authenticate domain ownership
+        if: steps.registry.outputs.published != 'true'
+        env:
+          MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$MCP_PRIVATE_KEY" ]; then
+            echo '::error::Set the MCP_PRIVATE_KEY repository secret to the existing adrianczuczka.com Ed25519 signing key (hex).'
+            exit 1
+          fi
+          mcp-publisher login dns --domain adrianczuczka.com --private-key "$MCP_PRIVATE_KEY"
+      - name: Publish release manifest
+        if: steps.registry.outputs.published != 'true'
+        run: mcp-publisher publish .mcp-release/server.json
+      - name: Verify live registry metadata
+        run: node scripts/verify-release.mjs "$RELEASE_TAG" .mcp-release --registry
