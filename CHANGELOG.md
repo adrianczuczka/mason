@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fix overlapping snapshot writes restoring old descriptions and deleted flows. Snapshot saves, verdicts, and partial writes share a per-checkout cross-process lock; reads, replacement, and consolidation cleanup stay within the protected operation.
+- Bind map verification to entry kind, content, and bounded source evidence through review tokens. Changed or deleted entries return conflicts; older calls without tokens request a fresh review without recording a verdict. This tool-contract change is intended for the next minor release. Existing snapshot files remain compatible. Restart all Mason MCP processes for a checkout after upgrading; older binaries do not honor the new snapshot lock.
+- Cover the reported overwrite with a controlled regression, exercise both call orders through one MCP session and separate processes, and test interrupted writers, contention, partial cleanup, and stale review evidence. Run the snapshot regressions in the existing macOS, Linux, and Windows distribution matrix before publishing.
+
 ## 0.17.4 — 2026-09-15
 
 - Share Git document/source inventories within each automation inspection, with a separate fresh inventory before publication. Batch module ignore checks by directory level and reuse only identical scoped history queries.

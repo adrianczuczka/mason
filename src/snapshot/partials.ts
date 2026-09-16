@@ -1,3 +1,4 @@
+import { withSnapshotWrite } from "./lock.js";
 import fs from "node:fs/promises";
 import { z } from "zod";
 import { readStoreJson, writeStoreJson, storePath } from "../utils/storage.js";
@@ -21,7 +22,7 @@ const scopeSchema = z.object({ files: z.array(z.string()), savedAt: z.string() }
 
 export async function savePartial(rootDir: string, partial: Partial): Promise<void> {
   if (!/^[a-zA-Z0-9_-]+$/.test(partial.batchId)) throw new Error(`Invalid batchId: ${partial.batchId}`);
-  await writeStoreJson(rootDir, `${DIRECTORY}/${partial.batchId}.json`, partialSchema.parse(partial));
+  await withSnapshotWrite(rootDir, () => writeStoreJson(rootDir, `${DIRECTORY}/${partial.batchId}.json`, partialSchema.parse(partial)));
 }
 
 export async function loadAllPartials(rootDir: string): Promise<Partial[]> {
@@ -42,7 +43,7 @@ export async function loadAllPartials(rootDir: string): Promise<Partial[]> {
 }
 
 export async function saveScope(rootDir: string, files: string[]): Promise<void> {
-  await writeStoreJson(rootDir, `${DIRECTORY}/scope.json`, { files, savedAt: new Date().toISOString() });
+  await withSnapshotWrite(rootDir, () => writeStoreJson(rootDir, `${DIRECTORY}/scope.json`, { files, savedAt: new Date().toISOString() }));
 }
 
 export async function loadScope(rootDir: string): Promise<string[] | null> {
@@ -51,9 +52,12 @@ export async function loadScope(rootDir: string): Promise<string[] | null> {
 }
 
 export async function clearScope(rootDir: string): Promise<void> {
-  await fs.rm(await storePath(rootDir, `${DIRECTORY}/scope.json`), { force: true });
+  await withSnapshotWrite(rootDir, async () => {
+    await fs.rm(await storePath(rootDir, `${DIRECTORY}/scope.json`), { force: true });
+  });
 }
 
+/** Called only after a snapshot commit, while updateSnapshot holds the write lock. */
 export async function clearAllPartials(rootDir: string): Promise<void> {
   await fs.rm(await storePath(rootDir, DIRECTORY), { recursive: true, force: true });
 }

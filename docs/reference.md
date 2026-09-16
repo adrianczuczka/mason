@@ -88,8 +88,8 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 | `save_decision` | Revise a matching lesson with its existing `id` when its assumptions, scope, or recommendation change; create separate records for distinct lessons. Preserve rationale, anchors, attribution, and history. Aim for 1,500 body characters; up to 2,500 is accepted with a warning above the target. Prior accepted revisions remain operative while drafts are reviewed. |
 | `review_decision` | Prepare draft and operative decision evidence, then record authorized acceptance, reaffirmation, or retirement against that revision. |
 | `mason_check_drift` | Feature-level staleness report — what changed since the snapshot, and whether to refresh incrementally or rebuild. |
-| `verify_snapshot` | Spot-check map correctness — sampled entries + file skeletons for the assistant to judge, least-recently-verified first. |
-| `save_verification` | Record verification verdicts — failures flag entries for re-mapping until fixed. |
+| `verify_snapshot` | Spot-check map correctness — sampled entries, file previews, and review tokens, least-recently-verified first. |
+| `save_verification` | Record verdicts against reviewed entry/source tokens; stale reviews return conflicts and failures flag entries for re-mapping. |
 | `get_impact` | **Call before editing a file.** Traces what's affected — co-change history + references + related tests. |
 | `analyze_project` | Git stats — hot files, stale dirs, commit conventions. |
 | `full_analysis` | One-shot orientation for unmapped projects: structure + samples + tests + git. |
@@ -233,3 +233,32 @@ Language-agnostic. Mason works from file naming patterns and git history rather 
 - **Shared file policy:** mapping, sampling, verification, impact analysis, and test discovery respect Git ignores and `.mason/config.json` exclusions. Sensitive filenames are denied, and source reads are limited to 1 MiB.
 - **Path protection:** source reads check canonical paths and reject symlinks escaping the project root. Metadata paths reject symlinks, including parent directories.
 - **Mapping is local:** source previews go to the connected assistant through MCP. Mason itself makes no model API calls for mapping. Optional Confluence sync uses network access and can call a configured model provider.
+
+## Snapshot repairs and verification
+
+After upgrading, restart every Mason MCP process that writes to the checkout. Older binaries do not participate in the new lock.
+
+Snapshot mutations are serialized per checkout across updated MCP sessions and processes. A writer reads the latest map while holding the shared lock, applies its changes, and replaces the snapshot atomically. Consolidation and partial cleanup use the same lock as incoming partial writes. A busy or damaged lock returns an error instead of reporting a successful save. Locks belonging to terminated local processes can be recovered; live, remote, and malformed locks are not removed automatically.
+
+After repairing an entry, wait for `save_snapshot` to finish, then call `verify_snapshot` and inspect the returned evidence. Submit each verdict with the entry's `kind` and `reviewToken`:
+
+```json
+{
+  "dir": "/absolute/path/to/project",
+  "verdicts": {
+    "authentication": {
+      "kind": "feature",
+      "reviewToken": "<copy the token from the reviewed entry>",
+      "ok": true
+    }
+  }
+}
+```
+
+`ok: false` also requires a non-empty `note`. If a feature and a flow share a name, submit them in separate calls with their respective kinds and tokens.
+
+Tokens cover the entry's description, paths, type, and tests, plus the full contents of the files used for its bounded previews (at most eight), including unavailable-file markers. Source edits beyond a preview's displayed characters invalidate its token too. Unrelated entries, verification metadata, and unrelated commits do not invalidate it. This remains a spot-check: files beyond the sampling limit are not covered by the source evidence.
+
+`save_verification` returns `stamped`, `failed`, `conflicts`, `reviewRequired`, `invalid`, and `unknown` entry lists. A batch can return `status: "partial"`; inspect these lists rather than treating an MCP response as blanket success. Changed or deleted entries receive no stamp and require a fresh `verify_snapshot` review. A failure is a recorded negative verdict; a conflict means the submitted verdict was not recorded. Existing calls without tokens return `status: "review_required"` and instructions, without changing the snapshot. The token fields remain optional in the input schema so these callers receive actionable feedback, but are required to record a verdict.
+
+Content edits clear an entry's previous verification. Unchanged entries retain it. Existing snapshots remain readable; a fresh review is required to record a new verdict. Verification records the evidence observed when saving; subsequent source edits remain subject to normal drift checks.

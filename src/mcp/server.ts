@@ -472,7 +472,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "verify_snapshot",
-    "Spot-check the concept map's CORRECTNESS (drift checks freshness; this checks entries were right to begin with). Returns a sample of entries — always the never-verified and least-recently-verified first — with skeletons of their claimed files, for you to judge whether the files actually implement what the entry claims. Report verdicts back via save_verification. Run periodically, or after an automated refresh wrote entries no human reviewed.",
+    "Spot-check the concept map's CORRECTNESS (drift checks freshness; this checks entries were right to begin with). Returns a sample of entries — always the never-verified and least-recently-verified first — with skeletons of their claimed files, for you to judge whether the files actually implement what the entry claims. Report verdicts back via save_verification with each entry’s kind and reviewToken. Tokens bind the entry and bounded source evidence; changed evidence requires a fresh review. Run periodically, or after an automated refresh wrote entries no human reviewed.",
     {
       dir: z
         .string()
@@ -491,7 +491,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "save_verification",
-    "Record verify_snapshot verdicts. Entries judged ok are stamped verifiedAt; failures are flagged verificationFailed with your note and surface in get_context, get_snapshot, and mason_check_drift until corrected. Verdict notes are required for failures.",
+    "Record verify_snapshot verdicts using each entry’s kind and reviewToken. Missing tokens request a fresh review; changed or deleted entries return conflicts without being stamped. Entries judged ok are stamped verifiedAt; failures are flagged verificationFailed with your note and surface in get_context, get_snapshot, and mason_check_drift until corrected. Verdict notes are required for failures.",
     {
       dir: z
         .string()
@@ -499,6 +499,8 @@ export function createMcpServer(): McpServer {
       verdicts: z
         .record(
           z.object({
+            kind: z.enum(["feature", "flow"]).optional().describe("Entry kind returned by verify_snapshot; required to record a verdict"),
+            reviewToken: z.string().optional().describe("Copy the reviewToken from verify_snapshot after inspecting its evidence; required to record a verdict"),
             ok: z.boolean(),
             note: z
               .string()

@@ -4,6 +4,7 @@ import { createFileAccess } from "../utils/files.js";
 export { SOURCE_GLOB, SOURCE_IGNORE } from "../utils/files.js";
 import { readStoreJson, writeStoreJson, type StoreDiagnostic } from "../utils/storage.js";
 import { z } from "zod";
+import { withSnapshotWrite } from "./lock.js";
 import { normalizeRepoPath } from "../utils/paths.js";
 import { buildTestMap } from "../test-map.js";
 
@@ -35,6 +36,8 @@ export interface FeatureEntry {
    */
   verifiedAt?: string;
   verifiedHash?: string;
+  /** Digest of the entry and bounded source evidence reviewed for this verdict. */
+  verificationToken?: string;
   /** Set when verification judged the entry wrong — re-map it. */
   verificationFailed?: boolean;
   verificationNote?: string;
@@ -60,6 +63,8 @@ export interface FlowEntry {
   /** See FeatureEntry.verifiedAt / verificationFailed. */
   verifiedAt?: string;
   verifiedHash?: string;
+  /** Digest of the entry and bounded source evidence reviewed for this verdict. */
+  verificationToken?: string;
   verificationFailed?: boolean;
   verificationNote?: string;
 }
@@ -76,7 +81,7 @@ export interface Snapshot {
 const repoPath = z.string().refine(value => normalizeRepoPath(value) !== null, "Expected a relative repository path");
 const verificationFields = {
   refreshedHash: z.string().optional(), verifiedAt: z.string().optional(),
-  verifiedHash: z.string().optional(), verificationFailed: z.boolean().optional(),
+  verifiedHash: z.string().optional(), verificationToken: z.string().optional(), verificationFailed: z.boolean().optional(),
   verificationNote: z.string().optional(),
 };
 export const featureSchema = z.object({
@@ -114,8 +119,20 @@ export async function inspectSnapshot(rootDir: string): Promise<{
   }
 }
 
-export async function saveSnapshot(rootDir: string, snapshot: Snapshot): Promise<void> {
-  await writeStoreJson(rootDir, ".mason/snapshot.json", snapshotSchema.parse(snapshot));
+/** Read and commit under one cross-process lock; a null snapshot means no write. */
+export async function updateSnapshot<T>(rootDir: string, update: (current: Snapshot | null) => Promise<{
+  snapshot: Snapshot | null;
+  result: T;
+  afterSave?: () => Promise<void>;
+}>): Promise<T> {
+  return withSnapshotWrite(rootDir, async () => {
+    const change = await update(await loadSnapshot(rootDir));
+    if (change.snapshot) {
+      await writeStoreJson(rootDir, ".mason/snapshot.json", snapshotSchema.parse(change.snapshot));
+      await change.afterSave?.();
+    }
+    return change.result;
+  });
 }
 
 export async function getCurrentGitHash(rootDir: string): Promise<string> {

@@ -1,10 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import * as fileAccess from "../src/utils/files.js";
+import { prepareVerdicts } from "./snapshot-helpers.js";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { verifySnapshot, saveVerification, checkDrift } from "../src/mcp/tools.js";
+import { verifySnapshot, saveVerification, saveSnapshotData, checkDrift } from "../src/mcp/tools.js";
 
 const exec = promisify(execFile);
 
@@ -35,6 +37,7 @@ describe("verify_snapshot / save_verification", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -114,11 +117,11 @@ describe("verify_snapshot / save_verification", () => {
     await writeSnapshot();
 
     const result = JSON.parse(
-      await saveVerification(tmpDir, {
+      await saveVerification(tmpDir, await prepareVerdicts(tmpDir, {
         auth: { ok: true },
         billing: { ok: false, note: "files are about invoicing UI, not generation" },
         ghost: { ok: true },
-      })
+      }))
     );
     expect(result.stamped.sort()).toEqual(["auth", "billing"]);
     expect(result.unknown).toEqual(["ghost"]);
@@ -136,8 +139,8 @@ describe("verify_snapshot / save_verification", () => {
 
   it("a later ok verdict clears a previous failure", async () => {
     await writeSnapshot();
-    await saveVerification(tmpDir, { auth: { ok: false, note: "wrong" } });
-    await saveVerification(tmpDir, { auth: { ok: true } });
+    await saveVerification(tmpDir, await prepareVerdicts(tmpDir, { auth: { ok: false, note: "wrong" } }));
+    await saveVerification(tmpDir, await prepareVerdicts(tmpDir, { auth: { ok: true } }));
 
     const snapshot = JSON.parse(
       await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8")
@@ -148,13 +151,139 @@ describe("verify_snapshot / save_verification", () => {
 
   it("mason_check_drift surfaces verification state additively", async () => {
     await writeSnapshot();
-    await saveVerification(tmpDir, {
+    await saveVerification(tmpDir, await prepareVerdicts(tmpDir, {
       billing: { ok: false, note: "mis-mapped" },
-    });
+    }));
 
     const drift = JSON.parse(await checkDrift(tmpDir));
     expect(drift.verification.failed).toEqual(["billing"]);
     expect(drift.verification.neverVerified).toBe(2); // auth + "login flow"
     expect(drift.hint).toMatch(/re-map those entries/i);
   });
+
+  it("requires prepared tokens without rewriting the snapshot", async () => {
+    await writeSnapshot();
+    const file = path.join(tmpDir, ".mason/snapshot.json");
+    const before = await fs.readFile(file, "utf8");
+    const result = JSON.parse(await saveVerification(tmpDir, { auth: { ok: true } }));
+    expect(result).toMatchObject({ status: "review_required", stamped: [], reviewRequired: ["auth"] });
+    expect(result.hint).toMatch(/verify_snapshot/);
+    expect(await fs.readFile(file, "utf8")).toBe(before);
+  });
+
+  it.each(["description", "files", "type", "tests", "delete"])("rejects a review after changing its %s", async change => {
+    await writeSnapshot();
+    const verdicts = await prepareVerdicts(tmpDir, { auth: { ok: true } });
+    if (change === "delete") await saveSnapshotData(tmpDir, {}, {}, ["auth"]);
+    else await saveSnapshotData(tmpDir, { auth: {
+      description: change === "description" ? "Repaired description" : "Login handling",
+      files: change === "files" ? ["src/billing.ts"] : ["src/auth.ts"],
+      ...(change === "type" ? { type: "infrastructure" as const } : {}),
+      ...(change === "tests" ? { tests: ["test/auth.test.ts"] } : {}),
+    } }, {});
+    const file = path.join(tmpDir, ".mason/snapshot.json");
+    const before = await fs.readFile(file, "utf8");
+    const result = JSON.parse(await saveVerification(tmpDir, verdicts));
+    expect(result).toMatchObject({ status: "conflict", stamped: [], conflicts: ["auth"] });
+    expect(await fs.readFile(file, "utf8")).toBe(before);
+  });
+
+  it("rejects changes beyond the source preview, even without a commit", async () => {
+    await writeSnapshot();
+    const prefix = "// unchanged preview\n".repeat(30);
+    await fs.writeFile(path.join(tmpDir, "src/auth.ts"), prefix + "export const valid = true;\n");
+    const verdicts = await prepareVerdicts(tmpDir, { auth: { ok: true } });
+    await fs.writeFile(path.join(tmpDir, "src/auth.ts"), prefix + "export const valid = false;\n");
+    const result = JSON.parse(await saveVerification(tmpDir, verdicts));
+    expect(result).toMatchObject({ status: "conflict", stamped: [], conflicts: ["auth"] });
+  });
+
+  it("rejects evidence that becomes excluded or unavailable after review", async () => {
+    await writeSnapshot();
+    const verdicts = await prepareVerdicts(tmpDir, { auth: { ok: true } });
+    await fs.writeFile(path.join(tmpDir, ".mason/config.json"), JSON.stringify({ ignore: ["src/auth.ts"] }));
+    expect(JSON.parse(await saveVerification(tmpDir, verdicts)).conflicts).toEqual(["auth"]);
+  });
+
+  it("keeps tokens valid across unrelated edits and metadata-only saves", async () => {
+    await writeSnapshot();
+    const verdicts = await prepareVerdicts(tmpDir, { auth: { ok: true } });
+    await saveSnapshotData(tmpDir, { billing: { description: "Updated billing", files: ["src/billing.ts"] } }, {});
+    await fs.writeFile(path.join(tmpDir, "src/billing.ts"), "export const invoice = false;\n");
+    await git(["add", "."], tmpDir);
+    await git(["commit", "-m", "unrelated edit"], tmpDir);
+    await saveSnapshotData(tmpDir, {}, {});
+    expect(JSON.parse(await saveVerification(tmpDir, verdicts))).toMatchObject({ status: "saved", stamped: ["auth"] });
+    expect((await prepareVerdicts(tmpDir, { auth: { ok: true } })).auth.reviewToken).toBe(verdicts.auth.reviewToken);
+    const snapshot = JSON.parse(await fs.readFile(path.join(tmpDir, ".mason/snapshot.json"), "utf8"));
+    expect(snapshot.features.auth.verificationToken).toBe(verdicts.auth.reviewToken);
+  });
+
+  it("identifies features and flows separately when they share a name", async () => {
+    await writeSnapshot();
+    await saveSnapshotData(tmpDir, {}, { auth: { description: "Auth flow", chain: ["src/auth.ts", "src/billing.ts"] } });
+    const feature = await prepareVerdicts(tmpDir, { auth: { ok: true, kind: "feature" } });
+    const flow = await prepareVerdicts(tmpDir, { auth: { ok: false, note: "Wrong flow", kind: "flow" } });
+    expect(feature.auth.reviewToken).not.toBe(flow.auth.reviewToken);
+    expect(JSON.parse(await saveVerification(tmpDir, { auth: { ...feature.auth, kind: "flow" } })).conflicts).toEqual(["auth"]);
+    await saveVerification(tmpDir, flow);
+    const snapshot = JSON.parse(await fs.readFile(path.join(tmpDir, ".mason/snapshot.json"), "utf8"));
+    expect(snapshot.features.auth.verifiedAt).toBeUndefined();
+    expect(snapshot.flows.auth.verificationFailed).toBe(true);
+    expect(JSON.parse(await saveVerification(tmpDir, feature)).stamped).toEqual(["auth"]);
+  });
+
+  it("requires a new review after repair and preserves the repaired content", async () => {
+    await writeSnapshot();
+    await saveVerification(tmpDir, await prepareVerdicts(tmpDir, { auth: { ok: false, note: "Incorrect description" } }));
+    await saveSnapshotData(tmpDir, { auth: { description: "Repaired login", files: ["src/auth.ts"] } }, {}, [], ["login flow"]);
+    const result = JSON.parse(await saveVerification(tmpDir, await prepareVerdicts(tmpDir, { auth: { ok: true } })));
+    expect(result.status).toBe("saved");
+    const snapshot = JSON.parse(await fs.readFile(path.join(tmpDir, ".mason/snapshot.json"), "utf8"));
+    expect(snapshot.features.auth).toMatchObject({ description: "Repaired login", verifiedAt: expect.any(String), verificationToken: expect.any(String) });
+    expect(snapshot.features.auth.verificationFailed).toBeUndefined();
+    expect(snapshot.flows["login flow"]).toBeUndefined();
+  });
+
+  it("reports mixed outcomes without claiming that every entry was verified", async () => {
+    await writeSnapshot();
+    const verdicts = await prepareVerdicts(tmpDir, { auth: { ok: true }, billing: { ok: true } });
+    await fs.writeFile(path.join(tmpDir, "src/billing.ts"), "export const invoice = false;\n");
+    const result = JSON.parse(await saveVerification(tmpDir, verdicts));
+    expect(result).toMatchObject({ status: "partial", stamped: ["auth"], conflicts: ["billing"] });
+    expect(result.hint).not.toMatch(/All.*verified/);
+  });
+
+  it("does not record a failed verdict without an explanation", async () => {
+    await writeSnapshot();
+    const result = JSON.parse(await saveVerification(tmpDir, await prepareVerdicts(tmpDir, { auth: { ok: false, note: " " } })));
+    expect(result).toMatchObject({ status: "invalid", stamped: [], invalid: ["auth"] });
+  });
+
+
+  it("rejects source changes during verdict recording before committing a stamp", async () => {
+    await writeSnapshot();
+    const verdicts = await prepareVerdicts(tmpDir, { auth: { ok: true } });
+    const createAccess = fileAccess.createFileAccess;
+    let reads = 0;
+    vi.spyOn(fileAccess, "createFileAccess").mockImplementation(async root => {
+      const access = await createAccess(root);
+      return { ...access, read: async file => {
+        const source = await access.read(file);
+        if (++reads === 1) await fs.writeFile(path.join(tmpDir, "src/auth.ts"), "export function changed() {}\n");
+        return source;
+      } };
+    });
+    const result = JSON.parse(await saveVerification(tmpDir, verdicts));
+    expect(result).toMatchObject({ status: "conflict", stamped: [], conflicts: ["auth"] });
+    const snapshot = JSON.parse(await fs.readFile(path.join(tmpDir, ".mason/snapshot.json"), "utf8"));
+    expect(snapshot.features.auth.verifiedAt).toBeUndefined();
+  });
+
+  it("guides clients missing tokens even when source evidence is currently unavailable", async () => {
+    await writeSnapshot();
+    await fs.writeFile(path.join(tmpDir, ".mason/config.json"), "{broken");
+    expect(JSON.parse(await saveVerification(tmpDir, { auth: { ok: true } }))).toMatchObject({ status: "review_required", stamped: [] });
+  });
+
 });

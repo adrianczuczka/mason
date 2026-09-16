@@ -355,7 +355,7 @@
     },
     {
       "name": "verify_snapshot",
-      "description": "Spot-check the concept map's correctness: returns a sample of entries (never-verified and least-recently-verified first) with skeletons of their claimed files, for the assistant to judge whether the files implement what each entry claims. Report verdicts via save_verification.",
+      "description": "Spot-check the concept map's correctness: returns a sample of entries (never-verified and least-recently-verified first) with skeletons of their claimed files, for the assistant to judge whether the files implement what each entry claims. Return each entry’s kind and reviewToken with verdicts via save_verification; tokens bind the entry and bounded source evidence.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -367,17 +367,19 @@
     },
     {
       "name": "save_verification",
-      "description": "Record verify_snapshot verdicts: ok entries are stamped verifiedAt and verifiedHash; failures surface in get_context, get_snapshot, and mason_check_drift until corrected.",
+      "description": "Record verify_snapshot verdicts using kind and reviewToken from the reviewed entry. Missing tokens require review; changed or deleted entries return conflicts without a stamp. Ok entries are stamped verifiedAt and verifiedHash; failures surface in get_context, get_snapshot, and mason_check_drift until corrected.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "dir": { "type": "string", "description": "Absolute path to the project root directory" },
           "verdicts": {
             "type": "object",
-            "description": "Entry name → {ok: boolean, note?: string (required when ok is false)}",
+            "description": "Entry name → {kind, reviewToken, ok, note?}; kind and reviewToken from verify_snapshot are required to stamp; note is required when ok is false",
             "additionalProperties": {
               "type": "object",
               "properties": {
+                "kind": { "type": "string", "enum": ["feature", "flow"], "description": "Entry kind from verify_snapshot; required to record a verdict" },
+                "reviewToken": { "type": "string", "description": "Token from the reviewed verify_snapshot entry; required to record a verdict" },
                 "ok": { "type": "boolean" },
                 "note": { "type": "string" }
               },

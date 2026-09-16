@@ -1,3 +1,4 @@
+import { prepareVerdicts } from "./snapshot-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -47,7 +48,7 @@ describe("reliability across tools", () => {
   });
 
   it("carries failed verification through both primary reading tools", async () => {
-    await saveVerification(repo, { auth: { ok: false, note: "Wrong implementation" } });
+    await saveVerification(repo, await prepareVerdicts(repo, { auth: { ok: false, note: "Wrong implementation" } }));
     const context = JSON.parse(await getContext(repo, "auth"));
     const snapshot = JSON.parse(await getSnapshot(repo));
     expect(context.features.auth.trust.verification).toBe("failed");
@@ -134,7 +135,7 @@ describe("reliability across tools", () => {
   });
 
   it("does not erase a failed verdict when a scoped refresh copies an entry", async () => {
-    await saveVerification(repo, { auth: { ok: false, note: "Wrong implementation" } });
+    await saveVerification(repo, await prepareVerdicts(repo, { auth: { ok: false, note: "Wrong implementation" } }));
     await savePartial(repo, { batchId: "batch-0", offset: 0, features: {}, flows: {}, savedAt: new Date().toISOString() });
     await saveSnapshotData(repo, structuredClone(features), {});
     const result = JSON.parse(await getSnapshot(repo));
