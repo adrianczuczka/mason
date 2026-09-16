@@ -1,3 +1,4 @@
+import { prepareVerdicts } from "./snapshot-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -124,7 +125,7 @@ describe("Mason without a concept map", () => {
     expect(snapshot.features.delivery).toBeDefined();
     expect(JSON.parse(await checkDrift(repo)).exists).toBe(true);
     expect(JSON.parse(await verifySnapshot(repo)).entries.map(e => e.name)).toContain("delivery");
-    expect(JSON.parse(await saveVerification(repo, { delivery: { ok: true } })).stamped).toContain("delivery");
+    expect(JSON.parse(await saveVerification(repo, await prepareVerdicts(repo, { delivery: { ok: true } }))).stamped).toContain("delivery");
     await expect(fs.access(path.join(repo, ".mason/project.json"))).rejects.toThrow();
   });
 

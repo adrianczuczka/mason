@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { inspectSnapshot, normalizeFeatureType } from "../snapshot/snapshot.js";
 import { createFileAccess } from "../utils/files.js";
 import type { FeatureType, Snapshot } from "../snapshot/snapshot.js";
+import { createSnapshotTrustReader, readSnapshotTrustIndex } from "../snapshot/trust.js";
 import { computeDrift, type DriftReport } from "../drift/drift.js";
 import { analyzeImpact } from "../impact/impact.js";
 import type { CochangeEntry, ReferenceEntry } from "../impact/impact.js";
@@ -10,7 +11,7 @@ import { scoreEntry, tokenSet } from "./lexical.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
 import { decisionKnowledge, effectiveDecision, DECISION_GUIDANCE } from "../decisions/provenance.js";
 import { anchorMatches, sanitizeRepoPaths } from "../utils/paths.js";
-import { assessTrust, trustHint, type TrustState } from "./trust.js";
+import { trustHint, type TrustState } from "./trust.js";
 import type { StoreDiagnostic } from "../utils/storage.js";
 import type { DecisionDriftReport } from "../decisions/drift.js";
 import type { DecisionCategory, DecisionRecord } from "../decisions/decisions.js";
@@ -177,6 +178,7 @@ export async function assembleContext(
   }
 
   const drift = await computeDrift(resolvedRoot);
+  const readTrust = createSnapshotTrustReader(resolvedRoot);
 
   const featureScores = Object.entries(snapshot.features)
     .map(([name, feat]) => ({
@@ -219,14 +221,7 @@ export async function assembleContext(
     Object.assign(bundle, await collectImpact(resolvedRoot, [...anchorFiles, ...Object.values(decisions).flatMap(d => [...d.files, ...(d.pendingProposal?.files ?? [])])]));
     bundle.diagnostics = store.diagnostics;
     bundle.freshness = drift;
-    bundle.trust = {
-      features: Object.fromEntries(Object.entries(snapshot.features).map(([name, entry]) =>
-        [name, assessTrust(entry, drift?.featureFreshness?.[name] ?? "unknown")]
-      )),
-      flows: Object.fromEntries(Object.entries(snapshot.flows).map(([name, entry]) =>
-        [name, assessTrust(entry, drift?.flowFreshness?.[name] ?? "unknown")]
-      )),
-    };
+    bundle.trust = await readSnapshotTrustIndex(readTrust, snapshot, drift);
     bundle.hint += " " + trustHint([
       ...Object.values(bundle.trust.features),
       ...Object.values(bundle.trust.flows),
@@ -240,7 +235,7 @@ export async function assembleContext(
   const features: Record<string, MatchedFeature> = {};
   const staleMatches: string[] = [];
   for (const { name, feat, score } of featureScores) {
-    const trust = assessTrust(feat, drift?.featureFreshness?.[name] ?? "unknown");
+    const trust = await readTrust("feature", name, feat, drift?.featureFreshness?.[name] ?? "unknown");
     const stale = trust.freshness !== "current";
     if (stale) staleMatches.push(name);
     features[name] = {
@@ -256,7 +251,7 @@ export async function assembleContext(
 
   const flows: Record<string, MatchedFlow> = {};
   for (const { name, flow, score } of flowScores) {
-    const trust = assessTrust(flow, drift?.flowFreshness?.[name] ?? "unknown");
+    const trust = await readTrust("flow", name, flow, drift?.flowFreshness?.[name] ?? "unknown");
     const stale = trust.freshness !== "current";
     if (stale) staleMatches.push(name);
     flows[name] = {

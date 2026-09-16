@@ -14,21 +14,23 @@ import { sampleFiles } from "./sampler.js";
 import { createFileAccess } from "../utils/files.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { sanitizeRepoPaths } from "../utils/paths.js";
-import { assessTrust, trustHint, type TrustState } from "../context/trust.js";
+import { trustHint, type TrustState } from "../context/trust.js";
 import { compactDecisionKnowledge, effectiveDecision, decisionTrust, DECISION_GUIDANCE } from "../decisions/provenance.js";
 import type { UpsertDecisionInput } from "../decisions/decisions.js";
 import { reviewDecision as runDecisionReview, type ReviewDecisionInput } from "../decisions/review.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
 import {
   loadSnapshot,
-  saveSnapshot,
+  updateSnapshot,
   getCurrentGitHash,
   prepareSnapshotBatch,
   normalizeFeatureType,
   DEFAULT_BATCH_SIZE,
   type FeatureType,
 } from "../snapshot/snapshot.js";
+import { createSnapshotTrustReader, readSnapshotTrustIndex } from "../snapshot/trust.js";
 import { computeDrift } from "../drift/drift.js";
+import { prepareSnapshotReview, snapshotEntryContent, type SnapshotVerdict } from "../snapshot/review.js";
 import type { DriftReport } from "../drift/drift.js";
 import {
   BATCH_SYSTEM_PROMPT,
@@ -368,9 +370,9 @@ export async function getSnapshot(dir: string): Promise<string> {
   const store = await loadDecisionStore(rootDir);
   const decisionRecords = store.records;
   const decisionDrift = await computeDecisionDrift(rootDir, decisionRecords);
+  const readTrust = createSnapshotTrustReader(rootDir);
   const trust: { features: Record<string, TrustState>; flows: Record<string, TrustState>; decisions: Record<string, TrustState> } = {
-    features: Object.fromEntries(Object.entries(snapshot.features).map(([name, entry]) => [name, assessTrust(entry, drift?.featureFreshness?.[name] ?? "unknown")])),
-    flows: Object.fromEntries(Object.entries(snapshot.flows).map(([name, entry]) => [name, assessTrust(entry, drift?.flowFreshness?.[name] ?? "unknown")])),
+    ...await readSnapshotTrustIndex(readTrust, snapshot, drift),
     decisions: Object.fromEntries(decisionRecords.filter(d => d.status === "active").map(d => [d.id, decisionTrust(effectiveDecision(d), decisionDrift.freshness?.[d.id] ?? "unknown")])),
   };
   output.trust = trust;
@@ -734,105 +736,101 @@ export async function saveSnapshotData(
   removeFlows: string[] = []
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  const gitHash = await getCurrentGitHash(rootDir);
-  const now = new Date().toISOString();
+  return updateSnapshot(rootDir, async previous => {
+    const gitHash = await getCurrentGitHash(rootDir);
+    const now = new Date().toISOString();
 
-  // Sanitize all file paths to prevent path traversal, and normalize the
-  // capability/infrastructure classification (defaults to "capability").
-  for (const feat of Object.values(features)) {
-    feat.files = sanitizePaths(rootDir, feat.files);
-    if (feat.tests) feat.tests = sanitizePaths(rootDir, feat.tests);
-    feat.type = normalizeFeatureType(feat.type);
-  }
-  for (const flow of Object.values(flows)) {
-    flow.chain = sanitizePaths(rootDir, flow.chain);
-  }
-
-  // If partials exist we're consolidating a Map-Reduce run: replace the
-  // snapshot wholesale. Merging here would pollute the unified map with any
-  // earlier (possibly hallucinated) call to save_snapshot. Outside of
-  // Map-Reduce — incremental refresh of one feature — fall back to merge.
-  const partials = await loadAllPartials(rootDir);
-  const replaceMode = partials.length > 0;
-  const previous = await loadSnapshot(rootDir);
-  const existing = replaceMode ? null : previous;
-  // Copy-through entries must not silently lose a failed verification during
-  // a scoped rebuild. A changed description/path set requires a new verdict.
-  const preserveVerification = (next: FeatureEntry | FlowEntry, old?: FeatureEntry | FlowEntry) => {
-    if (!old) return;
-    const semantic = (entry: FeatureEntry | FlowEntry) => JSON.stringify({
-      description: entry.description,
-      files: "files" in entry ? entry.files : undefined,
-      chain: "chain" in entry ? entry.chain : undefined,
-      tests: "files" in entry ? entry.tests : undefined,
-      type: "files" in entry ? normalizeFeatureType(entry.type) : undefined,
-    });
-    if (semantic(next) !== semantic(old)) return;
-    next.verifiedAt = old.verifiedAt;
-    next.verifiedHash = old.verifiedHash;
-    next.verificationFailed = old.verificationFailed;
-    next.verificationNote = old.verificationNote;
-  };
-  for (const [name, entry] of Object.entries(features)) preserveVerification(entry, previous?.features[name]);
-  for (const [name, entry] of Object.entries(flows)) preserveVerification(entry, previous?.flows[name]);
-
-  if (existing) {
-    // Entries not re-sent in this call are only verified as of the previous
-    // hash — record that before the top-level gitHash moves to HEAD, so
-    // drift detection can still see which entries were skipped.
-    if (existing.gitHash !== "unknown") {
-      for (const feat of Object.values(existing.features)) {
-        feat.refreshedHash ??= existing.gitHash;
-      }
-      for (const flow of Object.values(existing.flows)) {
-        flow.refreshedHash ??= existing.gitHash;
-      }
+    // Sanitize all file paths to prevent path traversal, and normalize the
+    // capability/infrastructure classification (defaults to "capability").
+    for (const feat of Object.values(features)) {
+      feat.files = sanitizePaths(rootDir, feat.files);
+      if (feat.tests) feat.tests = sanitizePaths(rootDir, feat.tests);
+      feat.type = normalizeFeatureType(feat.type);
+    }
+    for (const flow of Object.values(flows)) {
+      flow.chain = sanitizePaths(rootDir, flow.chain);
     }
 
-    const removedFeatures = removeFeatures.filter(
-      (name) => name in existing.features
-    );
-    const removedFlows = removeFlows.filter((name) => name in existing.flows);
-    for (const name of removedFeatures) delete existing.features[name];
-    for (const name of removedFlows) delete existing.flows[name];
+    // If partials exist we're consolidating a Map-Reduce run: replace the
+    // snapshot wholesale. Merging here would pollute the unified map with any
+    // earlier (possibly hallucinated) call to save_snapshot. Outside of
+    // Map-Reduce — incremental refresh of one feature — fall back to merge.
+    const partials = await loadAllPartials(rootDir);
+    const replaceMode = partials.length > 0;
+    const existing = replaceMode ? null : previous;
+    // Copy-through entries must not silently lose a failed verification during
+    // a scoped rebuild. A changed description/path set requires a new verdict.
+    const preserveVerification = (next: FeatureEntry | FlowEntry, old?: FeatureEntry | FlowEntry) => {
+      delete next.verifiedAt;
+      delete next.verifiedHash;
+      delete next.verificationToken;
+      delete next.verificationFailed;
+      delete next.verificationNote;
+      if (!old) return;
+      if (JSON.stringify(snapshotEntryContent(next)) !== JSON.stringify(snapshotEntryContent(old))) return;
+      next.verificationToken = old.verificationToken;
+      next.verifiedAt = old.verifiedAt;
+      next.verifiedHash = old.verifiedHash;
+      next.verificationFailed = old.verificationFailed;
+      next.verificationNote = old.verificationNote;
+    };
+    for (const [name, entry] of Object.entries(features)) preserveVerification(entry, previous?.features[name]);
+    for (const [name, entry] of Object.entries(flows)) preserveVerification(entry, previous?.flows[name]);
 
-    if (gitHash !== "unknown") {
-      for (const feat of Object.values(features)) feat.refreshedHash = gitHash;
-      for (const flow of Object.values(flows)) flow.refreshedHash = gitHash;
+    if (existing) {
+      // Entries not re-sent in this call are only verified as of the previous
+      // hash — record that before the top-level gitHash moves to HEAD, so
+      // drift detection can still see which entries were skipped.
+      if (existing.gitHash !== "unknown") {
+        for (const feat of Object.values(existing.features)) {
+          feat.refreshedHash ??= existing.gitHash;
+        }
+        for (const flow of Object.values(existing.flows)) {
+          flow.refreshedHash ??= existing.gitHash;
+        }
+      }
+
+      const removedFeatures = removeFeatures.filter(
+        (name) => name in existing.features
+      );
+      const removedFlows = removeFlows.filter((name) => name in existing.flows);
+      for (const name of removedFeatures) delete existing.features[name];
+      for (const name of removedFlows) delete existing.flows[name];
+
+      if (gitHash !== "unknown") {
+        for (const feat of Object.values(features)) feat.refreshedHash = gitHash;
+        for (const flow of Object.values(flows)) flow.refreshedHash = gitHash;
+      }
+
+      existing.features = { ...existing.features, ...features };
+      existing.flows = { ...existing.flows, ...flows };
+      existing.updatedAt = now;
+      existing.gitHash = gitHash;
+      return { snapshot: existing, afterSave: () => clearAllPartials(rootDir), result: JSON.stringify({
+        status: "updated",
+        mode: "merged",
+        features: Object.keys(existing.features).length,
+        flows: Object.keys(existing.flows).length,
+        removedFeatures: removedFeatures.length,
+        removedFlows: removedFlows.length,
+      }) };
     }
 
-    existing.features = { ...existing.features, ...features };
-    existing.flows = { ...existing.flows, ...flows };
-    existing.updatedAt = now;
-    existing.gitHash = gitHash;
-    await saveSnapshot(rootDir, existing);
-    await clearAllPartials(rootDir);
-    return JSON.stringify({
-      status: "updated",
-      mode: "merged",
-      features: Object.keys(existing.features).length,
-      flows: Object.keys(existing.flows).length,
-      removedFeatures: removedFeatures.length,
-      removedFlows: removedFlows.length,
-    });
-  }
+    const snapshot: Snapshot = {
+      version: 2,
+      createdAt: now,
+      updatedAt: now,
+      gitHash,
+      features,
+      flows,
+    };
 
-  const snapshot: Snapshot = {
-    version: 2,
-    createdAt: now,
-    updatedAt: now,
-    gitHash,
-    features,
-    flows,
-  };
-
-  await saveSnapshot(rootDir, snapshot);
-  await clearAllPartials(rootDir);
-  return JSON.stringify({
-    status: replaceMode ? "replaced" : "created",
-    mode: replaceMode ? "replaced-from-partials" : "fresh",
-    features: Object.keys(features).length,
-    flows: Object.keys(flows).length,
+    return { snapshot, afterSave: () => clearAllPartials(rootDir), result: JSON.stringify({
+      status: replaceMode ? "replaced" : "created",
+      mode: replaceMode ? "replaced-from-partials" : "fresh",
+      features: Object.keys(features).length,
+      flows: Object.keys(flows).length,
+    }) };
   });
 }
 
@@ -871,8 +869,6 @@ export async function getImpact(
 }
 
 const VERIFY_DEFAULT_SAMPLE = 5;
-const VERIFY_MAX_FILES_PER_ENTRY = 8;
-const VERIFY_SKELETON_CHARS = 500;
 
 /**
  * Verification closes the day-one hole drift can't: drift proves the map is
@@ -920,25 +916,13 @@ export async function verifySnapshot(
   const picked = entries.slice(0, Math.max(1, sample));
   const toVerify = [];
   for (const entry of picked) {
-    const skeletons: Array<{ path: string; content: string } | { path: string; missing: true }> = [];
-    for (const filePath of entry.files.slice(0, VERIFY_MAX_FILES_PER_ENTRY)) {
-      const full = await access.read(filePath);
-      if (full) {
-        skeletons.push({
-          path: full.path,
-          content: full.content.slice(0, VERIFY_SKELETON_CHARS),
-        });
-      } else {
-        skeletons.push({ path: filePath, missing: true });
-      }
-    }
+    const stored = entry.kind === "feature" ? snapshot.features[entry.name] : snapshot.flows[entry.name];
     toVerify.push({
       name: entry.name,
       kind: entry.kind,
       description: entry.description,
       lastVerified: entry.verifiedAt ?? "never",
-      skeletons,
-      truncated: entry.files.length > VERIFY_MAX_FILES_PER_ENTRY,
+      ...await prepareSnapshotReview(access, entry.kind, entry.name, stored),
     });
   }
 
@@ -950,56 +934,85 @@ export async function verifySnapshot(
     neverVerified,
     entries: toVerify,
     instructions:
-      "For each entry, judge from the skeletons whether the listed files actually implement the claimed feature/flow (missing files count against it). Then call save_verification with verdicts: {\"<entry name>\": {\"ok\": true|false, \"note\": \"<one line, required when ok is false>\"}}. Be skeptical — a plausible description is not evidence; the files must show it.",
+      'Judge whether the files implement each claimed feature/flow, then call save_verification with verdicts: {"<entry name>": {"kind": "<feature|flow from the entry>", "reviewToken": "<token from the entry>", "ok": true|false, "note": "<required when ok is false>"}}. Tokens cover the entry and full contents of the previewed files (at most 8), including unavailable-file markers; previews themselves are truncated. This is a spot-check, not proof of unshown files. A conflict requires verify_snapshot and a fresh review; never reuse a verdict for changed content. If a feature and flow share a name, submit their verdicts in separate calls.'
   });
 }
 
 export async function saveVerification(
   dir: string,
-  verdicts: Record<string, { ok: boolean; note?: string }>
+  verdicts: Record<string, SnapshotVerdict>
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  const snapshot = await loadSnapshot(rootDir);
-  if (!snapshot) {
-    return JSON.stringify({ exists: false, hint: "No concept map exists." });
-  }
-
-  const now = new Date().toISOString();
-  const verifiedHash = await getCurrentGitHash(rootDir);
-  const stamped: string[] = [];
-  const unknown: string[] = [];
-  const failed: string[] = [];
-
-  for (const [name, verdict] of Object.entries(verdicts)) {
-    const entry = snapshot.features[name] ?? snapshot.flows[name];
-    if (!entry) {
-      unknown.push(name);
-      continue;
+  return updateSnapshot(rootDir, async snapshot => {
+    if (!snapshot) {
+      return { snapshot: null, result: JSON.stringify({ exists: false, stamped: [], hint: "No concept map exists. Build it and run verify_snapshot before recording verdicts." }) };
     }
-    entry.verifiedAt = now;
-    entry.verifiedHash = verifiedHash;
-    if (verdict.ok) {
-      delete entry.verificationFailed;
-      delete entry.verificationNote;
-    } else {
-      entry.verificationFailed = true;
-      entry.verificationNote = verdict.note ?? "verification failed";
-      failed.push(name);
+
+    const stamped: string[] = [], unknown: string[] = [], failed: string[] = [];
+    const conflicts: string[] = [], reviewRequired: string[] = [], invalid: string[] = [];
+    const candidates: Array<{ name: string; verdict: SnapshotVerdict; entry: FeatureEntry | FlowEntry }> = [];
+    let access: Awaited<ReturnType<typeof createFileAccess>> | undefined;
+    for (const [name, verdict] of Object.entries(verdicts)) {
+      if (!verdict.kind || !["feature", "flow"].includes(verdict.kind) || !/^[a-f0-9]{64}$/.test(verdict.reviewToken ?? "")) {
+        reviewRequired.push(name);
+        continue;
+      }
+      if (typeof verdict.ok !== "boolean" || (!verdict.ok && !verdict.note?.trim())) {
+        invalid.push(name);
+        continue;
+      }
+      const collection = verdict.kind === "feature" ? snapshot.features : snapshot.flows;
+      if (!Object.hasOwn(collection, name)) {
+        unknown.push(name);
+        conflicts.push(name);
+        continue;
+      }
+      const entry = collection[name];
+      access ??= await createFileAccess(rootDir);
+      const current = await prepareSnapshotReview(access, verdict.kind, name, entry);
+      if (current.reviewToken !== verdict.reviewToken) conflicts.push(name);
+      else candidates.push({ name, verdict, entry });
     }
-    stamped.push(name);
-  }
 
-  snapshot.updatedAt = now;
-  await saveSnapshot(rootDir, snapshot);
+    const verifiedHash = candidates.length ? await getCurrentGitHash(rootDir) : "unknown";
+    // Refresh the inventory and source reads before committing a multi-entry batch.
+    // Editors do not take our lock; the persisted token identifies the evidence
+    // actually checked, while normal drift reporting handles later source edits.
+    const freshAccess = candidates.length ? await createFileAccess(rootDir) : null;
+    const now = new Date().toISOString();
+    for (const { name, verdict, entry } of candidates) {
+      const current = await prepareSnapshotReview(freshAccess!, verdict.kind!, name, entry);
+      if (current.reviewToken !== verdict.reviewToken) {
+        conflicts.push(name);
+        continue;
+      }
+      entry.verifiedAt = now;
+      entry.verifiedHash = verifiedHash;
+      entry.verificationToken = verdict.reviewToken;
+      if (verdict.ok) {
+        delete entry.verificationFailed;
+        delete entry.verificationNote;
+      } else {
+        entry.verificationFailed = true;
+        entry.verificationNote = verdict.note!.trim();
+        failed.push(name);
+      }
+      stamped.push(name);
+    }
 
-  return JSON.stringify({
-    stamped,
-    unknown,
-    failed,
-    hint:
-      failed.length > 0
-        ? `Entries [${failed.join(", ")}] are mis-mapped. Re-map them: read their actual files, correct the entries, and call save_snapshot with only those entries (plus removeFeatures/removeFlows if a concept no longer exists).`
-        : "All sampled entries verified. Re-run verify_snapshot periodically — it always picks the least-recently-verified entries next.",
+    const rejected = conflicts.length + reviewRequired.length + invalid.length;
+    const status = rejected ? (stamped.length ? "partial" : conflicts.length ? "conflict" : reviewRequired.length ? "review_required" : "invalid")
+      : stamped.length ? "saved" : "unchanged";
+    const hints: string[] = [];
+    if (conflicts.length) hints.push(`Entries [${conflicts.join(", ")}] changed or were deleted after review. Run verify_snapshot and review current evidence before retrying.`);
+    if (reviewRequired.length) hints.push(`Entries [${reviewRequired.join(", ")}] need kind and reviewToken from verify_snapshot. Inspect that evidence before submitting a verdict.`);
+    if (invalid.length) hints.push(`Entries [${invalid.join(", ")}] need a boolean ok and a non-empty note when ok is false.`);
+    if (failed.length) hints.push(`Entries [${failed.join(", ")}] are mis-mapped. Re-map them: read their actual files, correct the entries, and call save_snapshot with only those entries (plus removeFeatures/removeFlows if a concept no longer exists). Then run verify_snapshot for fresh review tokens.`);
+    if (!hints.length) hints.push(stamped.length ? "All submitted entries verified against the reviewed evidence. Re-run verify_snapshot periodically." : "No verdicts submitted; nothing changed.");
+    if (stamped.length) snapshot.updatedAt = now;
+    return { snapshot: stamped.length ? snapshot : null, result: JSON.stringify({
+      status, stamped, unknown, failed, conflicts, reviewRequired, invalid, hint: hints.join(" "),
+    }) };
   });
 }
 

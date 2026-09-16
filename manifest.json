@@ -162,7 +162,7 @@
     },
     {
       "name": "get_snapshot",
-      "description": "Return the optional feature-to-file architecture map with drift and trust evidence. If no map exists, returns exists:false plus project structure, Git signals, and test pairs. Decision capture, get_context, and get_impact still work. No initialization required.",
+      "description": "Return the optional feature-to-file architecture map with drift and trust evidence. Map verification is rechecked against sampled source contents; stale or unknown verification requires a fresh review, and recordedVerdict preserves the historical verdict. If no map exists, returns exists:false plus project structure, Git signals, and test pairs. Decision capture, get_context, and get_impact still work. No initialization required.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -173,7 +173,7 @@
     },
     {
       "name": "get_context",
-      "description": "Assemble task context: matching decisions with rationale, approval, owner, sources, last review, and freshness, plus related tests, file impact, and any available map entries. Proposals are suggestions; legacy records are unreviewed; accepted decisions are constraints subject to freshness. No initialization or map required. Pass task and optional files. map.status and diagnostics preserve missing or invalid knowledge. Impact covers up to three unique files, expanding directory anchors.",
+      "description": "Assemble task context: matching decisions with rationale, approval, owner, sources, last review, and freshness, plus related tests, file impact, and any available map entries. Map verification is rechecked against sampled source contents; stale or unknown verification requires a fresh review, and recordedVerdict preserves the historical verdict. Proposals are suggestions; legacy records are unreviewed; accepted decisions are constraints subject to freshness. No initialization or map required. Pass task and optional files. map.status and diagnostics preserve missing or invalid knowledge. Impact covers up to three unique files, expanding directory anchors.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -355,7 +355,7 @@
     },
     {
       "name": "verify_snapshot",
-      "description": "Spot-check the concept map's correctness: returns a sample of entries (never-verified and least-recently-verified first) with skeletons of their claimed files, for the assistant to judge whether the files implement what each entry claims. Report verdicts via save_verification.",
+      "description": "Spot-check the concept map's correctness: returns a sample of entries (never-verified and least-recently-verified first) with skeletons of their claimed files, for the assistant to judge whether the files implement what each entry claims. Return each entry’s kind and reviewToken with verdicts via save_verification; tokens bind the entry and bounded source evidence.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -367,17 +367,19 @@
     },
     {
       "name": "save_verification",
-      "description": "Record verify_snapshot verdicts: ok entries are stamped verifiedAt and verifiedHash; failures surface in get_context, get_snapshot, and mason_check_drift until corrected.",
+      "description": "Record verify_snapshot verdicts using kind and reviewToken from the reviewed entry. Missing tokens require review; changed or deleted entries return conflicts without a stamp. Ok entries are stamped verifiedAt and verifiedHash; failures surface in get_context, get_snapshot, and mason_check_drift until corrected.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "dir": { "type": "string", "description": "Absolute path to the project root directory" },
           "verdicts": {
             "type": "object",
-            "description": "Entry name → {ok: boolean, note?: string (required when ok is false)}",
+            "description": "Entry name → {kind, reviewToken, ok, note?}; kind and reviewToken from verify_snapshot are required to stamp; note is required when ok is false",
             "additionalProperties": {
               "type": "object",
               "properties": {
+                "kind": { "type": "string", "enum": ["feature", "flow"], "description": "Entry kind from verify_snapshot; required to record a verdict" },
+                "reviewToken": { "type": "string", "description": "Token from the reviewed verify_snapshot entry; required to record a verdict" },
                 "ok": { "type": "boolean" },
                 "note": { "type": "string" }
               },
