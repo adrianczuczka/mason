@@ -41,7 +41,7 @@ export function createMcpServer(): McpServer {
     },
     {
       instructions: (setupNotice ? setupNotice + "\n\n" : "") +
-        "Mason retrieves recorded decisions, file impact, and optional feature/flow maps. Use get_context with the task and known files, and get_impact before editing. Save learned rationale and constraints with save_decision; review and commit the local records through the project workflow. These tools work without initialization or a concept map. Consult trust and diagnostics: changed or unknown freshness needs source inspection, failed verification needs correction, and proposals are suggestions and legacy records are unreviewed. Accepted decisions are recorded team constraints, still subject to freshness checks. Use review_decision to prepare code evidence and record only authorized acceptance, reaffirmation, or retirement. Never invent a reviewer or treat these recorded identities as authenticated approval. mason_init returns documentation audit and committed-diff review findings with a quickstart guide. Use mode: \"map\" only when a full architecture map is requested. A missing map is not a setup failure; use decisions and source evidence. get_snapshot provides architecture navigation when a map is available. The mason-audit and mason-review CLIs also work without setup.",
+        "Mason retrieves recorded decisions, file impact, and optional feature/flow maps. Use get_context with the task and known files, and get_impact before editing. Save learned rationale and constraints with save_decision; review and commit the local records through the project workflow. These tools work without initialization or a concept map. Consult trust and diagnostics: changed or unknown freshness needs source inspection, stale or unknown map verification needs a fresh review, recorded failed verdicts need correction, and proposals are suggestions and legacy records are unreviewed. Accepted decisions are recorded team constraints, still subject to freshness checks. Use review_decision to prepare code evidence and record only authorized acceptance, reaffirmation, or retirement. Never invent a reviewer or treat these recorded identities as authenticated approval. mason_init returns documentation audit and committed-diff review findings with a quickstart guide. Use mode: \"map\" only when a full architecture map is requested. A missing map is not a setup failure; use decisions and source evidence. get_snapshot provides architecture navigation when a map is available. The mason-audit and mason-review CLIs also work without setup.",
     }
   );
 
@@ -202,7 +202,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_snapshot",
-    "Return the optional feature-to-file architecture map with drift and trust evidence. If no map exists, returns exists:false plus project structure, Git signals, and test pairs. Decision capture, get_context, and get_impact still work. No initialization required.",
+    "Return the optional feature-to-file architecture map with drift and trust evidence. Map verification is rechecked against sampled source contents; stale or unknown verification requires a fresh review, and recordedVerdict preserves the historical verdict. If no map exists, returns exists:false plus project structure, Git signals, and test pairs. Decision capture, get_context, and get_impact still work. No initialization required.",
     {
       dir: z
         .string()
@@ -218,7 +218,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "get_context",
-    "Assemble task context: matching decisions with rationale, approval, owner, sources, last review, and freshness, plus related tests, file impact, and any available map entries. Proposals are suggestions; legacy records are unreviewed; accepted decisions are constraints subject to freshness. No initialization or map required. Pass task and optional files. map.status and diagnostics preserve missing or invalid knowledge. Impact covers up to three unique files, expanding directory anchors.",
+    "Assemble task context: matching decisions with rationale, approval, owner, sources, last review, and freshness, plus related tests, file impact, and any available map entries. Map verification is rechecked against sampled source contents; stale or unknown verification requires a fresh review, and recordedVerdict preserves the historical verdict. Proposals are suggestions; legacy records are unreviewed; accepted decisions are constraints subject to freshness. No initialization or map required. Pass task and optional files. map.status and diagnostics preserve missing or invalid knowledge. Impact covers up to three unique files, expanding directory anchors.",
     {
       dir: z
         .string()

@@ -165,7 +165,10 @@ Freshness and correctness are separate. `get_context` returns a `trust` object f
 | `freshness: unknown` | Evidence is unavailable, such as missing history or an anchorless decision. Verify before relying on it. |
 | `verification: unverified` | No correctness verdict has been recorded. |
 | `verification: passed` | An assistant recorded a passing verdict; check its freshness and verification point before reuse. |
-| `verification: failed` | A known incorrect entry. The failure and its reason remain visible until corrected. |
+| `verification: failed` | A recorded negative verdict whose sampled map evidence still matches. Correct the description before relying on it. |
+| `verification: stale` | A map verdict exists, but the entry or sampled source contents differ from the reviewed evidence. Review again. |
+| `verification: unknown` | A map verdict exists, but its evidence cannot be confirmed, including older verdicts without tokens. |
+| `recordedVerdict` | The historical map verdict (`passed` or `failed`), retained with its timestamp and failure reason even when verification becomes stale or unknown. |
 
 Git commit distance is informational: unrelated commits and committing the refreshed map do not make the map stale. `mason-drift` exit codes still describe **committed map drift**; working-tree changes, decision warnings, and verification results are reported separately. A clean drift exit is not a correctness approval.
 
@@ -238,7 +241,13 @@ Language-agnostic. Mason works from file naming patterns and git history rather 
 
 After upgrading, restart every Mason MCP process that writes to the checkout. Older binaries do not participate in the new lock.
 
-Snapshot mutations are serialized per checkout across updated MCP sessions and processes. A writer reads the latest map while holding the shared lock, applies its changes, and replaces the snapshot atomically. Consolidation and partial cleanup use the same lock as incoming partial writes. A busy or damaged lock returns an error instead of reporting a successful save. Locks belonging to terminated local processes can be recovered; live, remote, and malformed locks are not removed automatically.
+Snapshot mutations are serialized per checkout across updated MCP sessions and processes. A writer reads the latest map while holding the shared lock, applies its changes, and replaces the snapshot atomically. Consolidation and partial cleanup use the same lock as incoming partial writes. A busy or damaged lock returns an error instead of reporting a successful save. Locks belonging to terminated local processes can be recovered; live, remote, and malformed locks are not removed automatically. A crash before owner data is written can leave an empty lock. A crash during recovery can leave `lock.reclaim`; that guard can block recovery of a dead writer even though an orphaned guard alone does not block ordinary writes. Errors identify the main lock, the owner state, and any recovery guard.
+
+For manual recovery:
+
+1. Stop every Mason process that can write to this checkout, including MCP sessions and processes on other hosts sharing it, and confirm they have exited. Prevent restarts during cleanup.
+2. Inspect the exact paths named in the error. Snapshot locks are `.mason/local/snapshot-write/lock` and `lock.reclaim` in the same directory. Remove only these files after confirming they are abandoned; leave the snapshot and partial data intact.
+3. Restart Mason and retry the save. Do not delete a lock based only on its age, and do not remove a recovery guard while another process might be reclaiming a lock.
 
 After repairing an entry, wait for `save_snapshot` to finish, then call `verify_snapshot` and inspect the returned evidence. Submit each verdict with the entry's `kind` and `reviewToken`:
 
@@ -261,4 +270,8 @@ Tokens cover the entry's description, paths, type, and tests, plus the full cont
 
 `save_verification` returns `stamped`, `failed`, `conflicts`, `reviewRequired`, `invalid`, and `unknown` entry lists. A batch can return `status: "partial"`; inspect these lists rather than treating an MCP response as blanket success. Changed or deleted entries receive no stamp and require a fresh `verify_snapshot` review. A failure is a recorded negative verdict; a conflict means the submitted verdict was not recorded. Existing calls without tokens return `status: "review_required"` and instructions, without changing the snapshot. The token fields remain optional in the input schema so these callers receive actionable feedback, but are required to record a verdict.
 
-Content edits clear an entry's previous verification. Unchanged entries retain it. Existing snapshots remain readable; a fresh review is required to record a new verdict. Verification records the evidence observed when saving; subsequent source edits remain subject to normal drift checks.
+Content edits clear an entry's previous verification. Unchanged entries retain it. Existing snapshots remain readable; older verdicts without evidence tokens report `verification: "unknown"` until reviewed again.
+
+`get_snapshot` and `get_context` recheck saved tokens for the map entries they return. Changed readable evidence reports `verification: "stale"`; unavailable sampled files, empty source lists, or unsupported tokens report `verification: "unknown"`. The historical `recordedVerdict`, timestamp, and failure reason remain visible, and reads do not change the saved record. Restoring the reviewed contents can make that verdict applicable again. This detects a reviewed uncommitted edit being reverted even when Git reports a clean checkout.
+
+Map drift and verification remain separate: `freshness`, `stale`, and drift exit codes describe mapping/Git evidence, so inspect `trust.verification` too. Source comparisons are bounded, point-in-time observations; editors do not acquire Mason's store lock and may change files after they are read. Files beyond the sample and separately listed test-file contents are not verified by the token. Existing tool errors, such as invalid project configuration, still surface as errors rather than successful trust responses.

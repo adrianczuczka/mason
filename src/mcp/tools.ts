@@ -14,7 +14,7 @@ import { sampleFiles } from "./sampler.js";
 import { createFileAccess } from "../utils/files.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { sanitizeRepoPaths } from "../utils/paths.js";
-import { assessTrust, trustHint, type TrustState } from "../context/trust.js";
+import { trustHint, type TrustState } from "../context/trust.js";
 import { compactDecisionKnowledge, effectiveDecision, decisionTrust, DECISION_GUIDANCE } from "../decisions/provenance.js";
 import type { UpsertDecisionInput } from "../decisions/decisions.js";
 import { reviewDecision as runDecisionReview, type ReviewDecisionInput } from "../decisions/review.js";
@@ -28,6 +28,7 @@ import {
   DEFAULT_BATCH_SIZE,
   type FeatureType,
 } from "../snapshot/snapshot.js";
+import { createSnapshotTrustReader, readSnapshotTrustIndex } from "../snapshot/trust.js";
 import { computeDrift } from "../drift/drift.js";
 import { prepareSnapshotReview, snapshotEntryContent, type SnapshotVerdict } from "../snapshot/review.js";
 import type { DriftReport } from "../drift/drift.js";
@@ -369,9 +370,9 @@ export async function getSnapshot(dir: string): Promise<string> {
   const store = await loadDecisionStore(rootDir);
   const decisionRecords = store.records;
   const decisionDrift = await computeDecisionDrift(rootDir, decisionRecords);
+  const readTrust = createSnapshotTrustReader(rootDir);
   const trust: { features: Record<string, TrustState>; flows: Record<string, TrustState>; decisions: Record<string, TrustState> } = {
-    features: Object.fromEntries(Object.entries(snapshot.features).map(([name, entry]) => [name, assessTrust(entry, drift?.featureFreshness?.[name] ?? "unknown")])),
-    flows: Object.fromEntries(Object.entries(snapshot.flows).map(([name, entry]) => [name, assessTrust(entry, drift?.flowFreshness?.[name] ?? "unknown")])),
+    ...await readSnapshotTrustIndex(readTrust, snapshot, drift),
     decisions: Object.fromEntries(decisionRecords.filter(d => d.status === "active").map(d => [d.id, decisionTrust(effectiveDecision(d), decisionDrift.freshness?.[d.id] ?? "unknown")])),
   };
   output.trust = trust;

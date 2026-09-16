@@ -1,7 +1,9 @@
 export type Freshness = "current" | "changed" | "unknown";
 export interface TrustState {
   freshness: Freshness;
-  verification: "unverified" | "passed" | "failed";
+  verification: "unverified" | "passed" | "failed" | "stale" | "unknown";
+  /** Historical map verdict, retained even when its evidence no longer applies. */
+  recordedVerdict?: "passed" | "failed";
   verifiedAt?: string;
   verifiedHash?: string;
   reasons: string[];
@@ -19,7 +21,9 @@ export function assessTrust(entry: { verifiedAt?: string; verifiedHash?: string;
 
 export function trustHint(states: TrustState[]): string {
   const parts: string[] = [];
-  if (states.some(s => s.verification === "failed")) parts.push("Verification failed for returned entries; do not rely on those descriptions until corrected.");
+  if (states.some(s => s.verification === "failed" || s.recordedVerdict === "failed")) parts.push("Verification failed for returned entries; do not rely on those descriptions until corrected.");
+  if (states.some(s => s.verification === "stale")) parts.push("Recorded verification evidence changed; use verify_snapshot and review the current evidence before reusing those verdicts.");
+  if (states.some(s => s.verification === "unknown")) parts.push("Recorded verification evidence cannot be confirmed; inspect the files and obtain a fresh review before relying on those verdicts.");
   if (states.some(s => s.freshness === "unknown")) parts.push("Freshness is unknown for some returned entries; inspect their files before relying on them.");
   if (states.some(s => s.freshness === "changed")) parts.push("Some returned entries have changed files, including possible local edits; verify against the current code.");
   if (!parts.length) parts.push("No changes detected in the returned anchors. This does not prove the descriptions are correct.");

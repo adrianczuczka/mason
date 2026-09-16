@@ -36,7 +36,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Snapshot concurrency and verification regressions
-        run: npx vitest run test/snapshot-concurrency.test.ts test/snapshot-mcp.test.ts test/verify.test.ts --maxWorkers=2
+        run: npx vitest run test/snapshot-concurrency.test.ts test/snapshot-mcp.test.ts test/snapshot-trust.test.ts test/verify.test.ts --maxWorkers=2
       - name: Windows batch launcher regression
         if: runner.os == 'Windows'
         run: npx vitest run test/distribution.test.ts -t 'batch launcher'

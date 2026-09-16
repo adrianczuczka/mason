@@ -99,7 +99,7 @@ describe("snapshot writer isolation", () => {
     const file = path.join(repo, ".mason/local/snapshot-write/lock");
     await withSnapshotWrite(repo, async () => {
       const owner = await fs.readFile(file, "utf8");
-      await expect(withSnapshotWrite(repo, async () => { throw new Error("must not run"); }, 0)).rejects.toThrow("Snapshot store is busy");
+      await expect(withSnapshotWrite(repo, async () => { throw new Error("must not run"); }, 0)).rejects.toThrow(`Local owner PID ${process.pid} is still running`);
       expect(await fs.readFile(file, "utf8")).toBe(owner);
     });
   });
@@ -108,7 +108,7 @@ describe("snapshot writer isolation", () => {
     const file = path.join(repo, ".mason/local/snapshot-write/lock");
     const owner = state === "malformed" ? "{broken" : JSON.stringify({ pid: process.pid, host: "another-machine" });
     await fs.writeFile(file, owner);
-    await expect(withSnapshotWrite(repo, async () => {}, 0)).rejects.toThrow("lock needs inspection");
+    await expect(withSnapshotWrite(repo, async () => {}, 0)).rejects.toThrow(state === "malformed" ? "incomplete or malformed" : "belongs to another host");
     expect(await fs.readFile(file, "utf8")).toBe(owner);
   });
 
