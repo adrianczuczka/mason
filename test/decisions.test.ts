@@ -54,6 +54,7 @@ function record(overrides: Partial<DecisionRecord>): DecisionRecord {
 
 describe("decisions", () => {
   let tmpDir: string;
+  let pendingCapTest: Promise<void> | undefined;
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mason-decisions-test-"));
@@ -67,6 +68,10 @@ describe("decisions", () => {
   });
 
   afterEach(async () => {
+    // A timeout does not await the test's underlying async work. Finish it
+    // before deleting its files or letting the next test replace tmpDir.
+    await pendingCapTest?.catch(() => {});
+    pendingCapTest = undefined;
     vi.unstubAllGlobals();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
@@ -295,29 +300,37 @@ describe("decisions", () => {
       expect((await loadDecisions(tmpDir)).map(r => r.id)).toEqual([id]);
     });
 
-    it("warns with pruneCandidates over the soft cap, never auto-evicts", async () => {
-      for (let i = 0; i < MAX_ACTIVE_DECISIONS; i++) {
-        await saveDecisionRecord(
-          tmpDir,
-          record({ id: `d-${i}`, title: `Decision ${i}`, body: `Body ${i}` })
-        );
-      }
-      await saveDecisionRecord(
-        tmpDir,
-        record({ id: "old-superseded", status: "superseded" })
-      );
-
-      const result = await upsertDecision(tmpDir, {
-        title: "One more entirely unrelated topic",
-        body: "Completely novel content about deployment windows on Fridays.",
-        category: "decision",
-      });
-      expect(result.status).toBe("created");
-      if (result.status !== "created") throw new Error("unreachable");
-      expect(result.warnings.join(" ")).toMatch(/soft cap/);
-      expect(result.pruneCandidates).toContain("old-superseded");
-      expect((await loadDecisions(tmpDir)).length).toBe(MAX_ACTIVE_DECISIONS + 2);
-    });
+    it("warns with pruneCandidates over the soft cap, never auto-evicts", async ({ signal }) => {
+      const repo = tmpDir;
+      pendingCapTest = (async () => {
+        const directory = path.join(repo, ".mason/decisions");
+        await fs.mkdir(directory, { recursive: true });
+        const existing = [
+          ...Array.from({ length: MAX_ACTIVE_DECISIONS }, (_, i) => record({ id: `d-${i}`, title: `Decision ${i}`, body: `Body ${i}` })),
+          record({ id: "old-superseded", status: "superseded" }),
+        ];
+        // These are starting fixtures, not save operations under test. Avoid
+        // 151 atomic replacements and fsyncs before exercising the soft cap.
+        for (const entry of existing) {
+          signal.throwIfAborted();
+          await fs.writeFile(path.join(directory, `${entry.id}.json`), JSON.stringify(entry), { signal });
+        }
+        signal.throwIfAborted();
+        const result = await upsertDecision(repo, {
+          title: "One more entirely unrelated topic",
+          body: "Completely novel content about deployment windows on Fridays.",
+          category: "decision",
+        });
+        signal.throwIfAborted();
+        expect(result.status).toBe("created");
+        if (result.status !== "created") throw new Error("unreachable");
+        expect(result.warnings.join(" ")).toMatch(/soft cap/);
+        expect(result.pruneCandidates).toContain("old-superseded");
+        const saved = await loadDecisions(repo);
+        expect(saved.map(entry => entry.id).sort()).toEqual([...existing.map(entry => entry.id), result.id].sort());
+      })();
+      await pendingCapTest;
+    }, 15000);
   });
 
   it("exposes matching MCP limits and preserves the full body through retrieval and hooks", async () => {
