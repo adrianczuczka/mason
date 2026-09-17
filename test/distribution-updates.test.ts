@@ -291,6 +291,24 @@ describe("standalone runtime safety", () => {
     await pruneUnusedVersions(home);
     expect((await fs.readdir(path.join(home, "versions"))).sort()).toEqual([record.current, record.previous!.id, record.pending!.id].sort());
   });
+  it("allows MCP startup while retired files are being deleted", async () => {
+    await fixture("1.1.0"); await installStandalone(source);
+    await fixture("1.2.0"); await installStandalone(source);
+    let deleting!: () => void, finish!: () => void;
+    const started = new Promise<void>(resolve => { deleting = resolve; });
+    const blocked = new Promise<void>(resolve => { finish = resolve; });
+    const remove = fs.rm.bind(fs);
+    vi.spyOn(fs, "rm").mockImplementation(async (file, options) => {
+      if (String(file).includes(".retired-") && options?.recursive) { deleting(); await blocked; }
+      return remove(file, options);
+    });
+    const pruning = pruneUnusedVersions(home);
+    await started;
+    try {
+      const session = await prepareStandaloneMcp(home);
+      await session.release();
+    } finally { finish(); await pruning; }
+  }, 15000);
   it("does not prune any version when process ownership is uncertain", async () => {
     const oldest = (await readInstallation(home)).current;
     await fixture("1.1.0"); await installStandalone(source);
