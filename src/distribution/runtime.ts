@@ -28,6 +28,26 @@ export async function registerRuntime() {
 
 /** Caller holds the update lock, before staging starts; startup shares the install lock. */
 export async function pruneUnusedVersions(home: string) {
+  // Full bundle verification and recursive deletion can be slow. Keep them
+  // outside the lock needed by commands and new MCP sessions.
+  const versions = await storePath(home, "versions");
+  const candidates: { id: string; directory: string; retired: boolean }[] = [];
+  const initial = await readInstallation(home);
+  const initialKeep = new Set([initial.current, initial.previous?.id, initial.pending?.id]);
+  for (const name of await fs.readdir(versions)) {
+    const retired = /^\.retired-([a-f0-9]{24})-[a-f0-9-]+$/.exec(name);
+    const id = retired?.[1] ?? name;
+    if (!/^[a-f0-9]{24}$/.test(id) || initialKeep.has(id)) continue;
+    try {
+      const directory = await storePath(home, `versions/${name}`);
+      await fs.access(await storePath(directory, "app/dist/mason-runtime.js"));
+      const bundle = await verifyBundle(directory);
+      if (bundle.manifestHash.slice(0, 24) === id && bundle.manifest.files["app/dist/mason-runtime.js"])
+        candidates.push({ id, directory, retired: !!retired });
+    } catch { /* Legacy, edited, or unknown bundles remain untouched. */ }
+  }
+  if (!candidates.length) return;
+  const garbage: string[] = [];
   await withLock(home, ".install-lock", async () => {
     const record = await readInstallation(home);
     const keep = new Set([record.current, record.previous?.id, record.pending?.id]);
@@ -47,17 +67,15 @@ export async function pruneUnusedVersions(home: string) {
         }
       } catch { return; } // Uncertain process ownership means no deletion.
     }
-    const versions = await storePath(home, "versions");
-    for (const id of await fs.readdir(versions)) {
-      if (!/^[a-f0-9]{24}$/.test(id) || keep.has(id)) continue;
+    for (const candidate of candidates) {
+      if (keep.has(candidate.id)) continue;
       try {
-        const directory = await storePath(home, `versions/${id}`);
-        const bundle = await verifyBundle(directory);
-        // Older releases do not register all running commands. Preserve those,
-        // and any edited or unrecognized directory whose ownership is uncertain.
-        if (bundle.manifestHash.slice(0, 24) !== id || !bundle.manifest.files["app/dist/mason-runtime.js"]) continue;
-        await fs.rm(directory, { recursive: true });
-      } catch { /* Busy files (including Windows executables) are retained for another check. */ }
+        const retired = candidate.retired ? candidate.directory
+          : await storePath(home, `versions/.retired-${candidate.id}-${randomUUID()}`);
+        if (!candidate.retired) await fs.rename(candidate.directory, retired);
+        garbage.push(retired);
+      } catch { /* Busy files remain available for the next check. */ }
     }
   });
+  for (const directory of garbage) await fs.rm(directory, { recursive: true }).catch(() => {});
 }
