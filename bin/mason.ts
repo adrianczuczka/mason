@@ -20,6 +20,9 @@ Usage: mason <command> [options]
   drift                      Check an optional architecture map
   mcp                        Run the MCP server (stdio)
   upgrade [version]          Upgrade the standalone user installation
+  updates [status|enable|disable|pin|unpin]
+                             Manage automatic standalone updates
+  rollback                   Restore and pin the previous standalone version
   uninstall                  Remove that installation; retain project data
 
 Use mason <command> --help for options. npm users can keep using mason-auto,
@@ -39,16 +42,63 @@ try {
   if (command === "internal-integration-version") console.log(JSON.stringify({ protocol: 1, version: PKG_VERSION }));
   else if (!command || ["--help", "-h", "help"].includes(command)) console.log(usage);
   else if (["--version", "-v"].includes(command)) console.log(PKG_VERSION);
+  else if (command === "internal-update") {
+    if (args.length) throw new Error("internal-update takes no arguments.");
+    const { currentInstallation } = await import("../src/distribution/state.js");
+    const { runAutomaticUpdate } = await import("../src/distribution/updates.js");
+    await runAutomaticUpdate((await currentInstallation()).home);
+  }
   else if (command === "internal-install") {
     if (args.length) throw new Error("internal-install takes no arguments.");
     const { installStandalone } = await import("../src/distribution/install.js");
     const bundleRoot = fileURLToPath(new URL("../..", import.meta.url));
     progress = createProgress();
-    const installed = await installStandalone(bundleRoot, progress);
+    const policyRevision = process.env.MASON_UPDATE_POLICY_REVISION;
+    if (policyRevision && !/^[a-f0-9]{64}$/.test(process.env.MASON_EXPECTED_SHA256 ?? "")) throw new Error("Automatic staging requires a verified release checksum.");
+    const installed = await installStandalone(bundleRoot, progress, { stageOnly: !!policyRevision, policyRevision });
     progress.stop();
     const outcome = installed.previousVersion && installed.previousVersion !== installed.version
       ? `Updated Mason ${installed.previousVersion} → ${installed.version}` : `Installed Mason ${installed.version}`;
-    console.log(`${outcome} in ${installed.home}.\n${installed.path.message}`);
+    if (policyRevision) console.log(`Staged Mason ${installed.version}. It will activate at a future MCP launch after existing servers exit.`);
+    else {
+      const { updateStatus } = await import("../src/distribution/updates.js");
+      const status = await updateStatus(installed.home);
+      const policy = status.pinnedVersion ? `pinned to ${status.pinnedVersion}` : status.mirror ? "managed by your mirror" : status.enabled ? "enabled" : "disabled";
+      console.log(`${outcome} in ${installed.home}.\n${installed.path.message}\nAutomatic updates: ${policy}. Manage with mason updates.`);
+    }
+  } else if (command === "updates") {
+    if (args.includes("--help")) console.log("Usage: mason updates [status|enable|disable|pin|unpin] [--json]. Pin holds the installed version; mason upgrade <version> installs and pins a specific release. Environment and mirror restrictions still apply.");
+    else {
+      const action = args.filter(arg => arg !== "--json")[0] ?? "status";
+      if (args.filter(arg => arg !== "--json").length > 1 || !["status", "enable", "disable", "pin", "unpin"].includes(action)) throw new Error("Usage: mason updates [status|enable|disable|pin|unpin] [--json]");
+      const { currentInstallation } = await import("../src/distribution/state.js");
+      const { updateSettings, updateStatus, scheduleAutomaticUpdate } = await import("../src/distribution/updates.js");
+      const { home } = await currentInstallation();
+      if (action !== "status") await updateSettings(home, action as "enable" | "disable" | "pin" | "unpin");
+      const status = await updateStatus(home);
+      if (args.includes("--json")) console.log(JSON.stringify(status));
+      else {
+        console.log(`Mason ${status.version}\nAutomatic updates: ${status.effective ? "enabled" : "inactive"} (preference: ${status.enabled ? "enabled" : "disabled"}).`);
+        if (status.pinnedVersion) console.log(`Pinned to ${status.pinnedVersion}. Run mason updates unpin to follow stable releases.`);
+        if (status.mirror) console.log("Company mirror installation: automatic public updates are disabled.");
+        if (!status.effective && status.enabled && !status.pinnedVersion && !status.mirror) console.log("Suppressed by CI, MASON_NO_AUTO_UPDATE, MASON_VERSION, or MASON_RELEASE_BASE.");
+        if (status.pendingVersion) console.log(`Downloaded ${status.pendingVersion}; activates on a future MCP launch after existing servers exit.`);
+        if (status.lastCheck) {
+          console.log(`Last check: ${new Date(status.lastCheck.lastAttempt).toISOString()}`);
+          if (status.lastCheck.availableVersion) console.log(`Available stable release: ${status.lastCheck.availableVersion}`);
+          if (status.lastCheck.error) console.log(`Last update problem: ${status.lastCheck.error}`);
+        }
+      }
+      if (action === "enable" || action === "unpin") void scheduleAutomaticUpdate();
+    }
+  } else if (command === "rollback") {
+    if (args.includes("--help")) console.log("Usage: mason rollback. Close running Mason MCP servers, then restore and pin the previous installed version.");
+    else {
+      if (args.length) throw new Error("rollback takes no arguments.");
+      const { rollbackStandalone } = await import("../src/distribution/install.js");
+      const restored = await rollbackStandalone();
+      console.log(`Restored Mason ${restored.version} and pinned it. Run mason updates unpin to resume automatic updates.`);
+    }
   } else if (command === "upgrade" || command === "uninstall") {
     if (args.includes("--help")) console.log(command === "upgrade" ? "Usage: mason upgrade [version]. Configured projects use the upgraded command on their next launch. Restart running assistants." : "Usage: mason uninstall. Removes the standalone user installation; project configuration and knowledge are retained. Run mason teardown in each project first to disconnect its integrations.");
     else {
@@ -69,6 +119,10 @@ try {
     }
     process.exitCode = await runAutomationCli(forwarded, input, undefined,
       { managedHost: managedLaunch ? setupHost as "codex" | "claude" : undefined });
+    if (command === "setup" && process.exitCode === 0 && !args.includes("--help")) {
+      const { scheduleAutomaticUpdate } = await import("../src/distribution/updates.js");
+      void scheduleAutomaticUpdate();
+    }
   } else if (["audit", "review", "drift", "hook", "mcp"].includes(command)) {
     const binary = new URL(`./mason-${command}.js`, import.meta.url);
     process.argv = [process.execPath, fileURLToPath(binary), ...args];

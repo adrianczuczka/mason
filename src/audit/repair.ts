@@ -244,7 +244,10 @@ async function verifyOriginal(rootDir: string, baselinePath: string, options: Au
     }
     if (!("confidence" in finding) && (!recheckable(finding) || now)) {
       return { ...base, status: "review-required",
-        reason: "An audit cannot establish that this advisory was reviewed. Retain its original evidence and report a separate assessment; editing or committing the doc is not approval." };
+        reason: (now ? "The current check still reports this advisory. " : finding.type === "deps-changed"
+          ? "The current check no longer reports this condition; the historical advisory remains awaiting assessment. "
+          : "The current check no longer reports the original finding; retained evidence still requires assessment. ") +
+          "An audit cannot establish that this advisory was reviewed. Retain its original evidence and report a separate assessment; editing or committing the doc is not approval." };
     }
     return { ...base, status: "resolved", reason: "The original check ran and no longer reports this claim. Inspect the edit for semantic correctness." };
   }));

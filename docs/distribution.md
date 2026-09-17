@@ -42,16 +42,40 @@ Setup configures project MCP, hooks and instructions using the same evidence-pre
 
 ```sh
 mason upgrade           # Latest stable release
-mason upgrade 0.16.1    # A particular published version
+mason upgrade 0.16.1    # Install and pin a particular published version
+mason updates           # Automatic update preference, pending version, last attempt
+mason rollback          # Restore and pin the previous installed version
 mason teardown         # Disconnect the current project; keep its knowledge
 mason uninstall
 ```
 
 A global upgrade updates the command used by all configured projects. Restart running assistants to load it. Activation is measured separately for each Mason version; old observations remain local evidence of the previous version. Setup retains original repair evidence and only needs repeating for a fresh clone or configuration changes. A clone does not inherit another checkout's activation. Re-review changed hooks through native host controls.
 
-Uninstall removes the standalone user installation, its owned launchers, and unchanged PATH additions recorded by Mason. Preexisting PATH entries and other shell settings remain; edited Mason blocks are retained with a message. It retains project instructions, MCP/hook configuration, decisions, and repair evidence. Run [mason teardown](setup.md#disconnect-a-project) in each project you want to disconnect before uninstalling. Remaining integrations require Mason to be reinstalled before they can run again. It refuses to delete an edited launcher. Previous global bundle versions are retained until uninstall.
+Uninstall removes the standalone user installation, its owned launchers, and unchanged PATH additions recorded by Mason. Preexisting PATH entries and other shell settings remain; edited Mason blocks are retained with a message. It retains project instructions, MCP/hook configuration, decisions, and repair evidence. Run [mason teardown](setup.md#disconnect-a-project) in each project you want to disconnect before uninstalling. Remaining integrations require Mason to be reinstalled before they can run again. It refuses to delete an edited launcher. Daily update checks reclaim unused bundles that support process tracking, keeping the current, rollback, staged, and running versions. Legacy bundles and bundles with uncertain ownership are retained until uninstall.
 
-The npm distribution and existing dedicated commands remain supported. Install globally with `npm install -g mason-context`; this requires Node 20+ and npm. The same project configuration calls `mason` whether it comes from npm or the standalone installer.
+The npm distribution and existing dedicated commands remain supported. Install globally with `npm install -g mason-context`; this requires Node 20.17+ and npm. The same project configuration calls `mason` whether it comes from npm or the standalone installer.
+
+## Automatic updates
+
+New, unpinned public standalone installations enable automatic updates and disclose the preference when installation finishes. An existing installation that predates the updater stays opted out after its first manual upgrade. Enable it with `mason updates enable`; no project setup changes are required.
+
+```sh
+mason updates enable    # Opt in
+mason updates disable   # Opt out; discard a pending activation
+mason updates pin       # Hold the currently installed version
+mason updates unpin     # Resume following stable releases if enabled
+mason updates --json    # Inspect policy and the last attempt as JSON
+```
+
+MCP startup and successful `mason setup` can launch a separate background worker. Long-running MCP servers also check whether a worker is due hourly. The worker attempts a release check at most once every 24 hours, including after a failure. It downloads only newer stable releases published at least 24 hours earlier. Releases must pass the six-platform distribution checks before publication. Network failures leave the installed command working and are recorded in `mason updates`; the next automatic attempt is on a later day. Hook, audit, review, drift, status, and version commands never initiate update requests.
+
+Downloads are staged in a separate version directory and must pass signature, archive and file checksum verification plus a version startup check. A pending update activates on the first subsequent MCP launch when no other Mason MCP servers are running for that installation. MCP process leases and activation share the installation lock, so concurrent new servers select the same version. If standalone process tracking cannot be established, startup reports an error; it never runs an untracked server that another process could mistake for idle. Existing MCP servers and hooks keep using the current global version until activation. Close all assistants using Mason and restart one to activate a pending update. A hook-only installation needs an MCP launch or an explicit `mason upgrade` to activate an update; host sessions without a running Mason MCP server are not tracked. No updater daemon or OS scheduled task is installed.
+
+`MASON_NO_AUTO_UPDATE=1` disables automatic checks and activation for the invoking process. CI environments, `MASON_VERSION`, and `MASON_RELEASE_BASE` also suppress them. Installing with an explicit `MASON_VERSION`, or running `mason upgrade <version>`, persists a version pin. Company mirror selection is persisted and prevents public automatic updates even after the environment variable disappears. `mason upgrade` remains an explicit immediate upgrade, clears a version pin after success, and preserves the auto-update preference; company mirrors require an explicit version. npm installations remain managed by npm.
+
+`mason rollback` restores the previously selected bundle without a download, verifies its files, and pins it so automatic updates do not immediately reinstall the rejected release. Close running Mason MCP servers before rolling back. Previous bundles are retained until uninstall; automatic updating therefore increases installation disk usage over time.
+
+Automatic updates verify `update.json` against `update.sigstore.json` using Sigstore, requiring GitHub's OIDC issuer and the exact Mason publishing workflow identity for that release tag, including certificate and transparency-log verification. The signed manifest binds each platform archive to its SHA-256 digest. Missing or invalid signatures never fall back to unsigned updates. Verification refreshes Sigstore trust metadata; see [network behavior](data-and-network.md#network-operations). Initial installs and explicit manual upgrades retain the checksum-based installer trust model.
 
 ## Runtime and platform support
 
@@ -59,7 +83,7 @@ Each archive contains the official Node runtime, its license, Mason, locked prod
 
 Targets are macOS, Linux with glibc, and Windows, on x64 and arm64. Alpine/musl is not included in this initial matrix. Bundles have no project-specific paths. Project MCP and hooks invoke `mason` on PATH and resolve the Git worktree from their working directory, including subdirectories. No `run.sh`, `run.ps1`, or `run.cjs` is generated in a project. Windows MCP configuration invokes the installed command through `cmd.exe`. Setup reconciles that platform-specific command when a checkout changes operating systems.
 
-Checksums detect corrupted or changed artifacts; they do not provide an independent signature. Archives are not currently code-signed or notarized. Native trust requirements still apply.
+Initial installs and explicit manual upgrades verify adjacent archive checksums. Automatic updates additionally verify signed release metadata as described above. Native executables are not currently platform-code-signed or notarized; OS and host trust requirements still apply.
 
 ## Build and validate from source
 
@@ -87,7 +111,7 @@ The smoke harness serves release archives locally and runs the actual installers
 
 [The standalone workflow](../.github/workflows/standalone.yml) runs that harness on six native runners. Tag publishing waits for all six, then uploads the checked archives, `SHA256SUMS`, and both installers to the GitHub release. Existing release assets are never overwritten. [GitHub runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) lists the runner labels.
 
-`MASON_VERSION` selects a version and `MASON_RELEASE_BASE` overrides the archive download base. A custom base requires an explicit version, avoiding public latest-version discovery. Production defaults use this repository's GitHub releases. For company distribution, mirror the reviewed installer and artifacts as described in [data and network behavior](data-and-network.md#company-installation-and-mcp).
+`MASON_VERSION` selects and pins a version and `MASON_RELEASE_BASE` overrides the archive download base. A custom base requires an explicit version, avoiding public latest-version discovery, and is retained for future manual upgrades. Production defaults use this repository's GitHub releases. The publishing job signs release metadata with its GitHub Actions OIDC identity; no long-lived signing secret is required. For company distribution, mirror the reviewed installer and artifacts as described in [data and network behavior](data-and-network.md#company-installation-and-mcp).
 
 ## Official MCP Registry publishing
 

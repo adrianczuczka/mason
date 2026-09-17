@@ -18,7 +18,7 @@ async function write(file: string, text: string) {
 }
 async function seed() {
   await write("old-module/index.js", "export const greeting = 'hello';\n");
-  await write("CLAUDE.md", "The `old-module/index.js` module provides a greeting.\n");
+  await write("CLAUDE.md", "The `old-module/index.js` module provides a greeting. Dependencies are configured in the package manifest.\n");
   await write("AGENTS.md", "The old-module directory contains the greeting.\n");
   await write("package.json", '{"scripts":{"test":"node --test"}}');
   await write(".gitignore", ".mason/reports/\n");

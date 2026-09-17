@@ -2,7 +2,7 @@
   "version": 2,
   "id": "shared-hooks-must-distinguish-inactive-installs-from-failure",
   "title": "Shared hooks must distinguish inactive installs from failures",
-  "body": "Shared configuration is not local activation. Missing Mason and a checkout without local hook setup must stay quiet; corrupt setup and failed active checks remain visible. A PATH guard handles only an absent executable. The earlier strict managed MCP launch made fresh clones disconnect before explaining setup. MCP should serve context and explain the missing setup without creating local activation or authorizing hooks. Each checkout still runs setup explicitly. Resolve managed hooks from the event payload before checking local setup: the launch cwd can be outside the repo or belong to the original checkout. Claude's CLAUDE_PROJECT_DIR stays at that original checkout after entering a worktree. An outside-Git fallback is safe only with an unambiguous checkout; conflicting roots or multiple worktrees remain unknown. Preserve pre-edit coverage for shell and unknown tools. Read-only observations must not advance audit freshness or imply a passing check. Configuration, observed activation, and verification remain separate. These are proposed constraints supported by isolated regressions, not an independently accepted policy or proof of every host configuration.",
+  "body": "Shared configuration is not activation. Missing Mason and a fresh clone without setup stay quiet; corrupt activation records and failed active checks remain visible. MCP may serve context before setup without granting hook trust. Maintainer testing on 2026-09-17 exposed that requiring setup in every linked worktree made routine review skills invisible throughout edits and commits because ignored local receipts were absent there. Linked worktrees may therefore inherit host activation from the primary checkout identified through Git common metadata, with explicit local setup and host opt-outs taking precedence. Share activation only: audit baselines, branch/session captures, observations, and ownership remain in the active checkout. Never borrow primary-checkout evidence to invent pre-edit coverage. Resolve the payload checkout before activation; host project environment variables can remain at the original checkout. Outside-Git fallback requires one unambiguous checkout; unavailable history or conflicting/multiple roots remain unknown. Preserve conservative capture for shell/unknown tools; read observations never advance verification. Separate configuration, observed activation and verification. These are proposed constraints, not independent approval or proof of every host workflow.",
   "category": "gotcha",
   "files": [
     "src/setup/launcher.ts",
@@ -10,14 +10,18 @@
     "src/setup/config.ts",
     "test/adoption-hardening.test.ts",
     "src/automation/hook-root.ts",
-    "test/adoption-workflows.test.ts"
+    "test/adoption-workflows.test.ts",
+    "src/setup/model.ts",
+    "src/setup/observations.ts",
+    "src/setup/teardown.ts",
+    "test/worktree-activation.test.ts"
   ],
   "createdAt": "2026-09-09T11:35:19.914Z",
-  "updatedAt": "2026-09-14T17:31:09.953Z",
+  "updatedAt": "2026-09-17T08:50:10.299Z",
   "refreshedHash": "594c81f4c5964c128009d6615e34b7d9b9324144",
   "status": "active",
   "approval": "proposed",
-  "revision": 3,
+  "revision": 4,
   "sources": [
     {
       "kind": "document",
@@ -48,6 +52,11 @@
       "kind": "document",
       "reference": "https://code.claude.com/docs/en/hooks",
       "note": "CLAUDE_PROJECT_DIR stays at the original checkout; hook input cwd follows worktree and directory changes."
+    },
+    {
+      "kind": "discussion",
+      "reference": "Maintainer-provided workflow feedback, 2026-09-17",
+      "note": "Linked worktree activation gap, historical dependency wording, dependency relevance, and scope-aware follow-up."
     }
   ],
   "history": [
@@ -176,6 +185,69 @@
             "kind": "document",
             "reference": "https://code.claude.com/docs/en/hooks",
             "note": "CLAUDE_PROJECT_DIR stays at the original checkout; hook input cwd follows worktree and directory changes."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "594c81f4c5964c128009d6615e34b7d9b9324144"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-17T08:50:10.299Z",
+      "actor": "Codex",
+      "revision": 4,
+      "content": {
+        "title": "Shared hooks must distinguish inactive installs from failures",
+        "body": "Shared configuration is not activation. Missing Mason and a fresh clone without setup stay quiet; corrupt activation records and failed active checks remain visible. MCP may serve context before setup without granting hook trust. Maintainer testing on 2026-09-17 exposed that requiring setup in every linked worktree made routine review skills invisible throughout edits and commits because ignored local receipts were absent there. Linked worktrees may therefore inherit host activation from the primary checkout identified through Git common metadata, with explicit local setup and host opt-outs taking precedence. Share activation only: audit baselines, branch/session captures, observations, and ownership remain in the active checkout. Never borrow primary-checkout evidence to invent pre-edit coverage. Resolve the payload checkout before activation; host project environment variables can remain at the original checkout. Outside-Git fallback requires one unambiguous checkout; unavailable history or conflicting/multiple roots remain unknown. Preserve conservative capture for shell/unknown tools; read observations never advance verification. Separate configuration, observed activation and verification. These are proposed constraints, not independent approval or proof of every host workflow.",
+        "category": "gotcha",
+        "files": [
+          "src/setup/launcher.ts",
+          "src/automation/adapters.ts",
+          "src/setup/config.ts",
+          "test/adoption-hardening.test.ts",
+          "src/automation/hook-root.ts",
+          "test/adoption-workflows.test.ts",
+          "src/setup/model.ts",
+          "src/setup/observations.ts",
+          "src/setup/teardown.ts",
+          "test/worktree-activation.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": "src/setup/launcher.ts",
+            "note": "Generated global command and per-checkout setup requirement in 0.16.1."
+          },
+          {
+            "kind": "document",
+            "reference": "src/automation/adapters.ts",
+            "note": "Lifecycle normalization and conservative mutation coverage."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Codex isolated-repository reproduction, 2026-09-09, during maintainer review of shared-hook onboarding",
+            "note": "Two local invocations: missing PATH command and installed command without local setup. No private project source or review text is copied here."
+          },
+          {
+            "kind": "document",
+            "reference": "test/adoption-hardening.test.ts",
+            "note": "Inactive integrations, active failure visibility, read-only observations, and conservative pre-edit capture regressions."
+          },
+          {
+            "kind": "document",
+            "reference": "test/adoption-workflows.test.ts",
+            "note": "Fresh-clone MCP, payload checkout setup gates, unambiguous outside-Git fallback, and worktree isolation regressions."
+          },
+          {
+            "kind": "document",
+            "reference": "https://code.claude.com/docs/en/hooks",
+            "note": "CLAUDE_PROJECT_DIR stays at the original checkout; hook input cwd follows worktree and directory changes."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer-provided workflow feedback, 2026-09-17",
+            "note": "Linked worktree activation gap, historical dependency wording, dependency relevance, and scope-aware follow-up."
           }
         ]
       },

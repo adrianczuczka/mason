@@ -11,7 +11,7 @@ if ($env:MASON_RELEASE_BASE -and -not $version) {
 }
 if (-not $version) {
     Write-MasonStep 'Checking the latest release'
-    $response = Invoke-WebRequest -UseBasicParsing -Method Head -Uri 'https://github.com/adrianczuczka/mason/releases/latest'
+    $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 30 -Method Head -Uri 'https://github.com/adrianczuczka/mason/releases/latest'
     $url = if ($response.BaseResponse.ResponseUri) { $response.BaseResponse.ResponseUri.AbsoluteUri } else { $response.BaseResponse.RequestMessage.RequestUri.AbsoluteUri }
     $version = ($url -split '/')[-1]
 }
@@ -26,10 +26,10 @@ try {
     Write-MasonStep "Downloading Mason $version (win32-$arch)"
     # Native transfer progress is useful in a terminal, but not in redirected logs.
     if (-not [Console]::IsOutputRedirected -and -not [Console]::IsErrorRedirected -and -not $env:CI -and $env:TERM -ne 'dumb') { $ProgressPreference = 'Continue' }
-    try { Invoke-WebRequest -UseBasicParsing -Uri "$base/v$version/$asset" -OutFile $archive }
+    try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 300 -Uri "$base/v$version/$asset" -OutFile $archive }
     finally { $ProgressPreference = 'SilentlyContinue' }
     Write-MasonStep 'Verifying download'
-    $checksums = (Invoke-WebRequest -UseBasicParsing -Uri "$base/v$version/SHA256SUMS").Content
+    $checksums = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 30 -Uri "$base/v$version/SHA256SUMS").Content
     if ($checksums -is [byte[]]) { $checksums = [Text.Encoding]::UTF8.GetString($checksums) }
     $checksumLines = @($checksums -split "`n" | Where-Object { $_ -cmatch ('^[a-f0-9]{64}\s+' + [regex]::Escape($asset) + '\s*$') })
     if ($checksumLines.Count -ne 1) { throw 'Missing or ambiguous release checksum.' }
@@ -39,6 +39,9 @@ try {
     try { $actual = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
     finally { $stream.Dispose(); $sha.Dispose() }
     if ($actual -ne $expected) { throw 'Mason archive checksum mismatch; installation unchanged.' }
+    if ($env:MASON_UPDATE_POLICY_REVISION -and (-not $env:MASON_EXPECTED_SHA256 -or $actual -cne $env:MASON_EXPECTED_SHA256)) {
+        throw 'Mason signed release checksum mismatch; installation unchanged.'
+    }
     Write-MasonStep 'Extracting installation files'
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($archive)

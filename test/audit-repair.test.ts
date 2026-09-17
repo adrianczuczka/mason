@@ -17,7 +17,7 @@ async function write(file: string, content: string) {
 async function seed() {
   await write("src/old.ts", "export const old = true;");
   await write("src/kept.ts", "export const kept = true;");
-  await write("CLAUDE.md", "Source: `src/old.ts`. The src directory.\n");
+  await write("CLAUDE.md", "Source: `src/old.ts`. The src directory. Dependencies are configured in the package manifest.\n");
   await write("package.json", '{"scripts":{"test":"vitest"}}');
   await commitAll(root, "initial");
   await fs.rm(path.join(root, "src/old.ts"));

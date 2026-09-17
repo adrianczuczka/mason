@@ -1,8 +1,10 @@
 import { isDeepStrictEqual } from "node:util";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { parse, stringify } from "smol-toml";
 import fg from "fast-glob";
 import { z } from "zod";
-import { hash, workspace } from "../automation/evidence.js";
+import { git, hash, workspace } from "../automation/evidence.js";
 import { withLock, type Host } from "../automation/store.js";
 import { AUTOMATION_PATH, automationConfigSchema, configPath, recordSchema } from "../automation/install.js";
 import { hookConfig, knownManagedHookCommands } from "../automation/adapters.js";
@@ -11,7 +13,7 @@ import { CLAUDE_MD_SECTION } from "../mcp/init.js";
 import { applyEdit, managedBlock, readText, type FileEdit, type RemovalEdit } from "./files.js";
 import { mcpPath } from "./config.js";
 import { hookCommand, mcpCommand } from "./launcher.js";
-import { loadSetupReceipt, SETUP_PATH, setupSchema } from "./model.js";
+import { loadSetupReceipt, SETUP_PATH, setupSchema, INACTIVE_HOSTS_PATH, inactiveHostsSchema } from "./model.js";
 import { BLOCKS, blockSpan, OWNERSHIP_PATH, ownershipSchema, type Ownership } from "./ownership.js";
 
 type Edit = FileEdit | RemovalEdit;
@@ -35,6 +37,11 @@ async function planTeardown(root: string, selected: readonly Host[]) {
   const ownership: Ownership = ownershipBefore === null ? { version: 1, files: {} } : ownershipSchema.parse(JSON.parse(ownershipBefore));
   const setupBefore = await read(SETUP_PATH);
   const setup = setupBefore === null ? null : setupSchema.parse(JSON.parse(setupBefore));
+  const linked = (await workspace(root)).gitDir !== await fs.realpath(
+    path.resolve(root, (await git(root, "rev-parse", "--git-common-dir")).trim()));
+  const inactiveBefore = linked && !setup ? await read(INACTIVE_HOSTS_PATH) : null;
+  const inactive = inactiveBefore === null ? { version: 1 as const, hosts: [] as Host[] }
+    : inactiveHostsSchema.parse(JSON.parse(inactiveBefore));
   const automationBefore = await read(AUTOMATION_PATH);
   const automation = automationBefore === null ? null : recordSchema.parse(JSON.parse(automationBefore));
   const commands = (host: Host) => new Set([
@@ -179,7 +186,10 @@ async function planTeardown(root: string, selected: readonly Host[]) {
         delete ownership.files[configPath(host)];
       }
       if (!remainingHost) for (const file of DOC_CANDIDATES) delete ownership.files[file];
-      if (setupBefore !== null) cleanup.push({ path: SETUP_PATH, before: setupBefore, after: Object.keys(setup!.hosts).length ? json(setup) : null });
+      if (setupBefore !== null) cleanup.push({ path: SETUP_PATH, before: setupBefore,
+        after: linked || Object.keys(setup!.hosts).length ? json(setup) : null });
+      else if (linked) cleanup.push({ path: INACTIVE_HOSTS_PATH, before: inactiveBefore,
+        after: json({ version: 1, hosts: [...new Set([...inactive.hosts, ...selected])].sort() }) });
       if (automationBefore !== null) cleanup.push({ path: AUTOMATION_PATH, before: automationBefore, after: Object.keys(automation!.hosts).length ? json(automation) : null });
       if (ownershipBefore !== null) cleanup.push({ path: OWNERSHIP_PATH, before: ownershipBefore, after: Object.keys(ownership.files).length ? json(ownership) : null });
       edits.push(...cleanup);

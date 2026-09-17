@@ -108,7 +108,7 @@ async function collectInputs(root: string): Promise<Inputs> {
     git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".", ":(exclude).mason/reports"),
     git(root, "ls-files", "--stage", "-z", "--", ".", ":(exclude).mason/reports"),
   ]) : ["", ""];
-  const common = [5, engineVersion, head, shallow, replacements, docContents];
+  const common = [6, engineVersion, head, shallow, replacements, docContents];
   const keys: Record<CheckName, string> = {
     "deleted-reference": hash([common, claims, docStatus]),
     "new-module": hash([common, modules]),

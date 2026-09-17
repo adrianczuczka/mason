@@ -102,7 +102,7 @@ describe("scoped initial audits", () => {
   it("does not assume a nested count or dependency change describes the root or sibling", async () => {
     await write("package.json", JSON.stringify({ workspaces: ["packages/*"] }));
     await write("packages/client/package.json", pkg({ build: "tsc" }));
-    await write("packages/client/README.md", "2 packages cooperate in this integration.\n");
+    await write("packages/client/README.md", "2 packages cooperate in this integration. Dependencies are managed locally.\n");
     await write("packages/other/package.json", pkg({}));
     await commitAll(root, "docs");
     await write("packages/other/package.json", pkg({ test: "vitest" })); await commitAll(root, "sibling change");
@@ -163,7 +163,7 @@ describe("scoped initial audits", () => {
   });
 
   it("rechecks a speculative missing path without approving historical advisories", async () => {
-    await write("README.md", "[generated](generated/api.md)\n"); await write("package.json", pkg({})); await commitAll(root, "docs");
+    await write("README.md", "[generated](generated/api.md)\nDependencies are managed in the package manifest.\n"); await write("package.json", pkg({})); await commitAll(root, "docs");
     await write("package.json", pkg({ test: "test" })); await commitAll(root, "change manifest");
     const prepared = await prepareRepair(root, ["deleted-reference", "deps-changed"]);
     expect(prepared.report.advisories.find(f => f.type === "deleted-reference")?.resolution).toBe("recheck");
