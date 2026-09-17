@@ -578,8 +578,9 @@ export function createMcpServer(): McpServer {
   return server;
 }
 
-export async function startMcpServer(): Promise<void> {
+export async function startMcpServer(onClose?: () => void): Promise<void> {
   const server = createMcpServer();
+  if (onClose) server.server.onclose = onClose;
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

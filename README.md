@@ -34,6 +34,8 @@ irm https://github.com/adrianczuczka/mason/releases/latest/download/install.ps1 
 
 No Node or npm required. Git is required. The installer configures PATH for Bash, Zsh, and Windows. [Platform details](docs/distribution.md) · [npm installation](docs/setup.md#unified-project-setup)
 
+New standard standalone installs update automatically in the background. Updates activate on a future MCP launch after existing Mason MCP servers exit. Run `mason updates` to inspect or change this preference. Existing installations require one manual upgrade and `mason updates enable`. [Update controls](docs/distribution.md#automatic-updates)
+
 Run this in your Git repository (open a new terminal if the installer asks):
 
 ```bash

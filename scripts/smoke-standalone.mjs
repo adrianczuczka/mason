@@ -7,7 +7,7 @@ import http from 'node:http';
 import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { parse } from 'smol-toml';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -87,9 +87,11 @@ async function context(host, directory = repo) {
   let stderr = '';
   transport.stderr?.on('data', bytes => { stderr += bytes; });
   const client = new Client({ name: 'standalone-smoke', version: '1' });
-  try { await client.connect(transport); const result = await client.callTool({ name: 'get_context', arguments: { dir: directory, task: 'Rename the entry module', files: ['src/old.ts'] } }); assert(!result.isError); }
+  let version;
+  try { await client.connect(transport); version = client.getServerVersion().version; const result = await client.callTool({ name: 'get_context', arguments: { dir: directory, task: 'Rename the entry module', files: ['src/old.ts'] } }); assert(!result.isError); }
   finally { await client.close(); }
   assert(!stderr.includes('Checking project configuration') && !stderr.includes('\x1b'), 'MCP must not emit human progress.');
+  return version;
 }
 async function hook(host, event, directory = repo) {
   const config = JSON.parse(await fs.readFile(path.join(directory, host === 'codex' ? '.codex/hooks.json' : '.claude/settings.json'), 'utf8'));
@@ -193,7 +195,7 @@ try {
 
   // A local next-release fixture exercises the real upgrade installer and global project upgrades.
   const next = original.version.split('-')[0].split('.').map(Number); next[2]++;
-  const nextVersion = next.join('.') + '-smoke';
+  const nextVersion = next.join('.'); // Private stable-version fixture; never published.
   const nextOut = path.join(temp, 'next'); await fs.mkdir(nextOut);
   const nextBundle = path.join(nextOut, `mason-${target}`);
   await fs.cp(bundle, nextBundle, { recursive: true });
@@ -208,6 +210,15 @@ try {
   const nextArchive = path.join(nextOut, archiveName);
   execFileSync('tar', windows ? ['-a', '-cf', nextArchive, '-C', nextOut, `mason-${target}`] : ['-czf', nextArchive, '-C', nextOut, `mason-${target}`]);
   releases.set(nextVersion, nextArchive);
+  // The production downloader must reject a mismatch against signed metadata,
+  // even when the untrusted adjacent SHA256SUMS agrees with the archive.
+  await assert.rejects(run(windows ? 'powershell.exe' : 'sh', windows
+    ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'install.ps1')]
+    : [path.join(root, 'install.sh')], {
+    env: { ...env, MASON_VERSION: nextVersion, MASON_UPDATE_POLICY_REVISION: 'smoke', MASON_EXPECTED_SHA256: '0'.repeat(64) },
+  }), /signed release checksum mismatch/);
+  assert.equal((await mason('--version')).stdout.trim(), original.version);
+
   const upgrade = await mason('upgrade', nextVersion);
   assert(upgrade.stderr.includes('Checking current installation'));
   assert(upgrade.stderr.includes('Downloading Mason'));
@@ -253,6 +264,67 @@ try {
   assert(upgraded.changedFiles.every(file => file.startsWith('.mason/local/')));
   for (const [name, bytes] of Object.entries(baselines)) assert.equal((await baselineBytes())[name], bytes);
   console.log('Global upgrade reached both project hosts with fresh activation evidence; clone setup was clean and idempotent.');
+
+  await mason('rollback');
+  // Exercise staged activation through real packaged MCP launches. No test
+  // endpoint or unsigned fallback is added to the production auto-updater.
+  const receiptFile = path.join(home, 'install.json');
+  const updateRecord = JSON.parse(await fs.readFile(receiptFile, 'utf8'));
+  updateRecord.updates = { enabled: true, revision: 'smoke-auto-policy' };
+  await fs.writeFile(receiptFile, JSON.stringify(updateRecord));
+  const savedUpdateEnv = { CI: env.CI, MASON_VERSION: env.MASON_VERSION, MASON_RELEASE_BASE: env.MASON_RELEASE_BASE, MASON_NO_AUTO_UPDATE: env.MASON_NO_AUTO_UPDATE };
+  for (const key of Object.keys(savedUpdateEnv)) delete env[key];
+  // Prove the real detached worker executes on every native platform, including
+  // Windows. The preload forbids network; failure must be recorded quietly.
+  const networkLog = path.join(temp, 'update-network.log');
+  env.NODE_OPTIONS = '--import=' + pathToFileURL(path.join(root, 'test/support/deny-network.mjs')).href;
+  env.MASON_TEST_NETWORK_LOG = networkLog;
+  try {
+    await mason('updates', 'enable');
+    const deadline = Date.now() + 15000;
+    let attempt;
+    do {
+      attempt = await fs.readFile(path.join(home, 'update-status.json'), 'utf8').then(JSON.parse, () => null);
+      if (attempt?.error) break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } while (Date.now() < deadline);
+    assert(attempt?.error?.includes('Network forbidden'), 'The detached updater must execute and record offline failure.');
+    assert.equal(await fs.readFile(networkLog, 'utf8'), 'fetch\n');
+    await mason('updates', 'enable');
+    assert.equal(await fs.readFile(networkLog, 'utf8'), 'fetch\n', 'A failed check must be throttled.');
+  } finally { delete env.NODE_OPTIONS; delete env.MASON_TEST_NETWORK_LOG; }
+  updateRecord.updates = JSON.parse(await fs.readFile(receiptFile, 'utf8')).updates;
+  const liveConfig = parse(await fs.readFile(path.join(repo, '.codex/config.toml'), 'utf8')).mcp_servers.mason;
+  const liveTransport = new StdioClientTransport({ ...liveConfig, env, cwd: repo, stderr: 'pipe' });
+  const liveClient = new Client({ name: 'update-session-smoke', version: '1' });
+  let liveStderr = ''; liveTransport.stderr?.on('data', bytes => { liveStderr += bytes; });
+  try {
+    await liveClient.connect(liveTransport);
+    assert.equal(liveClient.getServerVersion().version, original.version);
+    const runtimeLeases = await Promise.all((await fs.readdir(path.join(home, 'runtimes'))).map(async name => JSON.parse(await fs.readFile(path.join(home, 'runtimes', name), 'utf8'))));
+    assert(runtimeLeases.some(lease => lease.bundle === updateRecord.current), 'A live standalone server must protect its runtime from cleanup.');
+    const staged = await run(path.join(nextBundle, windows ? 'node.exe' : 'node'), [path.join(nextBundle, 'app/dist/mason.js'), 'internal-install'], {
+      env: { ...env, MASON_VERSION: nextVersion, MASON_EXPECTED_SHA256: digest(await fs.readFile(nextArchive)), MASON_UPDATE_POLICY_REVISION: updateRecord.updates.revision },
+    });
+    assert(staged.stdout.includes('Staged Mason'));
+    assert.equal((await mason('--version')).stdout.trim(), original.version);
+    assert.equal(await context('codex'), original.version, 'New servers must keep the active version while another server is running.');
+    assert.equal(JSON.parse((await mason('updates', '--json')).stdout).pendingVersion, nextVersion);
+    await hook('codex', 'Stop');
+    await assert.rejects(mason('rollback'), /Close running|No previous/);
+  } finally { await liveClient.close(); }
+  assert.equal(liveStderr, '', 'MCP update bookkeeping must not emit diagnostics to protocol streams.');
+  assert.equal(await context('codex'), nextVersion, 'The first new MCP launch after existing servers exit must activate the staged version.');
+  assert.equal((await mason('--version')).stdout.trim(), nextVersion);
+  await mason('rollback');
+  assert.equal((await mason('--version')).stdout.trim(), original.version);
+  assert.equal(JSON.parse((await mason('updates', '--json')).stdout).pinnedVersion, original.version);
+  await mason('updates', 'disable');
+  assert.equal(JSON.parse((await mason('updates', '--json')).stdout).enabled, false);
+  for (const [key, value] of Object.entries(savedUpdateEnv)) { if (value === undefined) delete env[key]; else env[key] = value; }
+  console.log('Signed checksum rejection, staged MCP activation, session consistency, rollback and update controls passed.');
+
+  await mason('upgrade', nextVersion);
 
   const retainedInstructions = await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8');
   const preview = JSON.parse((await mason('teardown', '--dir', repo, '--host', 'codex', '--dry-run', '--json')).stdout);

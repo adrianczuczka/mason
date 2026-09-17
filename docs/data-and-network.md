@@ -22,7 +22,7 @@ Mason separately reads files and Git history needed by the requested checks or t
 | `.mason/local/` | Setup and ownership records, ignored by generated setup rules. |
 | `.mason/reports/` | Original evidence, findings, caches, execution/activation receipts; ignored by generated setup rules. Receipts can contain root paths, branch, hostname, PID, timing, event names, hashed session identifiers, and tool call identifiers. Baselines persist; execution history is bounded. |
 | `~/.mason/config.json` | Optional Confluence credentials and LLM configuration. User-level JSON; credentials are not encrypted by Mason. |
-| Standalone installation directory | Executable, bundled Node, dependencies, receipts, and previous versions. Defaults to `~/.local/share/mason` or `%LOCALAPPDATA%\Mason`. |
+| Standalone installation directory | Executable, bundled Node, dependencies, receipts, update policy and last-attempt diagnostics, staged/previous versions, command and MCP process leases, and cached Sigstore trust metadata. Defaults to `~/.local/share/mason` or `%LOCALAPPDATA%\Mason`. |
 
 Teardown disconnects integrations but retains knowledge and evidence. Uninstall removes the standalone installation but keeps project data and optional user configuration. Review ignore rules before committing; they are not an access-control boundary. Mason runs with the invoking process's filesystem permissions.
 
@@ -31,7 +31,8 @@ Teardown disconnects integrations but retains knowledge and evidence. Uninstall 
 | Operation | Destination and data |
 |---|---|
 | Core audit, review, drift, decision/context/impact tools, and automation hooks | No direct remote API or telemetry calls. Local file and Git operations; results return to the caller. |
-| Standalone installation or explicit `mason upgrade` | GitHub releases and their download redirects, or a configured mirror. Downloads installers, archives, and checksums without uploading the checkout. Unpinned public installation resolves the latest release. No background updater. |
+| Standalone installation or explicit `mason upgrade` | GitHub releases and their download redirects, or a configured mirror. Downloads installers, archives, and checksums without uploading the checkout. Unpinned public installation resolves the latest release. |
+| Enabled standalone background updates | MCP startup, long-running MCP servers, successful setup, or enabling/unpinning updates can start a worker. At most one attempt per day lists releases at `api.github.com`, requests signed metadata and archives from GitHub releases and download redirects, and refreshes public trust metadata from `tuf-repo-cdn.sigstore.dev`. No checkout contents, hook payloads, or credentials are uploaded. Standard new installations enable this; existing, pinned, mirror, npm and CI installations do not automatically opt in. See [controls and activation](distribution.md#automatic-updates). |
 | npm installation or an `npx` MCP entry | The npm client's configured registry and download destinations. Resolution/cache behavior belongs to npm; `npx` is not a no-network guarantee. |
 | Optional Confluence tools | The configured Confluence base URL. Configuration can query spaces/pages; export sends generated wiki content. Requires invocation and configuration; outside the hook path. |
 | Optional product-language rewrite during Confluence export | Feature/flow descriptions and paths go to the configured LLM. API defaults are Anthropic (`api.anthropic.com`), OpenAI (`api.openai.com`), or Gemini (`generativelanguage.googleapis.com`); Ollama defaults to `http://localhost:11434`. CLI providers and environment overrides use their configured endpoints and policies. |
@@ -42,7 +43,7 @@ There is no global Mason switch enforcing network denial for every feature. Limi
 
 A `.mcp.json` entry with `command` launches a local program; it does not install it. A `url` entry connects to an already-running MCP service. Mason uses local stdio to inspect the checkout and uncommitted changes. A remote URL would require a different deployment and repository-access arrangement. Lifecycle hooks also need a local executable.
 
-Review a pinned version and distribute it through your approved artifact or npm mirror. Public source supports inspection. Checksums supplied beside an archive detect changes but are not an independent signature; standalone archives are not currently signed or notarized.
+Review a pinned version and distribute it through your approved artifact or npm mirror. Public source supports inspection. Initial/manual installer checksums do not independently authenticate a release; public automatic updates additionally verify Sigstore-signed metadata. Native executables are not platform-code-signed or notarized.
 
 For an internal standalone mirror, copy the reviewed installer, platform archives, and `SHA256SUMS` to the approved service. Preserve the `v<VERSION>/<asset>` layout beneath the release base. After obtaining the installer internally:
 
@@ -52,9 +53,9 @@ MASON_RELEASE_BASE=https://artifacts.example.internal/mason \
 sh ./install.sh
 ```
 
-The hostname is a placeholder. Both installers require `MASON_VERSION` when `MASON_RELEASE_BASE` is supplied, avoiding a public latest-version lookup. Set the mirror again for upgrades and specify the approved version: `MASON_RELEASE_BASE=… mason upgrade 0.16.2`. Mirror selection is not persisted. npm users should use their organization's registry configuration.
+The hostname is a placeholder. Both installers require `MASON_VERSION` when `MASON_RELEASE_BASE` is supplied, avoiding a public latest-version lookup. The mirror and version pin are persisted, and public automatic updates remain disabled for mirror installations. Specify the approved version for upgrades: `mason upgrade 0.16.2`. npm users should use their organization's registry configuration. `MASON_NO_AUTO_UPDATE=1` suppresses background update checks and activation without preventing explicit manual upgrades.
 
-Each developer runs `mason setup --host claude` or `--host codex` in each checkout and reviews native host trust. Generated hooks stay quiet when the command is absent or that checkout lacks local host setup. `mason status` explains inactive setup. Corrupt setup and failures in active checks remain visible. MCP requires installation and host trust; in a fresh clone it can serve context and explain the missing local setup while automatic hooks remain inactive. Connecting never creates local setup or grants hook trust.
+Each developer runs `mason setup --host claude` or `--host codex` in each primary checkout or fresh clone and reviews native host trust. Linked Git worktrees may inherit host activation from the primary checkout; local setup records take precedence. Audit evidence and activation observations stay in the active worktree. Generated hooks stay quiet when the command is absent or neither local nor inherited host setup exists. `mason status` explains inactive setup. Corrupt setup and failures in active checks remain visible. MCP requires installation and host trust; in a fresh clone it can serve context and explain the missing local setup while automatic hooks remain inactive. Connecting never creates local setup or grants hook trust.
 
 Setup owns the inline guards; no project wrapper scripts are required. Commands are platform-specific, as is Windows MCP configuration. Rerun setup when changing operating systems. Custom manual commands remain the caller's responsibility. Refresh existing guards by rerunning setup after upgrading, then review and commit the configuration.
 

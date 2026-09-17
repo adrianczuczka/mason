@@ -2,20 +2,23 @@
   "version": 2,
   "id": "separate-historical-reviews-from-recheckable-audit",
   "title": "Separate historical reviews from recheckable audit candidates",
-  "body": "Expanding documentation discovery and demoting speculative path/module findings exposed a repair lifecycle trap: treating every candidate like a historical advisory left ordinary completed renames permanently incomplete. Missing-path, missing-script, and unmentioned-directory candidates can carry resolution: recheck; the original evidence is retained, and rerunning the same check can establish that its condition is no longer detected. That is not semantic approval. Dependency-history and decision advisories require a separate assessment even after documentation changes or commits. Keep unavailable inputs and deleted/empty original documents unverified. The audit-scope and automation regressions cover candidate resolution through the final commit while historical advisories remain review-required. This is an implementation lesson, not an independently accepted policy.",
+  "body": "Treating every audit candidate like a historical advisory left ordinary repaired renames permanently incomplete. Missing-path, missing-script and unmentioned-directory candidates can carry resolution: recheck; a rerun can establish the condition is gone while preserving original evidence, without semantic approval. Dependency-history and decision advisories still require separate assessment after documentation edits or commits. Maintainer feedback on 2026-09-17 exposed misleading present-tense repetition of old dependency counts: summaries must use current findings or explicitly label a retained historical condition no longer reported; review-only completion should say awaiting review. A doc commit is not approval. Filter new dependency advisories for recognizable dependency content, including versionless library lists; absence of a version alone does not make a document immune to dependency drift. Local deletion of a dependency section must not hide committed evidence. Keep missing history, skipped inputs and deleted/empty original documents unverified. Unrelated findings need a scope reason and suggested follow-up, not automatic repairs, tickets or approval.",
   "category": "gotcha",
   "files": [
     "src/audit/repair.ts",
     "src/audit/types.ts",
     "test/audit-scope.test.ts",
-    "test/automation.test.ts"
+    "test/automation.test.ts",
+    "src/audit/checks/deps-changed.ts",
+    "src/automation/runtime.ts",
+    "test/dependency-feedback.test.ts"
   ],
   "createdAt": "2026-09-10T21:14:32.219Z",
-  "updatedAt": "2026-09-10T21:14:32.219Z",
+  "updatedAt": "2026-09-17T08:50:10.343Z",
   "refreshedHash": "77dd733d899866b30e3902e524715b93d75cb905",
   "status": "active",
   "approval": "proposed",
-  "revision": 1,
+  "revision": 2,
   "sources": [
     {
       "kind": "document",
@@ -26,6 +29,11 @@
       "kind": "document",
       "reference": "test/automation.test.ts",
       "note": "Rename verification across both host lifecycles and the final documentation commit."
+    },
+    {
+      "kind": "discussion",
+      "reference": "Maintainer-provided workflow feedback, 2026-09-17",
+      "note": "Linked worktree activation gap, historical dependency wording, dependency relevance, and scope-aware follow-up."
     }
   ],
   "history": [
@@ -54,6 +62,46 @@
             "kind": "document",
             "reference": "test/automation.test.ts",
             "note": "Rename verification across both host lifecycles and the final documentation commit."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "77dd733d899866b30e3902e524715b93d75cb905"
+    },
+    {
+      "kind": "revised",
+      "at": "2026-09-17T08:50:10.343Z",
+      "actor": "Codex",
+      "revision": 2,
+      "content": {
+        "title": "Separate historical reviews from recheckable audit candidates",
+        "body": "Treating every audit candidate like a historical advisory left ordinary repaired renames permanently incomplete. Missing-path, missing-script and unmentioned-directory candidates can carry resolution: recheck; a rerun can establish the condition is gone while preserving original evidence, without semantic approval. Dependency-history and decision advisories still require separate assessment after documentation edits or commits. Maintainer feedback on 2026-09-17 exposed misleading present-tense repetition of old dependency counts: summaries must use current findings or explicitly label a retained historical condition no longer reported; review-only completion should say awaiting review. A doc commit is not approval. Filter new dependency advisories for recognizable dependency content, including versionless library lists; absence of a version alone does not make a document immune to dependency drift. Local deletion of a dependency section must not hide committed evidence. Keep missing history, skipped inputs and deleted/empty original documents unverified. Unrelated findings need a scope reason and suggested follow-up, not automatic repairs, tickets or approval.",
+        "category": "gotcha",
+        "files": [
+          "src/audit/repair.ts",
+          "src/audit/types.ts",
+          "test/audit-scope.test.ts",
+          "test/automation.test.ts",
+          "src/audit/checks/deps-changed.ts",
+          "src/automation/runtime.ts",
+          "test/dependency-feedback.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": "test/audit-scope.test.ts",
+            "note": "Recheckable missing-path candidate resolves while a historical dependency advisory stays open."
+          },
+          {
+            "kind": "document",
+            "reference": "test/automation.test.ts",
+            "note": "Rename verification across both host lifecycles and the final documentation commit."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer-provided workflow feedback, 2026-09-17",
+            "note": "Linked worktree activation gap, historical dependency wording, dependency relevance, and scope-aware follow-up."
           }
         ]
       },

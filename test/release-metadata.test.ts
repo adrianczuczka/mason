@@ -30,7 +30,7 @@ async function write(file: string, value: string) {
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), "mason-release-metadata-"));
   await initGitRepo(root);
-  await write("CLAUDE.md", "The app directory contains the Android application.\n");
+  await write("CLAUDE.md", "The app directory contains the Android application and its dependencies.\n");
   await write("app/build.gradle.kts", gradle());
   await write(".gitignore", ".mason/reports/\n");
   await commitAll(root, "initial");
@@ -67,7 +67,7 @@ describe("release metadata advisories", () => {
     const withReference = (version: string) => gradle(version) + 'dependencies { implementation("example:library:${android.defaultConfig.versionName}") }\n';
     await write("app/build.gradle.kts", withReference("1.0.0"));
     await commitAll(root, "version drives dependency");
-    await write("CLAUDE.md", "The app directory contains the Android application and its dependencies.\n");
+    await write("CLAUDE.md", "The app directory contains the Android application and its current dependencies.\n");
     await commitAll(root, "document current configuration");
     await write("app/build.gradle.kts", withReference("1.0.1"));
     await commitAll(root, "version affecting dependencies");
@@ -79,13 +79,13 @@ describe("release metadata advisories", () => {
     await write("other/build.gradle.kts", gradle("1.0.1"));
     await commitAll(root, "add module during release");
     expect((await audit())!.advisories).toHaveLength(1);
-    await write("CLAUDE.md", "The app and other directories contain Android applications.\n");
+    await write("CLAUDE.md", "The app and other directories contain Android applications and their dependencies.\n");
     await commitAll(root, "instructions");
     await fs.rm(path.join(root, "other/build.gradle.kts"));
     await write("app/build.gradle.kts", gradle("1.0.2"));
     await commitAll(root, "remove module during release");
     expect((await audit())!.advisories).toHaveLength(1);
-    await write("CLAUDE.md", "The app directory contains the Android application.\n");
+    await write("CLAUDE.md", "The app directory contains the Android application and its dependencies.\n");
     await commitAll(root, "instructions again");
     await write("package.json", '{"version":"2.0.0"}');
     await write("app/build.gradle.kts", gradle("1.0.3"));

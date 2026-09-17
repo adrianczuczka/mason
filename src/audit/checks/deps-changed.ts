@@ -1,10 +1,21 @@
 import { documentScope } from "../docs.js";
 import { releaseMetadataOnly } from "../release-metadata.js";
 import { commitsTouchingSince } from "../git.js";
+import { inspectionGit } from "../inspection.js";
 import type { CheckContext, CheckResult } from "./index.js";
 import { emptyResult } from "./index.js";
 
 const MANIFEST_COMMITS_CAP = 10;
+
+/** A relevance filter, not semantic validation of a dependency or its version. */
+export function hasDependencyContent(content: string): boolean {
+  const text = content.replace(/<!-- mason:start -->[\s\S]*?<!-- mason:end -->/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+  return /\b(?:dependenc(?:y|ies)|librar(?:y|ies)|frameworks?|tech(?:nology)? stack|prerequisites|requirements)\b/i.test(text)
+    || /\b(?:package\.json|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|libs\.versions\.toml|Cargo\.toml|go\.mod|pyproject\.toml|requirements\.txt|Gemfile|composer\.json)\b/i.test(text)
+    || /\b(?:node(?:\.js)?|npm|pnpm|yarn|bun|deno|python|ruby|rust|go|java|jdk|kotlin|gradle|swift|php|react|vue|angular|compose|ktor|room)\s*(?:version\s*)?[`*:=>~^v\s-]*\d+(?:\.\d+)*\b/i.test(text)
+    || /\b(?:npm|pnpm|yarn|pip3?|cargo|gem|composer)\s+(?:install|add|require)\b/i.test(text);
+}
 
 /**
  * Tracked manifest files at any depth. Lockfiles are pure churn and are
@@ -62,6 +73,20 @@ export async function checkDepsChanged(
         reason: `${doc.path} has uncommitted edits – suppressed while in flight`,
       });
     }
+
+    // Local edits must not erase the dependency evidence we are preparing to
+    // retain. Inspect the committed document for dirty inputs, including setup.
+    let content = doc.content;
+    if (doc.dirty) {
+      try {
+        content = (await inspectionGit(["show", `${doc.lastCommit.hash}:${doc.path}`],
+          { cwd: ctx.root, maxBuffer: 10 * 1024 * 1024, timeout: 10000 })).stdout;
+      } catch {
+        result.skipped.push({ check: "deps-changed", doc: doc.path, reason: `${doc.path}: committed dependency content is unavailable` });
+        continue;
+      }
+    }
+    if (!hasDependencyContent(content)) continue;
 
     const range = await commitsTouchingSince(
       ctx.root,

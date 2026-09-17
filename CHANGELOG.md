@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.0 — 2026-09-17
+
+- Add automatic updates for new public standalone installations, with existing installations opting in through `mason updates enable`. Check at most daily for stable releases at least 24 hours old; leave npm, pinned versions, company mirrors, and CI under explicit control.
+- Verify automatic downloads against Sigstore-signed release metadata from the exact tagged publishing workflow, stage and health-check each bundle, and activate at a future MCP launch only after other Mason MCP servers exit. Keep update work and diagnostics out of hook and MCP protocol streams.
+- Add `mason updates` status, enable/disable and pin/unpin controls, `MASON_NO_AUTO_UPDATE=1`, persisted company mirror selection, and an offline `mason rollback` that restores and pins the previous installation. Retain `mason upgrade` for explicit immediate updates.
+- Track standalone processes before startup and reclaim unused update bundles while preserving current, rollback, staged, and running versions. Retain legacy or uncertain bundles conservatively.
+- Let linked Git worktrees inherit host activation from the primary checkout, with local setup and teardown taking precedence; keep audit evidence and observations local to each worktree.
+- Limit dependency-change advisories to documents containing dependency guidance, preserve committed evidence through local edits, and distinguish current findings from historical advisories awaiting review.
+
 ## 0.18.0 — 2026-09-16
 
 - Fix overlapping snapshot writes restoring old descriptions and deleted flows. Snapshot saves, verdicts, and partial writes share a per-checkout cross-process lock; reads, replacement, and consolidation cleanup stay within the protected operation.

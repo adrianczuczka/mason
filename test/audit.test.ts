@@ -346,7 +346,7 @@ describe("computeAudit: deps-changed (advisory)", () => {
 
   it("emits an advisory when manifests changed after the doc, and stays clean", async () => {
     await write("package.json", '{"name":"x","dependencies":{}}');
-    await write("CLAUDE.md", "# Doc\n");
+    await write("CLAUDE.md", "# Dependencies\n");
     await commitAll(tmpDir, "init");
     await write("package.json", '{"name":"x","dependencies":{"zod":"^3"}}');
     await commitAll(tmpDir, "feat: add zod");
@@ -367,7 +367,7 @@ describe("computeAudit: deps-changed (advisory)", () => {
 
   it("ignores commits that touch no manifest", async () => {
     await write("package.json", '{"name":"x"}');
-    await write("CLAUDE.md", "# Doc\n");
+    await write("CLAUDE.md", "# Dependencies\n");
     await commitAll(tmpDir, "init");
     await write("src/a.ts", "export const a = 1;\n");
     await commitAll(tmpDir, "feat: code only");
@@ -377,7 +377,7 @@ describe("computeAudit: deps-changed (advisory)", () => {
 
   it("suppresses the check for a dirty doc", async () => {
     await write("package.json", '{"name":"x"}');
-    await write("CLAUDE.md", "# Doc\n");
+    await write("CLAUDE.md", "# Dependencies\n");
     await commitAll(tmpDir, "init");
     await write("package.json", '{"name":"x","dependencies":{"zod":"^3"}}');
     await commitAll(tmpDir, "feat: add zod");

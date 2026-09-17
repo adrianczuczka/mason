@@ -148,11 +148,13 @@ describe("adoption workflows", { timeout: 30000 }, () => {
     await expect(fs.access(path.join(unrelated, ".mason"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("gates setup on the payload worktree and refuses to guess between checkouts outside Git", async () => {
+  it("inherits activation in the payload worktree and refuses to guess between checkouts outside Git", async () => {
     await setupProject(root, { host: "claude" }); await commitAll(root, "configure original");
     const worktree = path.join(temp, "worktree"); await git(["worktree", "add", "-b", "linked", worktree], root);
     expect(await hook(worktree, root)).toBe("");
-    await expect(fs.access(path.join(worktree, ".mason"))).rejects.toMatchObject({ code: "ENOENT" });
+    const inheritedWs = await workspace(worktree), inheritedRevision = (await loadSetup(root))!.hosts.claude!.revision;
+    expect(await readObservation(worktree, inheritedWs.directory, "claude", inheritedRevision, version)).not.toBeNull();
+    expect(await loadSetup(worktree)).toBeNull();
     await setupProject(worktree, { host: "claude" });
     expect(await hook(worktree, root)).toBe("");
     const ws = await workspace(worktree), revision = (await loadSetup(worktree))!.hosts.claude!.revision;

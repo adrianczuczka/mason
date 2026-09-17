@@ -4,6 +4,7 @@ import pkg from "./package.json";
 export default defineConfig({
   entry: [
     "bin/mason.ts",
+    "bin/mason-runtime.ts",
     "bin/mason-mcp.ts",
     "bin/mason-drift.ts",
     "bin/mason-audit.ts",
@@ -17,11 +18,11 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   splitting: false,
-  external: ["@anthropic-ai/sdk", "openai"],
+  external: ["@anthropic-ai/sdk", "openai", "sigstore"],
   define: {
     PKG_VERSION: JSON.stringify(pkg.version),
   },
   banner: {
-    js: "#!/usr/bin/env node",
+    js: '#!/usr/bin/env node\nif (!import.meta.url.endsWith("/mason-runtime.js")) await import("./mason-runtime.js").then(m => m.registerRuntime());',
   },
 });

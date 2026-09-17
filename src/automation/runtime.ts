@@ -61,13 +61,21 @@ export async function observeReadOnlyTool(dir: string, event: AutomationEvent) {
 
 export function summarize(report: AutomationReport): string {
   const open = report.findings.filter(f => f.status !== "resolved");
+  const onlyReview = report.status === "incomplete" && !report.diagnostics.length &&
+    !report.counts.unresolved && !report.counts.unverified && report.counts["review-required"] > 0;
   return [
-    `Mason: ${report.status}; ${report.counts.unresolved} unresolved, ${report.counts["review-required"]} need review, ${report.counts.unverified} unverified.`,
-    ...open.slice(0, 4).map(f => `[${f.status}] ${cleanText(f.original.anchor.doc)}: ${cleanText(f.original.message)}`),
+    onlyReview ? `Mason: ${report.counts["review-required"]} advisor${report.counts["review-required"] === 1 ? "y" : "ies"} awaiting review; no unresolved issues.`
+      : `Mason: ${report.status}; ${report.counts.unresolved} unresolved, ${report.counts["review-required"]} need review, ${report.counts.unverified} unverified.`,
+    ...open.slice(0, 4).map(f => {
+      const detail = f.current ? f.current.message : f.status === "review-required"
+        ? `${f.original.type}: current check no longer reports ${f.original.type === "deps-changed" ? "this condition" : "the original finding"}; historical evidence awaits assessment.`
+        : `Original evidence: ${f.original.message}. ${f.reason}`;
+      return `[${f.status}] ${cleanText(f.original.anchor.doc)}: ${cleanText(detail)}`;
+    }),
     ...(open.length > 4 ? [`${open.length - 4} more findings in the report.`] : []),
     ...report.diagnostics.slice(0, 2).map(cleanText),
     `Evidence: ${report.reportPath}. Resume/check with mason_automation(action: "check") or mason-auto check.`,
-    "Keep original evidence. Address findings relevant to the authorized task; report unrelated findings and unresolved advisories without approving them.",
+    "Keep original evidence. Address findings relevant to the authorized task; report unrelated findings with a brief scope reason and suggested follow-up. Use review_advisory for authorized assessments; otherwise leave advisories open without approving them.",
   ].join("\n");
 }
 
@@ -290,7 +298,7 @@ export async function automate(dir: string, event: AutomationEvent) {
         if (event.event === "after_tool" && event.mutating) {
           session.mutationObserved = true;
           if (!event.toolId || !session.pending[event.toolId]) {
-            const gap = "A tool completed without an observed matching pre-tool capture; pre-edit coverage is unknown.";
+            const gap = "A tool completed without an observed matching pre-tool capture in this checkout; pre-edit coverage is unknown. The tool may have changed checkouts; captures are kept separately for each worktree.";
             if (!session.coverageGaps.includes(gap)) session.coverageGaps.push(gap);
           }
           if (event.toolId) delete session.pending[event.toolId];

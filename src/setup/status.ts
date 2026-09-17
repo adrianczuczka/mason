@@ -4,15 +4,16 @@ import { events, type Host } from "../automation/store.js";
 import { automationStatus } from "../automation/runtime.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
 import { hookConfig } from "../automation/adapters.js";
-import { loadSetup, loadSetupReceipt } from "./model.js";
+import { effectiveSetup, loadSetupReceipt } from "./model.js";
 import { inspectHostConfig, instructionEdits } from "./config.js";
 import { hookCommand, mcpCommand, installedCommand } from "./launcher.js";
 import { readObservation } from "./observations.js";
 
 export async function setupStatus(dir: string) {
   const ws = await workspace(dir);
-  const setup = await loadSetup(ws.root);
-  if (!setup) {
+  const activation = await effectiveSetup(ws.root);
+  const setup = activation.setup;
+  if (!setup || !Object.keys(setup.hosts).length) {
     const partial = await Promise.all((["codex", "claude"] as const).map(async host => ({ host,
       receipt: await loadSetupReceipt(ws.root, ws.directory, host) })));
     const pending = partial.filter(item => item.receipt !== null).map(item => item.host);
@@ -39,7 +40,7 @@ export async function setupStatus(dir: string) {
         command: expectedHooks.SessionStart[0].hooks[0].command })) }))]));
     const hooks = isDeepStrictEqual(compatibleHooks, expectedHooks) && !config.disabled;
     const local = await loadSetupReceipt(ws.root, ws.directory, host);
-    const configured = local?.status === "configured" && local.root === ws.root && local.revision === entry.revision;
+    const configured = activation.root !== ws.root || local?.status === "configured" && local.root === ws.root && local.revision === entry.revision;
     const observation = await readObservation(ws.root, ws.directory, host, entry.revision, installed.version ?? "unavailable");
     // Complete lifecycle evidence must come from one session in this worktree/branch.
     const sessions = Object.values(observation?.sessions ?? {}).sort((a, b) => b.at.localeCompare(a.at));
@@ -62,13 +63,16 @@ export async function setupStatus(dir: string) {
   const statuses = Object.values(hosts).map(host => host.status);
   const decisions = await loadDecisionStore(ws.root);
   return { version: 1, status: statuses.length && statuses.every(status => status === "active") ? "active"
-    : statuses.includes("attention") ? "attention" : "pending", root: ws.root, hosts,
+    : statuses.includes("attention") ? "attention" : "pending", root: ws.root, hosts, activationRoot: activation.root,
     decisionRecords: decisions.records.length, diagnostics: decisions.diagnostics,
     scope: "Activation receipts record observed use after setup, not complete interception, correct repairs, or measured usefulness. Host trust and higher-priority settings may prevent execution. Receipts are local to this worktree and branch." };
 }
 
 export function summarizeActivation(status: Awaited<ReturnType<typeof setupStatus>>): string {
   const lines = ["Mason setup: " + status.status + "."];
+  if (status.activationRoot && status.activationRoot !== status.root) {
+    lines.push("Activation inherited from " + status.activationRoot + "; evidence belongs to this worktree.");
+  }
   for (const [host, state] of Object.entries(status.hosts)) {
     lines.push(`${host}: ${state.status}`, `  Runtime: ${state.runtime}; MCP: ${state.mcp}; instructions: ${state.instructions}.`,
       `  Hooks: ${state.hookConfiguration}; observed: ${state.observedEvents.join(", ") || "none"}.`,

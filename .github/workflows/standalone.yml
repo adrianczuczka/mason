@@ -35,6 +35,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Automatic update policy, integrity and session activation
+        run: npx vitest run test/distribution-updates.test.ts --maxWorkers=2
       - name: Snapshot concurrency and verification regressions
         run: npx vitest run test/snapshot-concurrency.test.ts test/snapshot-mcp.test.ts test/snapshot-trust.test.ts test/verify.test.ts --maxWorkers=2
       - name: Windows batch launcher regression

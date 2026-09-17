@@ -17,7 +17,7 @@ let root: string;
 const write = async (file: string, content: string) => { await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true }); await fs.writeFile(path.join(root, file), content); };
 async function seed(doc = "README.md", manifest = "package.json") {
   await write(".gitignore", ".mason/reports/\nnode_modules/\n");
-  await write(doc, "# Example\nSupported package instructions.\n");
+  await write(doc, "# Example\nSupported dependencies and package instructions.\n");
   await write(manifest, '{"scripts":{"test":"vitest"}}');
   await commitAll(root, "initial");
   await write(manifest, '{"scripts":{"test":"vitest","build":"tsc"}}');
@@ -165,7 +165,7 @@ describe("durable advisory assessments", () => {
   });
 
   it("closes a later finding across both a clean initial baseline and its captured baseline", async () => {
-    await write(".gitignore", ".mason/reports/\n"); await write("README.md", "# Project\n"); await write("package.json", '{}');
+    await write(".gitignore", ".mason/reports/\n"); await write("README.md", "# Project dependencies\n"); await write("package.json", '{}');
     await commitAll(root, "initial");
     const initial = (await automate(root, { event: "task_end" })).report;
     expect(initial.status).toBe("verified");

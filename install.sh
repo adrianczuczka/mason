@@ -11,7 +11,7 @@ if [ -n "${MASON_RELEASE_BASE:-}" ] && [ -z "$version" ]; then
 fi
 if [ -z "$version" ]; then
   step 'Checking the latest release'
-  resolved=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/adrianczuczka/mason/releases/latest)
+  resolved=$(curl --connect-timeout 10 --max-time 30 -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/adrianczuczka/mason/releases/latest)
   version=${resolved##*/}
 fi
 version=${version#v}
@@ -23,18 +23,21 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 step "Downloading Mason $version ($platform-$arch)"
 if [ -t 2 ] && [ "${TERM:-}" != dumb ] && [ -z "${CI:-}" ]; then
-  curl -fL --progress-bar "$base/v$version/$asset" -o "$tmp/bundle.tar.gz"
+  curl --connect-timeout 10 --max-time 300 -fL --progress-bar "$base/v$version/$asset" -o "$tmp/bundle.tar.gz"
 else
-  curl -fsSL "$base/v$version/$asset" -o "$tmp/bundle.tar.gz"
+  curl --connect-timeout 10 --max-time 300 -fsSL "$base/v$version/$asset" -o "$tmp/bundle.tar.gz"
 fi
 step 'Verifying download'
-curl -fsSL "$base/v$version/SHA256SUMS" -o "$tmp/checksums"
+curl --connect-timeout 10 --max-time 30 -fsSL "$base/v$version/SHA256SUMS" -o "$tmp/checksums"
 expected=$(awk -v name="$asset" '$2 == name { print $1; n++ } END { if (n != 1) exit 2 }' "$tmp/checksums")
 case "$expected" in ''|*[!a-f0-9]*) echo 'Invalid release checksum.' >&2; exit 2 ;; esac
 [ "${#expected}" -eq 64 ] || exit 2
 if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$tmp/bundle.tar.gz" | awk '{print $1}')
 else actual=$(shasum -a 256 "$tmp/bundle.tar.gz" | awk '{print $1}'); fi
 [ "$actual" = "$expected" ] || { echo 'Mason archive checksum mismatch; installation unchanged.' >&2; exit 2; }
+if [ -n "${MASON_UPDATE_POLICY_REVISION:-}" ]; then
+  [ -n "${MASON_EXPECTED_SHA256:-}" ] && [ "$actual" = "$MASON_EXPECTED_SHA256" ] || { echo 'Mason signed release checksum mismatch; installation unchanged.' >&2; exit 2; }
+fi
 step 'Extracting installation files'
 tar -tzf "$tmp/bundle.tar.gz" | while IFS= read -r entry; do
   case "$entry" in *../*|*/..|/*|*\\*) echo 'Unsafe archive entry.' >&2; exit 2 ;; esac
