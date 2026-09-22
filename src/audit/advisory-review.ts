@@ -22,9 +22,11 @@ const evidenceSchema = z.object({
   tree: z.string().max(2 * 1024 * 1024), lastScopeCommit: commitSchema,
   paths: z.array(z.object({ path: z.string(), exists: z.boolean() })).max(1000),
 });
+const dismissalReasonSchema = z.enum(["no-dependency-claims", "unrelated-manifest-change"]);
 const eventSchema = z.object({
-  at: z.string().datetime(), reviewer: z.string().trim().min(1).max(200), note: z.string().trim().min(1).max(2500),
-  outcome: z.enum(["addressed", "inapplicable", "deferred"]),
+  at: z.string().datetime(), reviewer: z.string().trim().min(1).max(200).optional(), note: z.string().trim().min(1).max(2500),
+  outcome: z.enum(["addressed", "inapplicable", "deferred", "dismissed"]),
+  reasonCode: dismissalReasonSchema.optional(),
   finding: advisorySchema.refine(finding => finding.evidence.kind !== "decision-anchor", "Decision findings use decision reviews"), evidence: evidenceSchema,
 });
 const recordSchema = z.object({ version: z.literal(1), id: hashSchema, events: z.array(eventSchema).min(1).max(200), digest: hashSchema });
@@ -32,13 +34,14 @@ type ReviewRecord = z.infer<typeof recordSchema>;
 export const reviewSummarySchema = z.object({
   id: hashSchema, status: z.enum(["current", "reopened", "deferred", "unverified"]), reason: z.string(),
   recordPath: z.string().optional(), reviewer: z.string().optional(), note: z.string().optional(),
-  outcome: z.enum(["addressed", "inapplicable", "deferred", "accepted", "reaffirmed", "retired"]).optional(),
+  outcome: z.enum(["addressed", "inapplicable", "deferred", "accepted", "reaffirmed", "retired", "dismissed"]).optional(),
   reviewedHead: z.string().optional(),
 });
 export type AdvisoryReviewSummary = z.infer<typeof reviewSummarySchema>;
 export const advisoryReviewRequest = z.object({
   baselinePath: z.string().min(1), findingId: hashSchema,
-  action: z.enum(["prepare", "addressed", "inapplicable", "deferred"]).default("prepare"),
+  action: z.enum(["prepare", "addressed", "inapplicable", "deferred", "dismiss"]).default("prepare"),
+  reasonCode: dismissalReasonSchema.optional(),
   reviewer: eventSchema.shape.reviewer.optional(), note: eventSchema.shape.note.optional(), reviewToken: hashSchema.optional(),
 });
 export type AdvisoryReviewInput = z.input<typeof advisoryReviewRequest>;
@@ -50,15 +53,21 @@ async function readRecord(root: string, id: string): Promise<ReviewRecord | null
   const record = recordSchema.parse(raw);
   const { digest: stored, ...payload } = record;
   if (record.id !== id || digest(payload) !== stored || record.events.some(event => findingId(event.finding as Finding) !== id
-    || event.evidence.fingerprint !== digest([event.evidence.scope, event.evidence.tree, event.evidence.lastScopeCommit, event.evidence.paths]))) {
+    || (event.outcome === "dismissed" ? !event.reasonCode || event.finding.type !== "deps-changed" : !event.reviewer || !!event.reasonCode)
+    || event.evidence.fingerprint !== evidenceFingerprint(event.evidence, event.reasonCode))) {
     throw new Error("Advisory review record is inconsistent or modified; inspect its history.");
   }
   return record;
 }
 
-function scopes(finding: Finding): string[] {
+function evidenceFingerprint(evidence: z.infer<typeof evidenceSchema>, reason?: z.infer<typeof dismissalReasonSchema>): string {
+  return digest([evidence.scope, evidence.tree, ...(reason === "no-dependency-claims" ? [] : [evidence.lastScopeCommit]), evidence.paths]);
+}
+
+function scopes(finding: Finding, reason?: z.infer<typeof dismissalReasonSchema>): string[] {
   const files = [finding.anchor.doc], e = finding.evidence;
   if (e.kind === "decision-anchor") throw new Error("Use review_decision for decision acceptance, reaffirmation or retirement.");
+  if (reason === "no-dependency-claims" && e.kind === "doc-behind-manifests") return [`:(literal)${finding.anchor.doc}`];
   if (e.kind === "doc-behind-manifests") return [`:(literal)${finding.anchor.doc}`, ...manifestPathspecs(finding.anchor.doc)];
   if (e.kind === "missing-path") files.push(...(e.scope?.candidates ?? [e.resolvedPath ?? e.claimed]));
   else if (e.kind === "missing-script") files.push(...e.manifestsChecked, ...(e.scope?.candidates ?? []));
@@ -71,9 +80,9 @@ function scopes(finding: Finding): string[] {
 }
 
 /** Committed, scoped Git evidence survives unrelated and review-record-only commits. */
-async function reviewEvidence(root: string, finding: Finding) {
+async function reviewEvidence(root: string, finding: Finding, reason?: z.infer<typeof dismissalReasonSchema>) {
   if (normalizeRepoPath(finding.anchor.doc) !== finding.anchor.doc) throw new Error("Invalid advisory document path.");
-  const scope = scopes(finding);
+  const scope = scopes(finding, reason);
   const head = (await git(root, "rev-parse", "HEAD")).trim();
   const tracked = (await git(root, "ls-files", "--cached", "-z", "--", ...scope)).split("\0").filter(Boolean);
   if (tracked.length > 20_000) throw new Error("Advisory scope exceeds 20,000 tracked files.");
@@ -102,7 +111,7 @@ async function reviewEvidence(root: string, finding: Finding) {
       if (!tracked.includes(file) && await pathExists(root, file)) dirty = true;
     }
   }
-  const fingerprint = digest([scope, tree, lastScopeCommit, paths]);
+  const fingerprint = evidenceFingerprint({ head, scope, tree, lastScopeCommit, paths, fingerprint: "" }, reason);
   if ((await git(root, "rev-parse", "HEAD")).trim() !== head) throw new Error("HEAD changed while collecting review evidence.");
   return { ...evidenceSchema.parse({ head, scope, tree, lastScopeCommit, paths, fingerprint }), dirty,
     documentDigest: digest(document) };
@@ -142,11 +151,11 @@ export async function assessAdvisory(root: string, finding: Finding, baselineHea
     if (!record) return null;
     const event = record.events.at(-1)!;
     // Use the reviewed scope, not a newly shortened finding's preview of that scope.
-    const current = await reviewEvidence(root, event.finding as Finding);
+    const current = await reviewEvidence(root, event.finding as Finding, event.reasonCode);
     await git(root, "merge-base", "--is-ancestor", event.evidence.head, current.head);
     const base = { id, recordPath: recordPath(id), reviewer: event.reviewer, note: event.note,
       outcome: event.outcome, reviewedHead: event.evidence.head };
-    if (current.dirty || current.fingerprint !== event.evidence.fingerprint || digest(scopes(finding)) !== digest(event.evidence.scope)) return { ...base, status: "reopened", reason: "Relevant document or repository evidence changed after the assessment; prepare a new review." };
+    if (current.dirty || current.fingerprint !== event.evidence.fingerprint || digest(scopes(finding, event.reasonCode)) !== digest(event.evidence.scope)) return { ...base, status: "reopened", reason: "Relevant document or repository evidence changed after the assessment; prepare a new review." };
     return { ...base, status: event.outcome === "deferred" ? "deferred" : "current", reason: event.outcome === "deferred"
       ? "The review was deferred and remains outstanding." : "An explicit assessment covers the current committed scope. This does not approve an engineering decision or certify correctness." };
   } catch (error) { return { id, status: "unverified", reason: error instanceof Error ? error.message : String(error) }; }
@@ -169,9 +178,13 @@ export async function reviewAdvisory(rootDir: string, input: AdvisoryReviewInput
   if (!finding) throw new Error("No advisory with this findingId in the original baseline. Provable issues must be repaired and rechecked.");
   if (finding.evidence.kind === "decision-anchor") return { status: "decision-review-required", decisionId: finding.evidence.decisionId,
     hint: "Use review_decision to prepare evidence and record authorized acceptance, reaffirmation or retirement, then verify this original repair baseline. An advisory assessment cannot approve a decision." };
+  if (request.action === "dismiss") {
+    if (finding.type !== "deps-changed" || finding.evidence.kind !== "doc-behind-manifests") throw new Error("One-step dismissal is only available for dependency advisories.");
+    if (!request.reasonCode || !request.note) throw new Error("Dismissal requires reasonCode and note; it does not require a reviewer or prepared token.");
+  } else if (request.reasonCode) throw new Error("reasonCode is only used with dismiss.");
   const prepare = async () => {
     const record = await readRecord(root, request.findingId);
-    const evidence = await reviewEvidence(root, finding);
+    const evidence = await reviewEvidence(root, finding, request.reasonCode);
     await git(root, "merge-base", "--is-ancestor", baseline.original.headHash!, evidence.head);
     const token = digest({ baseline: baseline.original, finding, evidence, record });
     return { record, evidence, token };
@@ -189,19 +202,21 @@ export async function reviewAdvisory(rootDir: string, input: AdvisoryReviewInput
       history: state.record?.events ?? [], reviewToken: state.token, diff, diffNote,
       hint: "Inspect the original finding, scoped document and relevant code changes. Record addressed, inapplicable or deferred only when the user or cited project review authorizes that assessment. Supply the actual reviewer, reason in note and reviewToken. Relevant edits must be committed first. Deferral remains outstanding. Review identities are recorded assertions, not authenticated approvals." };
   }
-  if (!request.reviewer || !request.note || !request.reviewToken) throw new Error("Prepare first; recording an assessment requires reviewToken, reviewer and note.");
+  if (request.action !== "dismiss" && (!request.reviewer || !request.note || !request.reviewToken)) throw new Error("Prepare first; recording an assessment requires reviewToken, reviewer and note.");
   return withLock(root, ".mason/reports/advisory-review-locks/" + request.findingId, async () => {
     const state = await prepare();
-    if (state.token !== request.reviewToken) throw new Error("Review conflict: evidence or review history changed since preparation. Prepare and inspect a new review.");
+    if (request.action !== "dismiss" && state.token !== request.reviewToken) throw new Error("Review conflict: evidence or review history changed since preparation. Prepare and inspect a new review.");
     if (state.evidence.dirty) throw new Error("Commit relevant document and repository edits before recording the assessment. Unrelated local work may remain.");
     if ((state.record?.events.length ?? 0) >= 200) throw new Error("Review history limit reached; existing events were retained.");
     const { dirty, documentDigest, ...evidence } = state.evidence;
     const event = eventSchema.parse({ at: new Date().toISOString(), reviewer: request.reviewer, note: request.note,
-      outcome: request.action, finding, evidence });
+      outcome: request.action === "dismiss" ? "dismissed" : request.action, reasonCode: request.reasonCode, finding, evidence });
     const payload = { version: 1 as const, id: request.findingId, events: [...(state.record?.events ?? []), event] };
     if ((await prepare()).token !== state.token) throw new Error("Review conflict: evidence changed while recording the assessment.");
     await writeStoreJson(root, recordPath(request.findingId), { ...payload, digest: digest(payload) });
     return { status: "recorded", recordPath: recordPath(request.findingId), event,
-      hint: "Review and commit this assessment record through the normal project workflow, then verify the original repair baseline. Relevant changes reopen the assessment; deferral remains outstanding." };
+      hint: request.action === "dismiss"
+        ? "Dismissal saved and effective locally. Commit the record to share it. No-dependency-claims dismissals reopen on document content changes; unrelated-manifest-change dismissals reopen on scoped document or manifest changes. This does not approve a decision."
+        : "Review and commit this assessment record through the normal project workflow, then verify the original repair baseline. Relevant changes reopen the assessment; deferral remains outstanding." };
   });
 }

@@ -17,10 +17,10 @@ let root: string;
 const write = async (file: string, content: string) => { await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true }); await fs.writeFile(path.join(root, file), content); };
 async function seed(doc = "README.md", manifest = "package.json") {
   await write(".gitignore", ".mason/reports/\nnode_modules/\n");
-  await write(doc, "# Example\nSupported dependencies and package instructions.\n");
-  await write(manifest, '{"scripts":{"test":"vitest"}}');
+  await write(doc, "# Example\nSupported dependencies include vitest 1.\n");
+  await write(manifest, '{"dependencies":{"vitest":"1"},"scripts":{"test":"vitest"}}');
   await commitAll(root, "initial");
-  await write(manifest, '{"scripts":{"test":"vitest","build":"tsc"}}');
+  await write(manifest, '{"dependencies":{"vitest":"2"},"scripts":{"test":"vitest","build":"tsc"}}');
   await commitAll(root, "new build script");
   const baseline = await prepareRepair(root, ["deps-changed"]);
   return { baselinePath: baseline.baselinePath, findingId: findingId(baseline.report.advisories[0]) };
@@ -169,7 +169,7 @@ describe("durable advisory assessments", () => {
     await commitAll(root, "initial");
     const initial = (await automate(root, { event: "task_end" })).report;
     expect(initial.status).toBe("verified");
-    await write("package.json", '{"scripts":{"test":"vitest"}}'); await commitAll(root, "add test script");
+    await write("package.json", '{"dependencies":{"vitest":"1"},"scripts":{"test":"vitest"}}'); await commitAll(root, "add test script");
     const changed = (await automate(root, { event: "task_end" })).report;
     expect(changed.baselinePaths).toHaveLength(2);
     const finding = changed.findings.find(f => f.original.type === "deps-changed")!;

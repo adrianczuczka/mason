@@ -1,7 +1,8 @@
+import fg from "fast-glob";
 import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import { execGit, type GitReadOptions } from "../utils/git-read.js";
-import { SOURCE_EXTENSIONS } from "../utils/files.js";
+import { loadProjectConfig, SOURCE_EXTENSIONS } from "../utils/files.js";
 
 interface Inspection { root: string; reads: Map<string, Promise<unknown>> }
 const inspections = new AsyncLocalStorage<Inspection>();
@@ -35,13 +36,17 @@ const sourceSuffixes = new Set(SOURCE_EXTENSIONS.map(extension => "." + extensio
 
 /** Git still prunes ignored trees; unrelated generated files are never inventoried. */
 export async function auditGitPaths(root: string, kind: "documents" | "sources"): Promise<string[]> {
-  const shared = inspections.getStore()?.root === path.resolve(root);
-  const specs = shared ? [...docSpecs, ...sourceSpecs] : kind === "documents" ? docSpecs : sourceSpecs;
+  const custom = (await loadProjectConfig(root)).audit?.include ?? [];
+  const shared = inspections.getStore()?.root === path.resolve(root) && !custom.length;
+  const expanded = fg.generateTasks(custom).flatMap(task => task.positive);
+  if (expanded.length > 1000) throw new Error("Audit include patterns expand to more than 1,000 globs");
+  const documentSpecs = [...docSpecs, ...expanded.map(pattern => `:(glob)${pattern}`)];
+  const specs = shared ? [...documentSpecs, ...sourceSpecs] : kind === "documents" ? documentSpecs : sourceSpecs;
   const limit = kind === "documents" ? 16 * 1024 * 1024 : 32 * 1024 * 1024;
   const { stdout } = await inspectionGit(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...specs],
     { cwd: root, maxBuffer: shared ? 48 * 1024 * 1024 : limit, timeout: 10000 });
   const paths = [...new Set(stdout.split("\0").filter(Boolean))].filter(file => kind === "documents"
-    ? /^(readme|agents|claude)\.md$/i.test(path.posix.basename(file))
+    ? custom.length > 0 || /^(readme|agents|claude)\.md$/i.test(path.posix.basename(file))
     // Git's *.ts also matches a file named .ts, unlike path.extname().
     : sourceSuffixes.has(file.slice(file.lastIndexOf("."))));
   if (Buffer.byteLength(paths.join("\0")) > limit) throw new Error("Git " + kind + " inventory exceeds its bounded read limit.");

@@ -19,7 +19,9 @@ const evidenceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("missing-script"), scriptName: z.string(), invocation: z.string(),
     manifestsChecked: z.array(z.string()), availableScripts: z.array(z.string()), scope: scopeSchema.optional() }),
   z.object({ kind: z.literal("doc-behind-manifests"), docLastCommit: commitSchema,
-    manifestCommits: z.array(commitSchema.extend({ files: z.array(z.string()) })), totalCommits: count }),
+    manifestCommits: z.array(commitSchema.extend({ files: z.array(z.string()) })), totalCommits: count,
+    matches: z.array(z.object({ dependency: z.string(), manifest: z.string(), before: z.string().nullable(), after: z.string().nullable(), line: z.number().int().positive(), excerpt: z.string() })).optional(),
+    matchingIncomplete: z.boolean().optional() }),
   z.object({ kind: z.literal("decision-anchor"), decisionId: z.string(), title: z.string(),
     changedFiles: z.array(z.string()), refreshedHash: z.string(),
     provenance: z.object({}).passthrough().optional() }),
@@ -29,7 +31,7 @@ export const issueSchema = findingSchema.extend({
   type: z.enum(["deleted-reference", "new-module", "stale-count", "dead-command"]),
   confidence: z.enum(["certain", "likely"]),
 });
-export const advisorySchema = findingSchema.extend({ type: checkSchema, resolution: z.literal("recheck").optional() });
+export const advisorySchema = findingSchema.extend({ type: checkSchema, resolution: z.enum(["recheck", "informational"]).optional() });
 export const checkResultSchema = z.object({
   issues: z.array(issueSchema), advisories: z.array(advisorySchema),
   suppressedAdvisories: z.array(advisorySchema).optional(),

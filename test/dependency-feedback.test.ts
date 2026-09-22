@@ -66,8 +66,8 @@ it("shows current dependency evidence and labels retained historical evidence af
   await bump(3);
   const current = (await automate(root, { event: "task_end" })).report;
   expect(current.findings[0].original).toEqual(original);
-  expect(summarize(current)).toContain("2 commits");
-  expect(summarize(current)).toContain("dependency update 3");
+  expect(summarize(current)).toContain("zxing changed from 1.0 to 3.0");
+  expect(summarize(current)).toContain("README.md:2: - ZXing");
   expect(summarize(current)).toContain("1 advisory awaiting review");
   await write("README.md", "## Library Dependencies\nZXing is maintained in the manifest.\n");
   await commitAll(root, "revise docs");

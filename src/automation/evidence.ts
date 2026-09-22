@@ -1,3 +1,5 @@
+import { includedCheckPaths } from "../audit/policy.js";
+import { loadProjectConfig } from "../utils/files.js";
 import { execGit } from "../utils/git-read.js";
 import { profilePhase } from "../utils/profile.js";
 import fs from "node:fs/promises";
@@ -50,6 +52,11 @@ export async function readInputs(root: string): Promise<Inputs> {
 
 async function collectInputs(root: string): Promise<Inputs> {
   const docPaths = await discoverDocPaths(root);
+  const auditPolicy = (await loadProjectConfig(root)).audit;
+  const allowed = new Map<CheckName, Set<string>>();
+  for (const name of ["deleted-reference", "new-module", "stale-count", "dead-command"] as const) {
+    allowed.set(name, await includedCheckPaths(root, docPaths, auditPolicy?.exclude?.[name] ?? []));
+  }
   const [headText, docStatus, shallowPath, replacements] = await Promise.all([
     git(root, "rev-parse", "HEAD"),
     docPaths.length ? git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...docPaths.map(p => `:(literal)${p}`)) : "",
@@ -75,7 +82,7 @@ async function collectInputs(root: string): Promise<Inputs> {
     docContents.push([file, text]);
     const parsed = { path: file, content: text ?? "", claims: extractClaims(text ?? "") };
     parsedDocs.push(parsed);
-    for (const claim of parsed.claims.paths) {
+    for (const claim of allowed.get("deleted-reference")!.has(file) ? parsed.claims.paths : []) {
       const scope = pathClaimScope(file, claim);
       if (scope?.candidates.some(gitMetadataPath)) continue;
       for (const candidate of scope?.candidates ?? []) {
@@ -85,8 +92,8 @@ async function collectInputs(root: string): Promise<Inputs> {
       }
     }
   }
-  const combinedDocs = moduleDocumentation(parsedDocs);
-  const countClaims = parsedDocs.flatMap(doc => doc.claims.counts.map(claim => ({ doc: doc.path, claim })));
+  const combinedDocs = moduleDocumentation(parsedDocs.filter(doc => allowed.get("new-module")!.has(doc.path)));
+  const countClaims = parsedDocs.filter(doc => allowed.get("stale-count")!.has(doc.path)).flatMap(doc => doc.claims.counts.map(claim => ({ doc: doc.path, claim })));
   const decisionDirectory = await storePath(root, ".mason/decisions");
   const decisionPresence = await fs.lstat(decisionDirectory).then(stat => stat.isDirectory() ? "directory" : "file", error => {
     if (error.code === "ENOENT") return "absent";
@@ -95,7 +102,7 @@ async function collectInputs(root: string): Promise<Inputs> {
   const [modules, counts, commands, decisionFiles] = await Promise.all([
     combinedDocs ? moduleCandidates(root, combinedDocs) : [],
     Promise.all(countClaims.map(({ doc, claim }) => resolveDocCountSource(root, doc, claim))),
-    commandInputs(root, parsedDocs),
+    commandInputs(root, parsedDocs.filter(doc => allowed.get("dead-command")!.has(doc.path))),
     fg(".mason/decisions/*.json", { cwd: root, dot: true, onlyFiles: false, followSymbolicLinks: false }),
   ]);
   const decisions = await Promise.all(decisionFiles.sort().map(async file => {
@@ -108,7 +115,7 @@ async function collectInputs(root: string): Promise<Inputs> {
     git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".", ":(exclude).mason/reports"),
     git(root, "ls-files", "--stage", "-z", "--", ".", ":(exclude).mason/reports"),
   ]) : ["", ""];
-  const common = [6, engineVersion, head, shallow, replacements, docContents];
+  const common = [7, engineVersion, head, shallow, replacements, docContents, auditPolicy];
   const keys: Record<CheckName, string> = {
     "deleted-reference": hash([common, claims, docStatus]),
     "new-module": hash([common, modules]),

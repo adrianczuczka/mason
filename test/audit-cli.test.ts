@@ -100,7 +100,7 @@ describe("runAuditCli: outcomes", () => {
 
   it("exits 0 when only advisories exist", async () => {
     await write("package.json", '{"name":"x"}');
-    await write("CLAUDE.md", "# Doc\n\nThe package.json manifest.\n");
+    await write("CLAUDE.md", "# Doc\n\nThe package.json manifest includes zod.\n");
     await commitAll(tmpDir, "init");
     await write("package.json", '{"name":"x","dependencies":{"zod":"^3"}}');
     await commitAll(tmpDir, "feat: add zod");

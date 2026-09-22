@@ -27,7 +27,7 @@ export interface AuditDoc {
   content: string;
   /** Directory whose instructions this document describes, not a proven shell cwd. */
   scope: string;
-  kind: "instructions" | "readme";
+  kind: "instructions" | "readme" | "guide";
   lineCount: number;
   /** Null when the doc is untracked. */
   lastCommit: CommitRef | null;
@@ -106,6 +106,8 @@ async function localDocPaths(root: string): Promise<string[]> {
 }
 
 export function documentScope(file: string): string {
+  // Explicitly included guides describe the repository; entry points retain directory scope.
+  if (!/^(readme|agents|claude)\.md$/i.test(path.posix.basename(file))) return ".";
   const parent = path.posix.dirname(file);
   return path.posix.basename(parent).toLowerCase() === ".claude" ? path.posix.dirname(parent) : parent;
 }
@@ -125,7 +127,7 @@ async function readDocs(resolvedRoot: string): Promise<AuditDoc[]> {
         profilePhase("audit.document-history", () => lastCommitOf(resolvedRoot, candidate))]);
       if (content === null) throw new Error("Document disappeared during discovery: " + candidate);
       return { path: candidate, content, scope: documentScope(candidate),
-        kind: /^readme\.md$/i.test(path.posix.basename(candidate)) ? "readme" : "instructions",
+        kind: /^readme\.md$/i.test(path.posix.basename(candidate)) ? "readme" : /^(agents|claude)\.md$/i.test(path.posix.basename(candidate)) ? "instructions" : "guide",
         lineCount: content.split("\n").length, lastCommit, dirty: dirty.has(candidate), claims: extractClaims(content) };
     })));
   }

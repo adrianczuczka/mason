@@ -18,6 +18,21 @@ npx -p mason-context mason-audit --fix-prompt      # issues? print a work order 
 npx -p mason-context mason-audit --checks deleted-reference,stale-count,dead-command
 ```
 
+Add guides and exclude individual document/check pairs in `.mason/config.json`:
+
+```json
+{
+  "audit": {
+    "include": ["docs/**/*.md"],
+    "exclude": {
+      "deps-changed": ["README.md", "secure-entry/README.md"]
+    }
+  }
+}
+```
+
+`include` adds to the default README/instruction discovery and respects Git ignores and the shared `ignore` policy. Patterns are relative to the repository; `*`, `**`, `?`, character classes and brace expansion are supported. Negated patterns and parent traversal are rejected. Explicitly included guides use repository scope for counts and dependency checks; named README/AGENTS/CLAUDE entry points retain their directory scope. Markdown links still resolve from the physical document directory. `exclude` maps check names to document patterns; excluding a dependency check does not disable path or command checks on that document. Exclusions appear in `excludedChecks`, invalidate cached checks immediately, and close retained findings as excluded by policy, not as approved repairs. Removing the exclusion re-evaluates the retained evidence.
+
 What it checks:
 
 | Check | Flags | Confidence |
@@ -26,18 +41,18 @@ What it checks:
 | `new-module` | a directory with source files that no context file mentions | advisory |
 | `stale-count` | "6 packages" vs what the workspace manifest actually resolves to | certain |
 | `dead-command` | `npm/pnpm/yarn run <script>` checked in its package scope | certain for resolved root/explicit scope; advisory when cwd is inferred |
-| `deps-changed` | dependency manifests committed after a dependency-facing doc’s last commit, excluding proven Android release metadata | advisory |
+| `deps-changed` | changed dependency declarations mentioned in a document, with the old/new values and affected passage | advisory; unmatched manifest recency is informational |
 | `decision-anchor-drift` | a decision record whose anchor files changed (only when `.mason/decisions/` exists) | advisory |
 
 Markdown links resolve from the document's physical directory. Bare paths in nested documents may refer to that directory or the repository root, so unresolved scope stays advisory. Generated outputs without tracked history are candidates for review. URL fetching, anchor-fragment validation, and arbitrary code-example execution are outside this passive audit.
 
 Commands use the nearest package manifest as an inferred scope. Literal `cd` steps in shell blocks and `--prefix`, `--dir`, or `-C` before `run` preserve directory scope. Unsupported selectors, shell control flow, missing manifests, and malformed manifests remain skipped with a reason. A script in a sibling package cannot validate an explicitly scoped command. Bare `pnpm build`/`yarn build` invocations are not checked because they may name binaries. Nested count and dependency checks stay within that document's directory.
 
-Dependency advisories apply to documents with recognizable dependency content: dependency/library/framework/stack or requirements wording, manifest references, recognized runtime or library versions, or package installation commands. Versionless library lists qualify. Generated Mason instruction blocks and HTML comments do not provide relevance signals. This is a conservative text filter, not full dependency-name extraction or proof that a particular change invalidates a claim; unusual wording can be missed and unrelated manifest changes may still be reported. For dirty documents, relevance is checked against committed content so deleting a section cannot hide original evidence.
+Dependency matching compares committed manifests at the document's baseline and current HEAD. It recognizes dependency sections and engines in `package.json`, literal Maven coordinates and plugin versions in Gradle build scripts, and library/plugin version references in `libs.versions.toml`. A changed dependency must be mentioned by its exact name or coordinate in the document; the finding includes the passage, line, manifest, and before/after values. This is lexical relevance, not proof the guidance is wrong. Comments and generated Mason instructions are excluded. Dirty documents are matched against their committed content so local edits cannot erase evidence.
 
-For relevant documents, the dependency advisory omits recognized literal `versionName`/`versionCode` changes inside an Android `defaultConfig` block when every touched manifest qualifies. Dependency edits, computed values, unfamiliar syntax, and unrecognized metadata stay advisory. This filter does not approve or remove advisories already retained in a repair baseline.
+Other dependency-facing documents receive `resolution: "informational"` notices when manifests changed but no specific affected passage was established. These remain in JSON evidence without creating a review obligation or keeping repair verification incomplete. Unsupported declarations (including other ecosystems, computed Gradle versions and unrecognized aliases) may not match; `matchingIncomplete` flags unsupported files, parsing/read failures, or matching limits. Matching is bounded to 64 changed manifests and 100 passage matches. The checker also omits proven Android release-metadata-only commits. It does not claim complete dependency coverage.
 
-Issues drive the exit code; **advisories never do**. Historical dependency/decision advisories need a separate assessment. Path, command, and module candidates carry `resolution: "recheck"`: verification can establish that their condition is no longer detected, without asserting that an edit was semantically approved. Every issue carries a `doc:line` anchor and git-derived evidence (the deleting commit, the rename target, the actual count and its source). A claim you want left alone — say, a deliberate reference to a removed directory — gets an ignore marker: `<!-- mason:ignore -->` on the line, or `<!-- mason:ignore-start -->` / `<!-- mason:ignore-end -->` around a block.
+Issues drive the exit code; **advisories never do**. Specific historical dependency/decision advisories need a separate assessment; manifest-recency-only information does not. Path, command, and module candidates carry `resolution: "recheck"`: verification can establish that their condition is no longer detected, without asserting that an edit was semantically approved. Every issue carries a `doc:line` anchor and git-derived evidence (the deleting commit, the rename target, the actual count and its source). A claim you want left alone — say, a deliberate reference to a removed directory — gets an ignore marker: `<!-- mason:ignore -->` on the line, or `<!-- mason:ignore-start -->` / `<!-- mason:ignore-end -->` around a block.
 
 ### Track a repair through verification
 
@@ -55,7 +70,7 @@ Preparation saves the full original audit under `.mason/reports/repairs/`; it do
 
 Each original finding is **resolved** (its check no longer reports it, or an explicit assessment covers current evidence), **unresolved**, **review-required**, or **unverified**. The reason and optional `review` distinguish these outcomes. New findings are separate. A shifted line number does not erase the original claim, and a missing document, unavailable history, or skipped check cannot count as a fix. These checks do not establish complete documentation correctness. Code examples and arbitrary build commands need separate validation using the project's toolchain.
 
-Dependency evidence suppressed by local edits is retained in `suppressedAdvisories`, including when setup has already dirtied the document. Committing that document does not prove the dependency change was reviewed: the original advisory stays in the repair report. Verification states when the current check no longer reports the condition, and hook summaries show that historical status instead of repeating an old count as a current fact. A recorded assessment is still needed to close the advisory. Baselines are validated local evidence with a checksum to detect accidental edits, not authenticated attestations.
+Dependency evidence suppressed by local edits is retained in `suppressedAdvisories`, including when setup has already dirtied the document. Committing that document does not prove the dependency change was reviewed: the original advisory stays in the repair report. Verification states when the current check no longer reports the condition, and hook summaries show that historical status instead of repeating an old count as a current fact. Specific matched advisories still need an assessment or dismissal. Legacy recency-only baselines without a recorded affected passage are retained as information when no current specific match remains; explicit prior assessments and deferrals are still respected. Baselines are validated local evidence with a checksum to detect accidental edits, not authenticated attestations.
 
 Ordinary audit exit codes remain **0** for no issues (advisories may exist), **1** for issues, and **2** for errors. Explicit `--verify-repair` uses **0** for verified scope, **1** for remaining/new issues, and **2** for incomplete verification, including advisories needing review or skipped checks. Incomplete verification takes precedence when both issues and unavailable evidence remain.
 
@@ -76,6 +91,16 @@ mason audit review --baseline .mason/reports/repairs/<baseline>.json --finding <
 ```
 
 Assessment history is versioned under `.mason/reviews/advisories/`. Review and commit that record, then verify the original baseline again. Assessments survive unrelated commits and the final metadata commit; changes within the recorded document and manifest/path scope reopen them. Explicit path references also retain presence observations for ignored generated outputs; they do not verify those files' contents. Equivalent findings in retained baselines share a review identity. Another clone can use the shared assessment with its own local baseline. Original findings and prior events remain available; ordinary audit JSON preserves them alongside additive `advisoryReviews`, while its concise summary keeps currently reviewed advisories out of the active list. Automation also includes closed findings in the full report and excludes them from its active summary.
+
+Dependency advisories also support a one-step dismissal:
+
+```bash
+mason audit review --baseline .mason/reports/repairs/<id>.json --finding <findingId> \
+  --outcome dismiss --reason no-dependency-claims \
+  --note "This README only describes navigation, not dependency requirements."
+```
+
+The MCP equivalent is `review_advisory` with `action: "dismiss"`, `baselinePath`, `findingId`, `reasonCode`, and `note`. No preparation, token or named reviewer is required. Choose `no-dependency-claims` when the document makes no such claims: the dismissal binds to the committed document content and survives manifest-only changes, including uncommitted manifest edits. Choose `unrelated-manifest-change` when the inspected manifest changes do not affect the guidance: later changes to the document or scoped manifests reopen it. The relevant scope must be committed before dismissing. Dismissals take effect locally; commit their records to share them. A dismissal records a reasoned disposition, not approval or a proof of correctness. Other advisory types retain the prepared assessment workflow.
 
 Decision findings route to `review_decision`. Acceptance, reaffirmation or retirement must cover the original finding and retain usable history; proposals alone never close it. An advisory assessment cannot approve an engineering decision. Recorded reviewer identities and dispositions are assertions for normal project review, not authenticated approvals or proof of correctness. Missing, malformed, skipped or conflicting evidence remains unverified. If setup previously ignored all `.mason/` data, rerun setup to allow versioning `.mason/reviews/`.
 

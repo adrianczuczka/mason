@@ -8,7 +8,7 @@ import { discoverDocPaths } from "./docs.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { getChangesWithStatus } from "../drift/drift.js";
 import { readStoreJson, storePath, writeStoreJson } from "../utils/storage.js";
-import { readBoundedFile } from "../utils/files.js";
+import { loadProjectConfig, readBoundedFile } from "../utils/files.js";
 import { isWithinRoot, normalizeRepoPath } from "../utils/paths.js";
 import { ALL_CHECKS } from "./types.js";
 import type { AuditReport, CheckName } from "./types.js";
@@ -21,9 +21,10 @@ export const reportSchema = z.object({
   version: z.literal(1), root: z.string(), gitAvailable: z.literal(true),
   headHash: commitSchema.shape.hash, checksRun: z.array(checkSchema).nonempty(),
   docs: z.array(z.object({ path: z.string().refine(value => normalizeRepoPath(value) === value), scope: z.string().optional(),
-    kind: z.enum(["instructions", "readme"]).optional(), lastCommit: commitSchema.nullable(),
+    kind: z.enum(["instructions", "readme", "guide"]).optional(), lastCommit: commitSchema.nullable(),
     dirty: z.boolean(), lineCount: count })).nonempty(),
   decisionsChecked: z.boolean(), clean: z.boolean(),
+  excludedChecks: z.array(z.object({ check: checkSchema, doc: z.string() })).optional(),
   issues: z.array(issueSchema), advisories: z.array(advisorySchema),
   suppressedAdvisories: z.array(advisorySchema).optional(),
   skippedChecks: z.array(z.object({ check: z.string(), reason: z.string(), doc: z.string().optional() })),
@@ -86,7 +87,7 @@ async function docState(root: string): Promise<string> {
       docs.push([doc, null]);
     }
   }
-  return digest(docs);
+  return digest([docs, (await loadProjectConfig(root)).audit]);
 }
 
 /** Refuse a verification assembled across a commit or instruction-file edit. */
@@ -232,6 +233,9 @@ async function verifyOriginal(rootDir: string, baselinePath: string, options: Au
     if (now && ("confidence" in finding || "confidence" in now)) {
       return { ...base, status: "unresolved", reason: "The original check still reports this claim." };
     }
+    if (current.excludedChecks?.some(excluded => excluded.check === finding.type && excluded.doc === finding.anchor.doc)) {
+      return { ...base, status: "resolved", reason: "Excluded by project audit policy; this is not a correctness assessment. Original evidence is retained." };
+    }
     const skipped = current.skippedChecks.filter(s => s.check === finding.type && (!s.doc || s.doc === finding.anchor.doc));
     if (!current.checksRun?.includes(finding.type) || skipped.length) {
       return { ...base, status: "unverified", reason: skipped.map(s => s.reason).join("; ") || "The original check did not run." };
@@ -241,6 +245,10 @@ async function verifyOriginal(rootDir: string, baselinePath: string, options: Au
       if (review.status === "unverified") return { ...base, review, status: "unverified", reason: review.reason };
       if (review.status === "current") return { ...base, review, status: "resolved", reason: review.reason };
       return { ...base, review, status: "review-required", reason: review.reason };
+    }
+    if (!("confidence" in finding) && finding.evidence.kind === "doc-behind-manifests"
+      && !finding.evidence.matches?.length && (!now || !("confidence" in now) && now.resolution === "informational")) {
+      return { ...base, status: "resolved", reason: "Manifest recency alone establishes no affected passage. Retained as information; no assessment is required." };
     }
     if (!("confidence" in finding) && (!recheckable(finding) || now)) {
       return { ...base, status: "review-required",
@@ -265,7 +273,7 @@ async function verifyOriginal(rootDir: string, baselinePath: string, options: Au
   const counts: Record<RepairStatus, number> = { resolved: 0, unresolved: 0, "review-required": 0, unverified: 0 };
   for (const f of findings) counts[f.status]++;
   const incomplete = diagnostics.length > 0 || counts.unverified > 0 || counts["review-required"] > 0 ||
-    (current?.skippedChecks.length ?? 0) > 0 || newFindings.some(f => !("confidence" in f) && !reviewedIds.has(findingId(f)));
+    (current?.skippedChecks.length ?? 0) > 0 || newFindings.some(f => !("confidence" in f) && f.resolution !== "informational" && !reviewedIds.has(findingId(f)));
   const issuesRemain = counts.unresolved > 0 || newFindings.some(f => "confidence" in f);
   return {
     version: 1, action: "verify", baselinePath: relative, baselineHead: original.headHash!,
@@ -283,7 +291,7 @@ export function repairExitCode(report: RepairVerification): number {
 export function formatRepairSummary(report: RepairVerification): string {
   return [
     "Repair verification: " + report.status + ". Baseline: " + report.baselinePath,
-    ...report.findings.map(f => "  [" + f.status + "] " + f.original.type + " " + f.original.anchor.doc + ": " + f.original.message + "\n    " + f.reason + "\n    findingId: " + f.id),
+    ...report.findings.map(f => "  [" + f.status + "] " + f.original.type + " " + f.original.anchor.doc + ": " + (f.current?.message ?? "Historical evidence at " + report.baselineHead.slice(0, 7) + ": " + f.original.message) + "\n    " + f.reason + "\n    findingId: " + f.id),
     ...report.newFindings.map(f => "  [new] " + f.type + " " + f.anchor.doc + ": " + f.message),
     ...report.diagnostics.map(d => "  [unverified] " + d),
     ...(report.currentAudit?.skippedChecks ?? []).map(s => "  [skipped] " + s.check + ": " + s.reason),
