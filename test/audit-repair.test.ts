@@ -17,15 +17,15 @@ async function write(file: string, content: string) {
 async function seed() {
   await write("src/old.ts", "export const old = true;");
   await write("src/kept.ts", "export const kept = true;");
-  await write("CLAUDE.md", "Source: `src/old.ts`. The src directory. Dependencies are configured in the package manifest.\n");
-  await write("package.json", '{"scripts":{"test":"vitest"}}');
+  await write("CLAUDE.md", "Source: `src/old.ts`. The src directory. Dependencies include vitest 1.\n");
+  await write("package.json", '{"dependencies":{"vitest":"1"},"scripts":{"test":"vitest"}}');
   await commitAll(root, "initial");
   await fs.rm(path.join(root, "src/old.ts"));
   await commitAll(root, "remove old");
 }
 async function seedAdvisory() {
   await seed();
-  await write("package.json", '{"scripts":{"test":"vitest","build":"tsc"}}');
+  await write("package.json", '{"dependencies":{"vitest":"2"},"scripts":{"test":"vitest","build":"tsc"}}');
   await commitAll(root, "change manifest");
 }
 async function cli(args: string[]) {

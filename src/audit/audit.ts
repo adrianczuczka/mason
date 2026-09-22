@@ -1,3 +1,5 @@
+import { loadProjectConfig } from "../utils/files.js";
+import { includedCheckPaths } from "./policy.js";
 import { profilePhase } from "../utils/profile.js";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -87,14 +89,22 @@ async function auditCurrent(rootDir: string, options: AuditOptions): Promise<Aud
     decisionsPresent,
   };
 
+  const policy = (await loadProjectConfig(resolvedRoot)).audit;
   const selected = options.checks ?? ALL_CHECKS;
   for (const name of ALL_CHECKS) {
     if (!selected.includes(name)) continue;
+    const exclusions = policy?.exclude?.[name] ?? [];
+    const included = await includedCheckPaths(resolvedRoot, docs.map(doc => doc.path), exclusions);
+    const excluded = docs.filter(doc => !included.has(doc.path)).map(doc => ({ check: name, doc: doc.path }));
+    if (excluded.length) (report.excludedChecks ??= []).push(...excluded);
+    const scoped = { ...ctx, docs: docs.filter(doc => included.has(doc.path)) };
     const { issues, advisories, suppressedAdvisories, skipped } = await (options.runCheck
-      ? options.runCheck(name, ctx) : CHECKS[name](ctx));
+      ? options.runCheck(name, scoped) : CHECKS[name](scoped));
     report.checksRun!.push(name);
     report.issues.push(...issues);
-    report.advisories.push(...advisories);
+    const advisoryPaths = await includedCheckPaths(resolvedRoot, [...new Set(advisories.map(f => f.anchor.doc))], exclusions);
+    report.advisories.push(...advisories.filter(f => advisoryPaths.has(f.anchor.doc)));
+    for (const f of advisories) if (!advisoryPaths.has(f.anchor.doc)) (report.excludedChecks ??= []).push({ check: name, doc: f.anchor.doc });
     report.suppressedAdvisories!.push(...(suppressedAdvisories ?? []));
     report.skippedChecks.push(...skipped);
   }

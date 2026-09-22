@@ -106,7 +106,7 @@ describe("release metadata advisories", () => {
     expect(await commitsTouchingSince(root, initial, ["app/build.gradle.kts"])).not.toBeNull();
   });
 
-  it("leaves an advisory retained by an older engine review-required", async () => {
+  it("retains an older engine recency-only advisory as information", async () => {
     const initial = await git(["rev-parse", "HEAD"], root);
     await write("app/build.gradle.kts", gradle("1.0.1"));
     await commitAll(root, "release version");
@@ -120,7 +120,8 @@ describe("release metadata advisories", () => {
     const bytes = await fs.readFile(path.join(root, baseline.baselinePath), "utf8");
     const verified = await verifyRepair(root, baseline.baselinePath);
     expect(verified.currentAudit!.advisories).toEqual([]);
-    expect(verified.findings[0].status).toBe("review-required");
+    expect(verified.findings[0].status).toBe("resolved");
+    expect(verified.findings[0].reason).toContain("Retained as information");
     expect(await fs.readFile(path.join(root, baseline.baselinePath), "utf8")).toBe(bytes);
   });
 });

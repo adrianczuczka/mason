@@ -92,7 +92,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "review_advisory",
-    "Prepare an assessment of an original repair advisory and its exact repository scope, then record authorized addressed, inapplicable or deferred outcomes with reviewToken, reviewer and note. Relevant changes reopen reviews; unrelated commits preserve them. Records belong in Git. Decision findings route to review_decision; this tool never approves decisions. Recorded identities are assertions, not authenticated approvals.",
+    "Prepare an assessment of an original repair advisory and its exact repository scope, then record authorized addressed, inapplicable or deferred outcomes with reviewToken, reviewer and note. Relevant changes reopen reviews; unrelated commits preserve them. Records belong in Git. Decision findings route to review_decision; this tool never approves decisions. Recorded identities are assertions, not authenticated approvals. For dependency advisories, action dismiss with reasonCode and note records a one-step dismissal without a token or reviewer. no-dependency-claims reopens only on document content changes; unrelated-manifest-change also tracks scoped manifests.",
     { dir: z.string().describe("Absolute path to the project root"), ...advisoryReviewRequest.shape },
     async ({ dir, ...request }) => ({ content: [{ type: "text", text: await masonReviewAdvisory(dir, request) }] })
   );

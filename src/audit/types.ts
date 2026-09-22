@@ -89,6 +89,8 @@ export type Evidence =
       docLastCommit: CommitRef;
       manifestCommits: Array<CommitRef & { files: string[] }>;
       totalCommits: number;
+      matches?: import("./dependency-claims.js").DependencyMatch[];
+      matchingIncomplete?: boolean;
     }
   | {
       kind: "decision-anchor";
@@ -117,13 +119,13 @@ export interface AuditAdvisory {
   message: string;
   anchor: DocAnchor;
   evidence: Evidence;
-  resolution?: "recheck";
+  resolution?: "recheck" | "informational";
 }
 
 export interface AuditDocInfo {
   path: string;
   scope?: string;
-  kind?: "instructions" | "readme";
+  kind?: "instructions" | "readme" | "guide";
   lastCommit: CommitRef | null;
   /** Uncommitted edits present — deps-changed is suppressed for dirty docs. */
   dirty: boolean;
@@ -149,6 +151,7 @@ export interface AuditReport {
   suppressedAdvisories?: AuditAdvisory[];
   skippedChecks: Array<{ check: string; reason: string; doc?: string }>;
   clean: boolean;
+  excludedChecks?: Array<{ check: CheckName; doc: string }>;
   /** Additive assessment status; original advisory evidence remains intact. */
   advisoryReviews?: import("./advisory-review.js").AdvisoryReviewSummary[];
 }

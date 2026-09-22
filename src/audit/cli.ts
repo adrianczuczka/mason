@@ -112,8 +112,8 @@ function issueLine(issue: AuditIssue): string {
 export function formatAuditSummary(report: AuditReport): string {
   const lines: string[] = [];
   const reviewed = new Set(report.advisoryReviews?.filter(review => review.status === "current").map(review => review.id));
-  const open = report.advisories.filter(finding => !reviewed.has(findingId(finding)));
-  const suppressed = (report.suppressedAdvisories ?? []).filter(finding => !reviewed.has(findingId(finding)));
+  const open = report.advisories.filter(finding => finding.resolution !== "informational" && !reviewed.has(findingId(finding)));
+  const suppressed = (report.suppressedAdvisories ?? []).filter(finding => finding.resolution !== "informational" && !reviewed.has(findingId(finding)));
   const reviewCount = open.length + suppressed.length;
 
   for (const doc of report.docs) {
@@ -138,6 +138,9 @@ export function formatAuditSummary(report: AuditReport): string {
     if (!docPaths.has(issue.anchor.doc)) lines.push(issueLine(issue));
   }
 
+  const information = [...report.advisories, ...(report.suppressedAdvisories ?? [])].filter(f => f.resolution === "informational");
+  if (information.length) lines.push(`${information.length} informational dependency notices; no review required (see --json).`);
+  if (report.excludedChecks?.length) lines.push(`${report.excludedChecks.length} document/check pairs excluded by project policy (see --json).`);
   if (open.length > 0) {
     lines.push("Advisories (do not affect the exit code):");
     for (const advisory of open) {
@@ -205,7 +208,7 @@ export function formatFixPrompt(report: AuditReport, baselinePath?: string): str
     "- new-module: review whether the directory needs documenting; an omission alone does not establish a defect. Preserve scope and describe only what you verified."
   );
   lines.push(
-    "- Historical ADVISORIES require a separate authorized assessment using review_advisory with the baselinePath and findingId from verification. Prepare and inspect evidence first; record addressed, inapplicable or deferred with the actual reviewer, note and reviewToken. Decision findings use review_decision. Candidates marked resolution: recheck can be rerun to see whether the condition remains; this does not establish semantic approval. Report what remains unknown."
+    "- Specific historical ADVISORIES require a separate authorized assessment using review_advisory with the baselinePath and findingId from verification. Prepare and inspect evidence first; record addressed, inapplicable or deferred with the actual reviewer, note and reviewToken. Dependency notices marked resolution: informational require no review. Dependency advisories may be dismissed with action: dismiss, reasonCode (no-dependency-claims or unrelated-manifest-change), and note, without a reviewer or token. Decision findings use review_decision. Candidates marked resolution: recheck can be rerun to see whether the condition remains; this does not establish semantic approval. Report what remains unknown."
   );
   lines.push("");
   lines.push("AUDIT REPORT (current context files and repository evidence, including local edits):");

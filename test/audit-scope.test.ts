@@ -163,8 +163,8 @@ describe("scoped initial audits", () => {
   });
 
   it("rechecks a speculative missing path without approving historical advisories", async () => {
-    await write("README.md", "[generated](generated/api.md)\nDependencies are managed in the package manifest.\n"); await write("package.json", pkg({})); await commitAll(root, "docs");
-    await write("package.json", pkg({ test: "test" })); await commitAll(root, "change manifest");
+    await write("README.md", "[generated](generated/api.md)\nDependencies include zod.\n"); await write("package.json", pkg({})); await commitAll(root, "docs");
+    await write("package.json", JSON.stringify({ dependencies: { zod: "3" }, scripts: { test: "test" } })); await commitAll(root, "change manifest");
     const prepared = await prepareRepair(root, ["deleted-reference", "deps-changed"]);
     expect(prepared.report.advisories.find(f => f.type === "deleted-reference")?.resolution).toBe("recheck");
     expect((await verifyRepair(root, prepared.baselinePath)).findings.every(f => f.status === "review-required")).toBe(true);

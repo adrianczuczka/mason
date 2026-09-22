@@ -8,13 +8,15 @@ Prepare an advisory assessment against retained evidence (read-only by default).
   --dir <path>       Repository root (default: current directory)
   --baseline <path>  Original repair baseline
   --finding <id>     findingId from repair verification or automation
-  --outcome <value>  Record addressed, inapplicable, or deferred
+  --outcome <value>  Record addressed, inapplicable, deferred, or dismiss
+  --reason <code>   Dismiss: no-dependency-claims or unrelated-manifest-change
   --reviewer <name>  Actual authorized reviewer
   --note <reason>    Assessment reason
   --token <token>    reviewToken returned by preparation
   --json            Full evidence and review history
 
-Recording requires prior preparation and committed relevant edits. Review records
+Assessments require preparation and committed relevant edits. Dismiss requires only
+--reason and --note, with a committed document; no reviewer or token is needed. Review records
 belong in Git under .mason/reviews/advisories/. Deferral remains outstanding.
 Decision findings use review_decision; this command never approves decisions.
 Exit 0: prepared/recorded; 2: unavailable, conflict, or decision review required.`;
@@ -26,13 +28,13 @@ export async function runAdvisoryCli(args: string[], io = { out: (text: string) 
     for (let i = 0; i < args.length; i++) {
       const flag = args[i];
       if (flag === "--json") { json = true; continue; }
-      if (!["--dir", "--baseline", "--finding", "--outcome", "--reviewer", "--note", "--token"].includes(flag) || flags[flag]) throw new Error("Unexpected or repeated argument: " + flag);
+      if (!["--dir", "--baseline", "--finding", "--outcome", "--reviewer", "--note", "--token", "--reason"].includes(flag) || flags[flag]) throw new Error("Unexpected or repeated argument: " + flag);
       const value = args[++i]; if (!value || value.startsWith("--")) throw new Error(flag + " requires a value.");
       flags[flag] = value;
     }
-    if (!flags["--outcome"] && ["--reviewer", "--note", "--token"].some(key => flags[key])) throw new Error("Use --outcome to record an assessment.");
+    if (!flags["--outcome"] && ["--reviewer", "--note", "--token", "--reason"].some(key => flags[key])) throw new Error("Use --outcome to record an assessment.");
     const input = { baselinePath: flags["--baseline"], findingId: flags["--finding"],
-      action: flags["--outcome"] ?? "prepare", reviewer: flags["--reviewer"], note: flags["--note"], reviewToken: flags["--token"] } as AdvisoryReviewInput;
+      action: flags["--outcome"] ?? "prepare", reviewer: flags["--reviewer"], note: flags["--note"], reviewToken: flags["--token"], reasonCode: flags["--reason"] } as AdvisoryReviewInput;
     const result = await reviewAdvisory(path.resolve(flags["--dir"] ?? process.cwd()), input);
     if (json) io.out(JSON.stringify(result, null, 2));
     else {

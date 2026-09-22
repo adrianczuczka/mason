@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Match supported dependency changes to named document passages; retain unmatched manifest recency as information without a review obligation. Preserve specific findings, original baselines and prior assessments, and label historical evidence explicitly.
+- Add `audit.include` document patterns and per-check `audit.exclude` patterns in project configuration, shared by audit discovery and automation caches.
+- Add one-step dependency-advisory dismissals with structured reasons. No-dependency-claims dismissals survive manifest changes and reopen when document content changes; unrelated-change dismissals also track scoped manifests. Existing prepared assessments and decision approval remain separate.
+
 ## 0.19.0 — 2026-09-17
 
 - Add automatic updates for new public standalone installations, with existing installations opting in through `mason updates enable`. Check at most daily for stable releases at least 24 hours old; leave npm, pinned versions, company mirrors, and CI under explicit control.

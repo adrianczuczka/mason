@@ -18,7 +18,7 @@ async function write(file: string, text: string) {
 }
 async function seed() {
   await write("old-module/index.js", "export const greeting = 'hello';\n");
-  await write("CLAUDE.md", "The `old-module/index.js` module provides a greeting. Dependencies are configured in the package manifest.\n");
+  await write("CLAUDE.md", "The `old-module/index.js` module provides a greeting. Dependencies include typescript.\n");
   await write("AGENTS.md", "The old-module directory contains the greeting.\n");
   await write("package.json", '{"scripts":{"test":"node --test"}}');
   await write(".gitignore", ".mason/reports/\n");
@@ -48,9 +48,9 @@ describe("portable automation", { timeout: 20000 }, () => {
     await write("CLAUDE.md", "The `greeting-module/index.js` module provides a greeting.\n");
     await write("AGENTS.md", "The greeting-module directory contains the greeting.\n");
     await hook(host, "PostToolUse", edit);
-    // Dirty docs explicitly retain incomplete dependency checks until committed.
+    // A doc edit alone does not create a dependency-review obligation.
     const dirty = await automate(root, { event: "task_end" });
-    expect(dirty.report.status).toBe("incomplete");
+    expect(dirty.report.status).toBe("verified");
     expect(dirty.report.counts.unresolved).toBe(0);
     await commitAll(root, "rename module and update documentation");
     const done = await automate(root, { event: "task_end" });
@@ -61,7 +61,7 @@ describe("portable automation", { timeout: 20000 }, () => {
 
   it("resumes a Claude repair in Codex and retains suppressed dependency evidence", async () => {
     await seed();
-    await write("package.json", '{"scripts":{"test":"node --test","build":"tsc"}}');
+    await write("package.json", '{"devDependencies":{"typescript":"5"},"scripts":{"test":"node --test","build":"tsc"}}');
     await commitAll(root, "manifest changes");
     await hook("claude", "SessionStart");
     const original = (await automationStatus(root)).baselinePaths;
@@ -81,7 +81,7 @@ describe("portable automation", { timeout: 20000 }, () => {
     const cached = await automate(root, { event: "before_tool" });
     expect(cached.report.checks.ran).toEqual([]);
     expect(cached.report.checks.reused).toHaveLength(6);
-    await write("package.json", '{"scripts":{"test":"node --test","build":"tsc"}}');
+    await write("package.json", '{"devDependencies":{"typescript":"5"},"scripts":{"test":"node --test","build":"tsc"}}');
     const changed = await automate(root, { event: "after_tool" });
     expect(changed.report.checks.ran).toContain("dead-command");
     expect(changed.report.checks.reused).toContain("deleted-reference");

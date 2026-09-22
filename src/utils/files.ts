@@ -15,7 +15,10 @@ export const SOURCE_IGNORE = [
   "**/package-lock.json", "**/yarn.lock", "**/pnpm-lock.yaml",
 ];
 export const MAX_SOURCE_BYTES = 1024 * 1024;
-export interface ProjectConfig { patterns?: string[]; alwaysInclude?: string[]; ignore?: string[] }
+export interface ProjectConfig {
+  patterns?: string[]; alwaysInclude?: string[]; ignore?: string[];
+  audit?: { include?: string[]; exclude?: Partial<Record<import("../audit/types.js").CheckName, string[]>> };
+}
 export interface SourceFile { path: string; content: string; totalLines: number }
 
 export function isSensitiveFile(file: string): boolean {
@@ -58,6 +61,28 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
         throw new Error(`Configuration ${key} must be an array of strings`);
       }
       config[key] = value[key];
+    }
+    if (value.audit !== undefined) {
+      const audit = value.audit;
+      if (!audit || typeof audit !== "object" || Array.isArray(audit)) throw new Error("Configuration audit must be an object");
+      const patterns = (raw: unknown): string[] => {
+        if (!Array.isArray(raw) || raw.length > 100 || !raw.every(s => typeof s === "string" &&
+          normalizeRepoPath(s) === s && !s.startsWith("!") && !/[\x00-\x1f]/.test(s))) {
+          throw new Error("Audit patterns must be at most 100 repository-relative globs without traversal or negation");
+        }
+        return raw;
+      };
+      config.audit = {};
+      if (audit.include !== undefined) config.audit.include = patterns(audit.include);
+      if (audit.exclude !== undefined) {
+        if (!audit.exclude || typeof audit.exclude !== "object" || Array.isArray(audit.exclude)) throw new Error("audit.exclude must map check names to patterns");
+        const { ALL_CHECKS } = await import("../audit/types.js");
+        config.audit.exclude = {};
+        for (const [check, globs] of Object.entries(audit.exclude)) {
+          if (!ALL_CHECKS.includes(check as typeof ALL_CHECKS[number])) throw new Error("Unknown audit check: " + check);
+          config.audit.exclude[check as typeof ALL_CHECKS[number]] = patterns(globs);
+        }
+      }
     }
     return config;
   } catch (error) {

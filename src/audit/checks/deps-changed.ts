@@ -1,3 +1,4 @@
+import { matchDependencyChanges } from "../dependency-claims.js";
 import { documentScope } from "../docs.js";
 import { releaseMetadataOnly } from "../release-metadata.js";
 import { commitsTouchingSince } from "../git.js";
@@ -46,9 +47,8 @@ export function manifestPathspecs(doc: string): string[] {
 }
 
 /**
- * Advisory, never an issue: a manifest commit after the doc's last commit
- * proves recency ordering, not that any specific claim is false — and it can
- * never be closed by editing the doc within the same run.
+ * A matched declaration change is advisory, never proof of an incorrect claim.
+ * Manifest recency without an affected passage is background information.
  */
 export async function checkDepsChanged(
   ctx: CheckContext
@@ -66,13 +66,6 @@ export async function checkDepsChanged(
       });
       continue;
     }
-    if (doc.dirty) {
-      result.skipped.push({
-        check: "deps-changed",
-        doc: doc.path,
-        reason: `${doc.path} has uncommitted edits – suppressed while in flight`,
-      });
-    }
 
     // Local edits must not erase the dependency evidence we are preparing to
     // retain. Inspect the committed document for dirty inputs, including setup.
@@ -86,7 +79,6 @@ export async function checkDepsChanged(
         continue;
       }
     }
-    if (!hasDependencyContent(content)) continue;
 
     const range = await commitsTouchingSince(
       ctx.root,
@@ -113,16 +105,27 @@ export async function checkDepsChanged(
     range.total = relevant.length;
     if (range.total === 0) continue;
 
-    const latest = range.commits[0];
+    const relevance = await matchDependencyChanges(ctx.root, doc.lastCommit.hash, ctx.headHash,
+      [...new Set(range.commits.flatMap(commit => commit.files))], content);
+    // Documents without any dependency guidance or matched declaration stay quiet.
+    if (!relevance.matches.length && !hasDependencyContent(content)) continue;
+    const match = relevance.matches[0];
+    if (doc.dirty && match) result.skipped.push({ check: "deps-changed", doc: doc.path,
+      reason: `${doc.path} has uncommitted edits – suppressed while in flight` });
     (doc.dirty ? result.suppressedAdvisories : result.advisories).push({
       type: "deps-changed",
-      message: `dependency manifests touched by ${range.total} commit${range.total === 1 ? "" : "s"} since ${doc.path} was last committed (latest: ${latest.hash.slice(0, 7)} "${latest.subject}")`,
-      anchor: { doc: doc.path, line: null, excerpt: null },
+      ...(match ? {} : { resolution: "informational" as const }),
+      message: match
+        ? `${match.dependency} changed from ${match.before ?? "absent"} to ${match.after ?? "removed"} in ${match.manifest}; review ${doc.path}:${match.line}: ${match.excerpt}${relevance.matches.length > 1 ? ` (${relevance.matches.length - 1} more matches in evidence)` : ""}`
+        : `Dependency manifests changed after the document baseline ${doc.lastCommit.hash.slice(0, 7)} (${doc.lastCommit.date.slice(0, 10)}); no specific affected passage was established. Informational only.${relevance.incomplete ? " Some manifest declarations could not be matched." : ""}`,
+      anchor: { doc: doc.path, line: match?.line ?? null, excerpt: match?.excerpt ?? null },
       evidence: {
         kind: "doc-behind-manifests",
         docLastCommit: doc.lastCommit,
         manifestCommits: range.commits.slice(0, MANIFEST_COMMITS_CAP),
         totalCommits: range.total,
+        matches: relevance.matches,
+        matchingIncomplete: relevance.incomplete,
       },
     });
   }
