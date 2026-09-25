@@ -4,7 +4,8 @@ set -eu
 step() { printf 'Mason: %s...\n' "$1" >&2; }
 case "$(uname -s)" in Darwin) platform=darwin ;; Linux) platform=linux ;; *) echo 'Use install.ps1 on Windows.' >&2; exit 2 ;; esac
 case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; x86_64|amd64) arch=x64 ;; *) echo 'Unsupported architecture.' >&2; exit 2 ;; esac
-version=${MASON_VERSION:-}
+# Upgrade can supply a resolved release without changing the user's version pin.
+version=${1:-${MASON_VERSION:-}}
 if [ -n "${MASON_RELEASE_BASE:-}" ] && [ -z "$version" ]; then
   echo 'Set MASON_VERSION when using MASON_RELEASE_BASE; no public latest-version lookup was made.' >&2
   exit 2

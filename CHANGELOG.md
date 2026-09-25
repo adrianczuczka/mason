@@ -5,6 +5,7 @@
 - Match supported dependency changes to named document passages; retain unmatched manifest recency as information without a review obligation. Preserve specific findings, original baselines and prior assessments, and label historical evidence explicitly.
 - Add `audit.include` document patterns and per-check `audit.exclude` patterns in project configuration, shared by audit discovery and automation caches.
 - Add one-step dependency-advisory dismissals with structured reasons. No-dependency-claims dismissals survive manifest changes and reopen when document content changes; unrelated-change dismissals also track scoped manifests. Existing prepared assessments and decision approval remain separate.
+- Skip standalone upgrade downloads when the requested or latest version is already installed, while retaining explicit version pinning and unpinned upgrade behavior.
 
 ## 0.19.0 — 2026-09-17
 

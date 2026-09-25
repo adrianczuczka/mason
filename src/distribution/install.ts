@@ -225,17 +225,46 @@ export async function upgradeStandalone(version?: string, progress?: Progress) {
   progress?.step("Checking current installation");
   const { home, bundle, record } = await currentInstallation();
   await verifyBundle(bundle);
+  const mirror = process.env.MASON_RELEASE_BASE || record.updates?.mirror || "";
+  if (mirror && !version) throw new Error("Specify a version when upgrading from a company mirror; no public latest-version lookup was made.");
+  let selected = version?.replace(/^v/, "");
+  if (!selected) {
+    progress?.step("Checking the latest release");
+    const response = await fetch("https://github.com/adrianczuczka/mason/releases/latest", {
+      method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(30000),
+    });
+    if (!response.ok) throw new Error(`Latest release request failed (HTTP ${response.status}).`);
+    selected = new URL(response.url).pathname.split("/").pop()?.replace(/^v/, "");
+    if (!selected || !/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(selected)) throw new Error("Invalid Mason release version.");
+  }
+  const alreadyInstalled = await withLock(home, ".install-lock", async () => {
+    const current = await readInstallation(home);
+    if (current.version !== selected) return false;
+    await verifyBundle(await storePath(home, "versions/" + current.current));
+    current.updates = { ...(current.updates ?? { enabled: false }), revision: randomUUID(),
+      pinnedVersion: version ? selected : undefined, mirror: mirror || undefined };
+    delete current.pending;
+    await writeStoreJson(home, "install.json", current);
+    return true;
+  });
+  if (alreadyInstalled) {
+    progress?.stop();
+    console.log(`Mason ${selected} is already installed.`);
+    return 0;
+  }
   const windows = process.platform === "win32";
   const script = path.join(bundle, windows ? "install.ps1" : "install.sh");
   // The installer owns progress from here; do not animate over its inherited IO.
   progress?.stop();
-  return new Promise<number>((resolve, reject) => {
-    const child = spawn(windows ? "powershell.exe" : "sh", windows ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script] : [script],
+  const code = await new Promise<number>((resolve, reject) => {
+    const child = spawn(windows ? "powershell.exe" : "sh", windows ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, selected!] : [script, selected!],
       { stdio: "inherit", windowsHide: true, env: { ...process.env, MASON_HOME: home, MASON_BIN_DIR: record.bin,
         MASON_RELEASE_BASE: process.env.MASON_RELEASE_BASE || record.updates?.mirror || "", MASON_VERSION: version ?? "",
         MASON_UPDATE_POLICY_REVISION: "", MASON_EXPECTED_SHA256: "" } });
     child.on("error", reject); child.on("exit", code => resolve(code ?? 2));
   });
+  if (code === 0) console.log("Restart running assistants to use this installation. Existing project integrations use mason from PATH.");
+  return code;
 }
 
 export async function uninstallStandalone() {

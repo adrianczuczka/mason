@@ -347,7 +347,11 @@ try {
   console.log('Project teardown preserved the other host and evidence; repeat teardown and reconnection passed.');
 
   corrupt = true;
-  const failure = await mason('upgrade', nextVersion).then(() => null, error => error);
+  const unchanged = await mason('upgrade', nextVersion);
+  assert(unchanged.stdout.includes(`Mason ${nextVersion} is already installed.`));
+  assert(!unchanged.stderr.includes('Downloading Mason'));
+  assert(!unchanged.stdout.includes('Restart running assistants'));
+  const failure = await mason('upgrade', original.version).then(() => null, error => error);
   assert(failure && failure.message.includes('checksum mismatch'));
   assert(!failure.message.includes('Installing Mason'), 'A corrupt download must not reach installation.');
   assert(!failure.message.includes('Restart running assistants'), 'A failed upgrade must not claim success.');

@@ -1,11 +1,12 @@
 # Download a self-contained Mason release; works in Windows PowerShell 5.1+.
+param([string]$ResolvedVersion)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 function Write-MasonStep([string]$Message) { [Console]::Error.WriteLine("Mason: $Message...") }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 $arch = switch ($architecture) { 'ARM64' { 'arm64' } 'AMD64' { 'x64' } default { throw "Unsupported architecture: $architecture" } }
-$version = $env:MASON_VERSION
+$version = if ($ResolvedVersion) { $ResolvedVersion } else { $env:MASON_VERSION }
 if ($env:MASON_RELEASE_BASE -and -not $version) {
     throw 'Set MASON_VERSION when using MASON_RELEASE_BASE; no public latest-version lookup was made.'
 }

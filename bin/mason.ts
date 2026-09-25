@@ -107,7 +107,6 @@ try {
       if (command === "upgrade") {
         progress = createProgress();
         process.exitCode = await upgradeStandalone(args[0], progress);
-        if (process.exitCode === 0) console.log("Restart running assistants to use this installation. Existing project integrations use mason from PATH.");
       }
       else console.log((process.platform === "win32" ? "Finishing installation cleanup after runtime exit: " : "Removed standalone installation: ") + await uninstallStandalone() + ". Project configuration and knowledge were retained. Reinstall Mason to use its integrations.");
     }
