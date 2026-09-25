@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.1 — 2026-09-25
 
 - Match supported dependency changes to named document passages; retain unmatched manifest recency as information without a review obligation. Preserve specific findings, original baselines and prior assessments, and label historical evidence explicitly.
 - Add `audit.include` document patterns and per-check `audit.exclude` patterns in project configuration, shared by audit discovery and automation caches.
