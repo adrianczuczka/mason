@@ -1,3 +1,4 @@
+import { pendingKnowledge } from "../decisions/pending.js";
 import { profilePhase } from "../utils/profile.js";
 import { withRepositoryInspection } from "../audit/inspection.js";
 import { recordExecution, executionStatus, failureNotifications } from "./execution.js";
@@ -59,8 +60,12 @@ export async function observeReadOnlyTool(dir: string, event: AutomationEvent) {
   return { root: ws.root, directory: ws.directory };
 }
 
-export function summarize(report: AutomationReport): string {
-  const open = report.findings.filter(f => f.status !== "resolved");
+export function summarize(report: AutomationReport, previous?: { findings: Record<string, string>; diagnostics: string[] }): string {
+  const changed = report.findings.filter(f => !previous || previous.findings[f.id] !== hash(f));
+  const open = changed.filter(f => f.status !== "resolved");
+  const unchanged = report.findings.filter(f => f.status !== "resolved").length - open.length;
+  const resolved = previous ? changed.filter(f => f.status === "resolved" && previous.findings[f.id]) : [];
+  const diagnostics = report.diagnostics.filter(d => !previous || !previous.diagnostics.includes(d));
   const onlyReview = report.status === "incomplete" && !report.diagnostics.length &&
     !report.counts.unresolved && !report.counts.unverified && report.counts["review-required"] > 0;
   return [
@@ -73,7 +78,10 @@ export function summarize(report: AutomationReport): string {
       return `[${f.status}] ${cleanText(f.original.anchor.doc)}: ${cleanText(detail)}`;
     }),
     ...(open.length > 4 ? [`${open.length - 4} more findings in the report.`] : []),
-    ...report.diagnostics.slice(0, 2).map(cleanText),
+    ...resolved.slice(0, 4).map(f => `[resolved] ${cleanText(f.original.anchor.doc)}: ${cleanText(f.reason)}`),
+    ...(resolved.length > 4 ? [`${resolved.length - 4} more resolved findings in the report.`] : []),
+    ...(unchanged ? [`${unchanged} unchanged outstanding finding(s) retained in the report.`] : []),
+    ...diagnostics.slice(0, 2).map(cleanText),
     `Evidence: ${report.reportPath}. Resume/check with mason_automation(action: "check") or mason-auto check.`,
     "Keep original evidence. Address findings relevant to the authorized task; report unrelated findings with a brief scope reason and suggested follow-up. Use review_advisory for authorized assessments; otherwise leave advisories open without approving them.",
   ].join("\n");
@@ -260,6 +268,7 @@ export async function automate(dir: string, event: AutomationEvent) {
   const startedAt = Date.now();
   const ws = await profilePhase("automation.workspace", () => workspace(dir));
   return recordExecution(ws.root, ws.directory, event.event, () => withRepositoryInspection(ws.root, async () => {
+    const knowledge = event.event === "session_start" ? await pendingKnowledge(ws.root) : null;
     const inputs = await readInputs(ws.root);
     const result = await profilePhase("automation.analysis", () => analyze(ws, inputs, event, startedAt));
     if (result.shared) {
@@ -312,14 +321,31 @@ export async function automate(dir: string, event: AutomationEvent) {
       const relevant = report.findings.some(f => f.status === "unresolved" && session &&
         (!session.initialIssues.includes(f.id) || session.initialDocs[f.original.anchor.doc] !== inputs.docs[f.original.anchor.doc]));
       const continueOnce = event.event === "task_end" && !!session?.mutationObserved && relevant && !session.continued && !event.stopHookActive;
-      const notify = !session || newSession || signature !== session.seen || continueOnce;
-      if (session) { session.seen = signature; if (continueOnce) session.continued = true; }
+      const previous = session?.notifiedFindings && !newSession && !continueOnce
+        ? { findings: { ...session.notifiedFindings }, diagnostics: session.notifiedDiagnostics ?? [] } : undefined;
+      const changed = report.findings.filter(f => !previous || previous.findings[f.id] !== hash(f));
+      const pending = changed.filter(f => f.status !== "resolved");
+      const resolved = previous ? changed.filter(f => f.status === "resolved" && previous.findings[f.id]) : [];
+      const diagnostics = report.diagnostics.filter(d => !previous || !previous.diagnostics.includes(d));
+      const notify = !session || newSession || signature !== session.seen || continueOnce ||
+        pending.length > 0 || resolved.length > 0 || diagnostics.length > 0;
+      if (session) {
+        session.seen = signature;
+        if (notify) {
+          // Truncated findings remain pending; only displayed details are delivered.
+          const delivered = session.notifiedFindings ?? {};
+          for (const finding of [...pending.slice(0, 4), ...resolved.slice(0, 4)]) delivered[finding.id] = hash(finding);
+          session.notifiedFindings = Object.fromEntries(report.findings.filter(f => delivered[f.id]).map(f => [f.id, delivered[f.id]]));
+          session.notifiedDiagnostics = [...new Set([...(session.notifiedDiagnostics ?? []).filter(d => report.diagnostics.includes(d)), ...diagnostics.slice(0, 2)])];
+        }
+        if (continueOnce) session.continued = true;
+      }
       const persistReport = !state.latest || state.fingerprint !== inputs.fingerprint || notify || event.event === "task_end";
       if (!persistReport) report.reportPath = state.latest!;
       state.updatedAt = now; state.fingerprint = inputs.fingerprint; state.latest = report.reportPath;
       if (persistReport) await writeStoreJson(ws.root, report.reportPath, report);
       await writeStoreJson(ws.root, ws.directory + "/state.json", state);
-      return { report, message: notify ? summarize(report) : null, continueOnce };
+      return { report, message: [notify ? summarize(report, previous) : null, knowledge].filter(Boolean).join("\n") || null, continueOnce };
     }));
   }));
 }

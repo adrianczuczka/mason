@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Capture supported project lessons immediately as proposals, without waiting for implementation or merge; keep unimplemented remedies tentative.
+- Show uncommitted decision records and proposals awaiting review at session start, with paths and ages and oldest proposals first.
+- Show changed findings without repeating unchanged details. Only displayed findings count as delivered; overflow remains pending, and full audit reports retain all evidence.
+
 ## 0.19.1 — 2026-09-25
 
 - Match supported dependency changes to named document passages; retain unmatched manifest recency as information without a review obligation. Preserve specific findings, original baselines and prior assessments, and label historical evidence explicitly.

@@ -10,6 +10,8 @@ export const stateSchema = z.object({
   baselines: z.array(z.object({ path: z.string(), at: z.string(), event: z.string(), fingerprint: z.string() })).max(128),
   sessions: z.record(z.object({
     host: hostSchema, seen: z.string().nullable(), continued: z.boolean(),
+    notifiedFindings: z.record(z.string()).optional(),
+    notifiedDiagnostics: z.array(z.string()).optional(),
     initialIssues: z.array(z.string()), initialDocs: z.record(z.string().nullable()),
     lastUsed: z.string(), mutationObserved: z.boolean(),
     pending: z.record(z.string()), coverageGaps: z.array(z.string()),
