@@ -56,8 +56,8 @@ export async function runAutomationHook(host: Host, stdin: string, options: { ma
     if (warning) result.message = [result.message, warning].filter(Boolean).join("\n");
     if (!result.message) return null;
     if (name === "Stop") {
-      // A single continuation for actionable task findings; advisories never create a loop.
-      return result.continueOnce ? { decision: "block", reason: result.message } : { systemMessage: result.message };
+      // Completion feedback never starts an automatic repair loop.
+      return { systemMessage: result.message };
     }
     return { hookSpecificOutput: { hookEventName: name, additionalContext: result.message } };
   } catch (error) {

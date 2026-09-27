@@ -82,10 +82,12 @@ it("observes known read tools without advancing audit evidence, then checks shel
   expect(await fs.readFile(path.join(root, ws.directory, "execution.json"), "utf8")).toBe(execution);
   expect((await automationStatus(root)).status).toBe("changed");
   const shell = await runAutomationHook("claude", JSON.stringify({ cwd: root, session_id: sessionId, hook_event_name: "PreToolUse", tool_name: "Bash", tool_use_id: "shell" }));
-  expect(JSON.stringify(shell)).toContain("src/main.ts");
+  expect(shell).toBeNull();
+  expect((await automate(root, { event: "task_end" })).message).toContain("src/main.ts");
   await fs.writeFile(path.join(root, "AGENTS.md"), "Entry point: `src/wrong.ts`.\n");
   const unknown = await runAutomationHook("claude", JSON.stringify({ cwd: root, session_id: sessionId, hook_event_name: "PreToolUse", tool_name: "mcp__custom__edit", tool_use_id: "unknown" }));
-  expect(JSON.stringify(unknown)).toContain("src/wrong.ts");
+  expect(unknown).toBeNull();
+  expect(JSON.stringify(await runAutomationHook("claude", JSON.stringify({ cwd: root, session_id: sessionId, hook_event_name: "Stop" })))).toContain("src/wrong.ts");
 }, 20000);
 
 it.each(["claude", "codex"] as const)("records %s read-only activation from a subdirectory", async host => {

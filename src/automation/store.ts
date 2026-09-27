@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { withStoreLock } from "../utils/store-lock.js";
+import { notificationStateSchema } from "./notifications.js";
 
 export const hostSchema = z.enum(["claude", "codex"]);
 export type Host = z.infer<typeof hostSchema>;
@@ -17,6 +18,7 @@ export const stateSchema = z.object({
   })),
   updatedAt: z.string(), fingerprint: z.string().nullable(),
   latest: z.string().nullable(),
+  notifications: notificationStateSchema.optional(),
   analysis: z.object({ id: z.string(), fingerprint: z.string(), completedAt: z.number(), path: z.string() }).optional(),
 });
 export type State = z.infer<typeof stateSchema>;

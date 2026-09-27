@@ -105,7 +105,8 @@ export async function runAutomationCli(argv: string[], stdin = "", io = defaultI
       const { setupStatus, summarizeActivation } = await import("../setup/status.js");
       const setup = await setupStatus(dir);
       const result = { ...await automationStatus(dir), configured: await installedAutomation(dir), setup };
-      io.out(values.json || !process.stdout.isTTY ? JSON.stringify(result, null, 2) : summarizeActivation(setup));
+      io.out(values.json || !process.stdout.isTTY ? JSON.stringify(result, null, 2)
+        : [summarizeActivation(setup), result.knowledge].filter(Boolean).join("\n\n"));
       return 0;
     }
     if (action !== "check") throw new Error("Unknown automation command: " + action);

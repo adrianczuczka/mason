@@ -42,9 +42,10 @@ it.each(["claude", "codex"] as const)("checks %s mutations in a linked worktree 
   await invoke("PreToolUse", tool);
   await fs.rename(path.join(linked, "src/main.ts"), path.join(linked, "src/renamed.ts"));
   await commitAll(linked, "rename entry");
-  expect(JSON.stringify(await invoke("PostToolUse", tool))).toContain("src/main.ts");
+  expect(await invoke("PostToolUse", tool)).toBeNull();
   const stop = await invoke("Stop");
-  expect(stop?.decision).toBe("block");
+  expect(stop?.systemMessage).toContain("src/main.ts");
+  expect(stop).not.toHaveProperty("decision");
   const status = await automationStatus(linked);
   const report = JSON.parse(await fs.readFile(path.join(linked, status.reportPath!), "utf8"));
   expect(report.root).toBe(linked);

@@ -1,3 +1,4 @@
+import { completionFindings, completionSummary, createNotificationState } from "./notifications.js";
 import { profilePhase } from "../utils/profile.js";
 import { withRepositoryInspection } from "../audit/inspection.js";
 import { recordExecution, executionStatus, failureNotifications } from "./execution.js";
@@ -272,6 +273,13 @@ export async function automate(dir: string, event: AutomationEvent) {
       const state = await loadState(ws);
       if (state.analysis?.id !== result.analysis.id) throw new Error("Automation evidence changed during publication; retry against the current inputs.");
       const report = structuredClone(result.analysis.report) as AutomationReport;
+      if (!state.notifications) {
+        // Upgrade from the last retained observation, not a fresh session's state.
+        // This keeps changes made since that observation eligible for notification.
+        const previous = state.latest ? await readStoreJson(ws.root, state.latest) : null;
+        const baseline = previous === null ? report : z.object({ findings: z.array(repairFindingSchema), head: z.string() }).parse(previous);
+        state.notifications = createNotificationState(baseline.findings as RepairFinding[], baseline.head);
+      }
       if (result.shared) report.checks = { ...report.checks, ran: [], reused: [...new Set([...report.checks.ran, ...report.checks.reused])], shared: true };
       report.reportPath = ws.directory + "/checks/" + randomUUID() + ".json";
       const now = new Date().toISOString();
@@ -308,29 +316,37 @@ export async function automate(dir: string, event: AutomationEvent) {
         report.capture = report.status !== "unavailable" && !session.coverageGaps.length &&
           (session.events.session_start || session.events.before_tool) ? "observed" : "unknown";
       }
-      const signature = hash([report.status, report.findings, report.diagnostics, report.checks.skipped]);
-      const relevant = report.findings.some(f => f.status === "unresolved" && session &&
-        (!session.initialIssues.includes(f.id) || session.initialDocs[f.original.anchor.doc] !== inputs.docs[f.original.anchor.doc]));
-      const continueOnce = event.event === "task_end" && !!session?.mutationObserved && relevant && !session.continued && !event.stopHookActive;
-      const notify = !session || newSession || signature !== session.seen || continueOnce;
-      if (session) { session.seen = signature; if (continueOnce) session.continued = true; }
-      const persistReport = !state.latest || state.fingerprint !== inputs.fingerprint || notify || event.event === "task_end";
+      // Checks and original repair baselines are independent of conversational output.
+      // Potentially mutating tool names do not establish that anything changed.
+      const selected = session && event.event === "task_end" ? completionFindings(state.notifications, report.findings) : [];
+      const diagnostics = session ? report.diagnostics.filter(d => !state.notifications!.diagnostics.includes(d)) : [];
+      if (session) state.notifications.diagnostics = [...report.diagnostics];
+      const message = !session ? summarize(report) : [
+        completionSummary(selected, report.reportPath),
+        ...(diagnostics.length ? [`Mason: verification limited. ${diagnostics.slice(0, 2).map(cleanText).join(" ")} Evidence: ${report.reportPath}.`] : []),
+      ].filter(Boolean).join("\n") || null;
+      const notify = message !== null;
+      // Completion notices are advisory; no automatic retry/repair loop.
+      const continueOnce = false;
+      const persistReport = !state.latest || state.fingerprint !== inputs.fingerprint || notify || newSession || event.event === "task_end";
       if (!persistReport) report.reportPath = state.latest!;
       state.updatedAt = now; state.fingerprint = inputs.fingerprint; state.latest = report.reportPath;
       if (persistReport) await writeStoreJson(ws.root, report.reportPath, report);
       await writeStoreJson(ws.root, ws.directory + "/state.json", state);
-      return { report, message: notify ? summarize(report) : null, continueOnce };
+      return { report, message, continueOnce };
     }));
   }));
 }
 
 /** Read-only inspection: configured hooks and observed runtime events are different facts. */
 export async function automationStatus(dir: string) {
+  const { pendingKnowledge } = await import("../decisions/pending.js");
   const ws = await profilePhase("automation.workspace", () => workspace(dir));
+  const knowledge = await pendingKnowledge(ws.root);
   const execution = await executionStatus(ws.root, ws.directory);
   const notifications = await failureNotifications(ws.root, ws.directory);
   const raw = await readStoreJson(ws.root, ws.directory + "/state.json");
-  if (raw === null) return { version: 1, status: execution.status === "not-observed" ? "not-observed" : "unavailable", root: ws.root, branch: ws.branch, baselinePaths: [], hosts: {}, execution, notifications };
+  if (raw === null) return { version: 1, status: execution.status === "not-observed" ? "not-observed" : "unavailable", root: ws.root, branch: ws.branch, baselinePaths: [], hosts: {}, execution, notifications, knowledge };
   const state = parseState(raw);
   if (state.root !== ws.root || state.gitDir !== ws.gitDir || state.branch !== ws.branch) throw new Error("Automation state belongs to another workspace.");
   const inputs = await readInputs(ws.root);
@@ -344,6 +360,7 @@ export async function automationStatus(dir: string) {
   const unfinished = ["failed", "unknown", "running"].includes(execution.status);
   return { version: 1, status: unfinished ? "unavailable" : inputs.fingerprint === state.fingerprint ? "current" : "changed", root: ws.root,
     branch: ws.branch, baselinePaths: state.baselines.map(b => b.path), reportPath: state.latest,
-    verificationStatus: unfinished ? "unavailable" : latest?.status ?? "unavailable", hosts, execution, notifications,
+    verificationStatus: unfinished ? "unavailable" : latest?.status ?? "unavailable", hosts, execution, notifications, knowledge,
+    notificationBaselineHead: state.notifications?.baselineHead ?? null,
     note: "Observed events do not prove all tool paths are intercepted. Run check to verify the retained evidence." };
 }

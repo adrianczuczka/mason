@@ -66,7 +66,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "mason_automation",
-    "Inspect installed automation and observed host events, or resume/check retained documentation repair evidence across sessions. status is read-only; check saves local baselines and verification reports without editing source or approving advisories. Returns concise results with a full report path. Works without a map.",
+    "Inspect installed automation, observed host events, pending decision records and the notification baseline, or check all retained documentation findings across sessions. status is read-only; check saves local baselines and verification reports without editing source, approving advisories or consuming pending completion notices. Returns concise results with a full report path. Works without a map.",
     {
       dir: z.string().describe("Absolute path to the project directory"),
       action: z.enum(["status", "check"]).describe("Inspect configuration and receipts, or capture/resume and verify original audit evidence."),
