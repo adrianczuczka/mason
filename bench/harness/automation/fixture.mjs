@@ -33,7 +33,7 @@ export async function fixture(root, host, arm, binary) {
   const initialDocs = {};
   for (const file of ["CLAUDE.md", "AGENTS.md"]) initialDocs[file] = digest(await fs.readFile(path.join(root, file), "utf8"));
   const protectedFiles = {};
-  for (const file of [".gitignore", ".claude/settings.json", ".codex/hooks.json", ".mason/automation.json"]) {
+  for (const file of [".gitignore", ".claude/settings.json", ".codex/hooks.json", ".mason/local/automation.json"]) {
     try { protectedFiles[file] = await fs.readFile(path.join(root, file), "utf8"); }
     catch (e) { if (e.code !== "ENOENT") throw e; }
   }
