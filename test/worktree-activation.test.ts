@@ -42,7 +42,7 @@ it.each(["claude", "codex"] as const)("checks %s mutations in a linked worktree 
   await invoke("PreToolUse", tool);
   await fs.rename(path.join(linked, "src/main.ts"), path.join(linked, "src/renamed.ts"));
   await commitAll(linked, "rename entry");
-  expect(await invoke("PostToolUse", tool)).toBeNull();
+  expect(await invoke("PostToolUse", tool)).toMatchObject({ hookSpecificOutput: { additionalContext: expect.stringContaining("src/main.ts") } });
   const stop = await invoke("Stop");
   expect(stop?.systemMessage).toContain("src/main.ts");
   expect(stop).not.toHaveProperty("decision");

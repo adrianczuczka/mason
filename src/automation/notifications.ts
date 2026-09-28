@@ -14,7 +14,6 @@ export const notificationStateSchema = z.object({
   baseline: z.record(conditionSchema),
   delivered: z.record(conditionSchema),
   cleared: z.array(z.string()),
-  diagnostics: z.array(z.string()),
 });
 export type NotificationState = z.infer<typeof notificationStateSchema>;
 
@@ -56,7 +55,7 @@ export function notificationConditions(findings: RepairFinding[]): Record<string
 }
 
 export function createNotificationState(findings: RepairFinding[], head: string): NotificationState {
-  return { version: 1, baselineHead: head, baseline: notificationConditions(findings), delivered: {}, cleared: [], diagnostics: [] };
+  return { version: 1, baselineHead: head, baseline: notificationConditions(findings), delivered: {}, cleared: [] };
 }
 
 function worsened(current: Condition, previous?: Condition): boolean {
@@ -65,7 +64,7 @@ function worsened(current: Condition, previous?: Condition): boolean {
     current.facts.some(fact => !previous.facts.includes(fact));
 }
 
-/** Called only at completion. Sessions and explicit audits never consume pending notices. */
+/** Each delivery channel owns its state; explicit audits never consume notifications. */
 export function completionFindings(state: NotificationState, findings: RepairFinding[]): RepairFinding[] {
   const current = notificationConditions(findings);
   const cleared = new Set(state.cleared);
@@ -117,7 +116,7 @@ export function completionSummary(findings: RepairFinding[], reportPath: string)
         : source.message;
       return `[${f.status === "unresolved" ? "issue" : "advisory"}] ${safe(source.anchor.doc)}: ${safe(detail)}`;
     }),
-    ...(findings.length > MAX_COMPLETION_FINDINGS ? [`${findings.length - MAX_COMPLETION_FINDINGS} more in the report; pending a later completion notice.`] : []),
+    ...(findings.length > MAX_COMPLETION_FINDINGS ? [`${findings.length - MAX_COMPLETION_FINDINGS} more in the report; pending later feedback.`] : []),
     `Evidence: ${reportPath}. Explicit audit: mason_automation(action: "check").`,
     "Inspect findings within the authorized work. Concurrent changes may also contribute; this summary does not establish who introduced them.",
   ].join("\n");

@@ -38,12 +38,17 @@ for (const host of hosts) for (const task of tasks) for (const arm of arms) {
   console.log("[" + name + "] running");
   const initial = await fixture(root, host, arm, binary);
   await fs.writeFile(path.join(output, name + "-initial.json"), JSON.stringify(initial, null, 2));
-  let session;
+  let session, continuations = null;
   if (values.validate) {
-    const fire = (event, toolId) => auto(binary, root, ["hook", "--host", host], {
-      cwd: root, session_id: name, hook_event_name: event,
-      ...(toolId ? { tool_name: toolId === "docs" && host === "codex" ? "apply_patch" : "Bash", tool_use_id: toolId } : {}),
-    });
+    continuations = 0;
+    const fire = (event, toolId) => {
+      const result = auto(binary, root, ["hook", "--host", host], {
+        cwd: root, session_id: name, hook_event_name: event,
+        ...(toolId ? { tool_name: toolId === "docs" && host === "codex" ? "apply_patch" : "Bash", tool_use_id: toolId } : {}),
+      });
+      if (result?.decision === "block") continuations++;
+      return result;
+    };
     fire("SessionStart");
     fire("PreToolUse", "source");
     if (task === "rename") {
@@ -60,14 +65,14 @@ for (const host of hosts) for (const task of tasks) for (const arm of arms) {
     session = { ok: true, kind: "deterministic-replay", costUsd: 0 };
   } else session = await runHost({ host, arm, cwd: root, prompt: task === "rename" ? PROMPT : CONTROL_PROMPT,
     transcript: path.join(output, name + "-transcript.jsonl"), timeoutMs, budgetUsd, model: values.model });
-  const evaluation = await grade(root, host, arm, binary, initial, task);
+  const evaluation = await grade(root, host, arm, binary, initial, task, continuations);
   rows.push({ host, task, arm, session, evaluation });
   await fs.writeFile(path.join(output, "report.json"), JSON.stringify({ version: 1, mode: values.validate ? "replay" : "live", hostVersions, bundleSha256, rows }, null, 2));
   console.log(`[${name}] session=${session.ok ? "complete" : "failed"} evaluation=${evaluation.pass ? "pass" : "fail"} ${evaluation.failures.join("; ")}`);
 }
 const report = ["# Mason automation evaluation", "", values.validate ? "Deterministic replay only; not agent performance evidence." : "Live ordinary requests; no Mason-specific task prompt.", "",
   "| Host | Task | Arm | Session | Evaluation | Capture before edit | Continuations |", "|---|---|---|---|---|---|---|",
-  ...rows.map(r => `| ${r.host} | ${r.task} | ${r.arm} | ${r.session.ok ? "complete" : "failed"} | ${r.evaluation.pass ? "pass" : "fail"} | ${r.evaluation.captureBeforeEdit ?? "not measured"} | ${r.evaluation.continuations} |`), "",
+  ...rows.map(r => `| ${r.host} | ${r.task} | ${r.arm} | ${r.session.ok ? "complete" : "failed"} | ${r.evaluation.pass ? "pass" : "fail"} | ${r.evaluation.captureBeforeEdit ?? "not measured"} | ${r.evaluation.continuations ?? "not measured"} |`), "",
   "One run per cell is a smoke test, not an estimate of quality improvement or false-positive rate. Inspect report.json and transcripts for failures, costs, and actual hook activation.", "",
 ].join("\n");
 await fs.writeFile(path.join(output, "report.md"), report);

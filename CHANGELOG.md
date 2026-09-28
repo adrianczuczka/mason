@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Capture supported project lessons immediately as proposals, without waiting for implementation or merge. Keep proposed remedies tentative and preserve explicit review.
-- Keep existing findings quiet during ordinary sessions and report new or worsened conditions at response completion. Preserve a branch/worktree notification baseline and delivery history across restarts, independently of original repair evidence. Explicit audits retain the full summary; notices do not request automatic repair continuations.
+- Keep existing findings quiet during ordinary sessions, deliver new or worsened findings to the assistant during the task, and report remaining conditions at response completion. Preserve a branch/worktree notification baseline and delivery history across restarts, independently of original repair evidence. Explicit audits retain the full summary; notices do not request automatic repair continuations.
+- Recover notification tracking from unreadable upgrade reports without discarding repair evidence, and deduplicate verification diagnostics independently across sessions.
 - Compare meaningful conditions rather than report metadata, and re-notify findings that recur after a confirmed resolution. Keep verification failures visible separately and retain notice overflow for later completions.
 - Expose uncommitted decision records and pending proposals, with paths and ages and oldest proposals first, in explicit automation status instead of session-start reminders.
 

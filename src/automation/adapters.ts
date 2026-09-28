@@ -22,7 +22,6 @@ export function normalizeHook(host: Host, raw: unknown): { cwd: string; name: st
   return { cwd: input.cwd, name: input.hook_event_name, readOnly, event: {
     event: lifecycle[input.hook_event_name], host, sessionId: input.session_id, toolId: input.tool_use_id,
     mutating: !!input.tool_name && !readOnly,
-    stopHookActive: input.stop_hook_active || input.permission_mode === "plan",
   } };
 }
 

@@ -16,7 +16,6 @@ export interface AutomationEvent {
   sessionId?: string;
   toolId?: string;
   mutating?: boolean;
-  stopHookActive?: boolean;
 }
 export interface AutomationReport {
   version: 1;
@@ -276,9 +275,18 @@ export async function automate(dir: string, event: AutomationEvent) {
       if (!state.notifications) {
         // Upgrade from the last retained observation, not a fresh session's state.
         // This keeps changes made since that observation eligible for notification.
-        const previous = state.latest ? await readStoreJson(ws.root, state.latest) : null;
-        const baseline = previous === null ? report : z.object({ findings: z.array(repairFindingSchema), head: z.string() }).parse(previous);
-        state.notifications = createNotificationState(baseline.findings as RepairFinding[], baseline.head);
+        let baseline = { findings: report.findings, head: report.head };
+        if (state.latest) {
+          try {
+            const previous = z.object({ findings: z.array(repairFindingSchema), head: z.string() })
+              .safeParse(await readStoreJson(ws.root, state.latest));
+            if (!previous.success) throw new Error("Unsupported saved report");
+            baseline = previous.data as typeof baseline;
+          } catch {
+            report.diagnostics.push("The saved notification baseline could not be read; initialized from the current audit. Original repair evidence is retained. Run an explicit check for all outstanding findings.");
+          }
+        }
+        state.notifications = createNotificationState(baseline.findings, baseline.head);
       }
       if (result.shared) report.checks = { ...report.checks, ran: [], reused: [...new Set([...report.checks.ran, ...report.checks.reused])], shared: true };
       report.reportPath = ws.directory + "/checks/" + randomUUID() + ".json";
@@ -291,9 +299,8 @@ export async function automate(dir: string, event: AutomationEvent) {
         const removable = keys.filter(k => !Object.keys(state.sessions[k].pending).length);
         for (const expired of removable.slice(0, Math.max(0, keys.length - 31))) delete state.sessions[expired];
         if (Object.keys(state.sessions).length >= 128) throw new Error("Too many sessions with unfinished tool calls; original evidence was retained.");
-        state.sessions[key] = { host: event.host!, seen: null, continued: false,
-          initialIssues: report.findings.filter(f => f.status === "unresolved").map(f => f.id), initialDocs: inputs.docs,
-          lastUsed: now, mutationObserved: false, pending: {}, coverageGaps: [], events: {} };
+        state.sessions[key] = { host: event.host!, notifiedDiagnostics: [],
+          lastUsed: now, pending: {}, coverageGaps: [], events: {} };
       }
       const session = key ? state.sessions[key] : null;
       if (session) {
@@ -304,7 +311,6 @@ export async function automate(dir: string, event: AutomationEvent) {
           session.pending[event.toolId] = inputs.fingerprint;
         }
         if (event.event === "after_tool" && event.mutating) {
-          session.mutationObserved = true;
           if (!event.toolId || !session.pending[event.toolId]) {
             const gap = "A tool completed without an observed matching pre-tool capture in this checkout; pre-edit coverage is unknown. The tool may have changed checkouts; captures are kept separately for each worktree.";
             if (!session.coverageGaps.includes(gap)) session.coverageGaps.push(gap);
@@ -319,21 +325,27 @@ export async function automate(dir: string, event: AutomationEvent) {
       // Checks and original repair baselines are independent of conversational output.
       // Potentially mutating tool names do not establish that anything changed.
       const selected = session && event.event === "task_end" ? completionFindings(state.notifications, report.findings) : [];
-      const diagnostics = session ? report.diagnostics.filter(d => !state.notifications!.diagnostics.includes(d)) : [];
-      if (session) state.notifications.diagnostics = [...report.diagnostics];
+      // Agent delivery and user completion summaries must not consume each other.
+      state.agentNotifications ??= { ...structuredClone(state.notifications), delivered: {} };
+      const feedback = session && ["turn_start", "after_tool"].includes(event.event)
+        ? completionFindings(state.agentNotifications, report.findings) : [];
+      const diagnostics = session ? report.diagnostics.filter(d => !session.notifiedDiagnostics.includes(d)).slice(0, 2) : [];
+      if (session) session.notifiedDiagnostics = [...new Set([
+        ...session.notifiedDiagnostics.filter(d => report.diagnostics.includes(d)), ...diagnostics,
+      ])];
       const message = !session ? summarize(report) : [
         completionSummary(selected, report.reportPath),
+        completionSummary(feedback, report.reportPath),
         ...(diagnostics.length ? [`Mason: verification limited. ${diagnostics.slice(0, 2).map(cleanText).join(" ")} Evidence: ${report.reportPath}.`] : []),
       ].filter(Boolean).join("\n") || null;
       const notify = message !== null;
       // Completion notices are advisory; no automatic retry/repair loop.
-      const continueOnce = false;
       const persistReport = !state.latest || state.fingerprint !== inputs.fingerprint || notify || newSession || event.event === "task_end";
       if (!persistReport) report.reportPath = state.latest!;
       state.updatedAt = now; state.fingerprint = inputs.fingerprint; state.latest = report.reportPath;
       if (persistReport) await writeStoreJson(ws.root, report.reportPath, report);
       await writeStoreJson(ws.root, ws.directory + "/state.json", state);
-      return { report, message, continueOnce };
+      return { report, message };
     }));
   }));
 }

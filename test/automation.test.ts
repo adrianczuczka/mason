@@ -39,7 +39,7 @@ describe("portable automation", { timeout: 20000 }, () => {
     await hook(host, "PreToolUse", tool);
     await fs.rename(path.join(root, "old-module"), path.join(root, "greeting-module"));
     const output = await hook(host, "PostToolUse", tool);
-    expect(output).toBeNull();
+    expect(output).toMatchObject({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: expect.stringContaining("old-module/index.js") } });
     expect(JSON.stringify(await hook(host, "Stop"))).toContain("old-module/index.js");
     const before = await automationStatus(root);
     expect(before.baselinePaths).toHaveLength(2);
@@ -68,7 +68,9 @@ describe("portable automation", { timeout: 20000 }, () => {
     const original = (await automationStatus(root)).baselinePaths;
     await write("CLAUDE.md", "The `old-module/index.js` module provides a greeting. Updated instructions.\n");
     const resumed = await hook("codex", "SessionStart");
-    expect(JSON.stringify(resumed)).not.toContain("awaiting review");
+    expect(resumed).toBeNull();
+    const retained = await automate(root, { event: "task_end" });
+    expect(retained.report.findings.some(f => f.original.type === "deps-changed")).toBe(true);
     expect((await automationStatus(root)).baselinePaths).toEqual(original);
     await commitAll(root, "update instructions");
     const checked = await automate(root, { event: "task_end" });

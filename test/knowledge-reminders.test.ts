@@ -83,7 +83,7 @@ it("keeps backlog quiet, reports new findings at completion, and preserves evide
   await fs.unlink(path.join(root, "src/two.ts"));
   await commitAll(root, "remove second");
   const changed = await automate(root, { ...session, event: "turn_start" });
-  expect(changed.message).toBeNull();
+  expect(changed.message).toContain("src/two.ts");
   const restarted = { ...session, sessionId: "restart" };
   expect((await automate(root, { ...restarted, event: "session_start" })).message).toBeNull();
   // An explicit audit must not swallow the queued completion notice.
@@ -166,7 +166,10 @@ it("loads existing session state without notification detail fields", async () =
   const statePath = path.join(root, ws.directory, "state.json");
   const state = JSON.parse(await fs.readFile(statePath, "utf8"));
   for (const session of Object.values(state.sessions) as any[]) {
-    delete session.notifiedFindings;
+    session.seen = "legacy-signature";
+    session.continued = true;
+    session.initialIssues = [];
+    session.initialDocs = {};
     delete session.notifiedDiagnostics;
   }
   await fs.writeFile(statePath, JSON.stringify(state));
@@ -174,7 +177,7 @@ it("loads existing session state without notification detail fields", async () =
   await fs.mkdir(path.join(root, "src"));
   await fs.writeFile(path.join(root, "README.md"), "See `src/missing.ts`.\n");
   const changed = await automate(root, { ...event, event: "turn_start" });
-  expect(changed.message).toBeNull();
+  expect(changed.message).toContain("missing.ts");
   expect((await automate(root, { ...event, event: "task_end" })).message).toContain("missing.ts");
 });
 
@@ -195,3 +198,65 @@ it("shows the oldest proposals before the display limit regardless of filename",
   expect(summary).not.toContain("lesson-0.json");
   expect(summary).toContain("1 more");
 });
+
+it("deduplicates coverage diagnostics independently across alternating sessions", async () => {
+  const a = { host: "claude" as const, sessionId: "a" };
+  const b = { host: "codex" as const, sessionId: "b" };
+  await automate(root, { ...a, event: "session_start" });
+  const gap = await automate(root, { ...a, event: "after_tool", mutating: true, toolId: "missed" });
+  expect(gap.message).toContain("verification limited");
+  for (let i = 0; i < 2; i++) {
+    await automate(root, { ...b, event: "turn_start" });
+    const repeated = await automate(root, { ...a, event: "turn_start" });
+    expect(repeated.message).toBeNull();
+    expect(repeated.report.diagnostics.join(" ")).toContain("pre-tool capture");
+    expect(repeated.report.status).toBe("incomplete");
+  }
+}, 20000);
+
+it.each(["old-schema", "broken-json", "missing"])("recovers a %s notification report without losing repair evidence", async kind => {
+  const event = { host: "claude" as const, sessionId: "upgrade", event: "session_start" as const };
+  const first = await automate(root, event);
+  const ws = await workspace(root);
+  const statePath = path.join(root, ws.directory, "state.json");
+  const state = JSON.parse(await fs.readFile(statePath, "utf8"));
+  delete state.notifications;
+  delete state.agentNotifications;
+  // Keep analysis and original baselines intact: only the notification source is bad.
+  const oldPath = path.join(root, state.latest);
+  const baselines = await Promise.all(first.report.baselinePaths.map(p => fs.readFile(path.join(root, p), "utf8")));
+  if (kind === "missing") await fs.unlink(oldPath);
+  else await fs.writeFile(oldPath, kind === "broken-json" ? "{" : JSON.stringify({ findings: [] }));
+  await fs.writeFile(statePath, JSON.stringify(state));
+  const recovered = await automate(root, event);
+  expect(recovered.message).toContain("notification baseline could not be read");
+  expect((await automate(root, { ...event, event: "task_end" })).message).toBeNull();
+  expect((await automationStatus(root)).notificationBaselineHead).toBe(recovered.report.head);
+  expect(await Promise.all(first.report.baselinePaths.map(p => fs.readFile(path.join(root, p), "utf8")))).toEqual(baselines);
+  if (kind !== "missing") expect(await fs.readFile(oldPath, "utf8")).toBe(kind === "broken-json" ? "{" : JSON.stringify({ findings: [] }));
+}, 20000);
+
+it.each(["claude", "codex"] as const)("gives %s agent feedback once without consuming completion delivery", async host => {
+  const { runAutomationHook } = await import("../src/automation/adapters.js");
+  const invoke = (hook_event_name: string, extra = {}) => runAutomationHook(host, JSON.stringify({
+    cwd: root, session_id: "feedback", hook_event_name, ...extra,
+  }));
+  await fs.mkdir(path.join(root, "src"));
+  await fs.writeFile(path.join(root, "src/main.ts"), "present");
+  await fs.writeFile(path.join(root, "README.md"), "See `src/main.ts`.\n");
+  await commitAll(root, "document file");
+  await invoke("SessionStart");
+  const tool = { tool_name: "Bash", tool_use_id: "delete" };
+  await invoke("PreToolUse", tool);
+  await fs.unlink(path.join(root, "src/main.ts"));
+  const feedback = await invoke("PostToolUse", tool);
+  expect(feedback).toMatchObject({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: expect.stringContaining("src/main.ts") } });
+  expect(await invoke("UserPromptSubmit")).toBeNull();
+  expect(await invoke("Stop")).toMatchObject({ systemMessage: expect.stringContaining("src/main.ts") });
+  expect(await invoke("Stop")).toBeNull();
+  // Fix within the task, then verify recurrence reaches the agent again.
+  await fs.writeFile(path.join(root, "src/main.ts"), "restored");
+  expect(await invoke("UserPromptSubmit")).toBeNull();
+  await fs.unlink(path.join(root, "src/main.ts"));
+  expect(await invoke("UserPromptSubmit")).toMatchObject({ hookSpecificOutput: { additionalContext: expect.stringContaining("src/main.ts") } });
+}, 20000);

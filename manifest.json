@@ -51,7 +51,7 @@
     },
     {
       "name": "mason_automation",
-      "description": "Inspect installed automation and observed host events, or resume/check retained documentation repair evidence across sessions. status is read-only; check saves local baselines and verification reports without editing source or approving advisories. Returns concise results with a full report path. Works without a map.",
+      "description": "Inspect installed automation, observed host events, pending decision records and the notification baseline, or check all retained documentation findings across sessions. status is read-only; check saves local baselines and verification reports without editing source, approving advisories or consuming pending completion notices. Returns concise results with a full report path. Works without a map.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -303,7 +303,7 @@
     },
     {
       "name": "save_decision",
-      "description": "Capture or revise a decision proposal with rationale, anchors, optional owner, sources, and a known actor. Compare matching get_context records and pending proposals before saving. When new evidence changes the same lesson's assumptions, scope, or recommended action, pass its existing id, including for accepted records. Preserve supported rationale and sources and replace obsolete instructions. Create a new record for a genuinely distinct lesson; skip unchanged restatements. No setup or map required. Writes a local record and preserves content history. Changes create a pending proposal while the last accepted revision remains operative; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede a record with an operative accepted revision; review its replacement and retire the original separately.",
+      "description": "Capture or revise a decision proposal as soon as the lesson is supported by evidence, without waiting for implementation or merge. Keep unimplemented remedies tentative. Include rationale, anchors, optional owner, sources, and a known actor. Compare matching get_context records and pending proposals before saving. When new evidence changes the same lesson's assumptions, scope, or recommended action, pass its existing id, including for accepted records. Preserve supported rationale and sources and replace obsolete instructions. Create a new record for a genuinely distinct lesson; skip unchanged restatements. No setup or map required. Writes a local record and preserves content history. Changes create a pending proposal while the last accepted revision remains operative; unchanged content does not re-verify or refresh it. Use review_decision for authorized acceptance or reaffirmation. A proposal cannot supersede a record with an operative accepted revision; review its replacement and retire the original separately.",
       "inputSchema": {
         "type": "object",
         "properties": {

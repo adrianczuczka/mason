@@ -40,7 +40,7 @@ export async function fixture(root, host, arm, binary) {
   return { head: git(root, "rev-parse", "HEAD"), initialDocs, protectedFiles };
 }
 
-export async function grade(root, host, arm, binary, initial, task = "rename") {
+export async function grade(root, host, arm, binary, initial, task = "rename", continuations = null) {
   const failures = [];
   const expectedDir = task === "rename" ? "greeting-module" : "old-module";
   const expectedGreeting = task === "rename" ? "hello" : "welcome";
@@ -61,14 +61,15 @@ export async function grade(root, host, arm, binary, initial, task = "rename") {
     if (await fs.readFile(path.join(root, file), "utf8").catch(() => null) !== text) failures.push("protected integration changed: " + file);
   }
   const status = auto(binary, root, ["status"]);
-  let captureBeforeEdit = null, observedEvents = [], continuations = 0;
+  let captureBeforeEdit = null, observedEvents = [];
   if (arm === "hooks") {
     observedEvents = status.hosts?.[host]?.observedEvents ?? [];
     if (!["session_start", "before_tool", "after_tool", "task_end"].every(e => observedEvents.includes(e))) failures.push("required host lifecycle events were not observed");
     if (status.reportPath) {
-      const state = JSON.parse(await fs.readFile(path.join(root, path.dirname(path.dirname(status.reportPath)), "state.json"), "utf8"));
-      captureBeforeEdit = Object.values(state.sessions).some(s => s.host === host && Object.entries(initial.initialDocs).every(([file, sum]) => s.initialDocs[file] === sum));
-      continuations = Object.values(state.sessions).filter(s => s.continued).length;
+      const baselines = await Promise.all(status.baselinePaths.map(async file =>
+        JSON.parse(await fs.readFile(path.join(root, file), "utf8"))));
+      captureBeforeEdit = baselines.some(({ report }) => report.headHash === initial.head &&
+        Object.keys(initial.initialDocs).every(file => report.docs.some(doc => doc.path === file && !doc.dirty)));
     }
     if (!captureBeforeEdit) failures.push("original documentation capture was not established");
     if (task === "control" && continuations) failures.push("irrelevant continuation on the control task");
