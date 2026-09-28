@@ -32,3 +32,19 @@ These are single-case integration smoke results. No live baseline-versus-instruc
 ## Release packaging check — 2026-09-06
 
 The 0.12.0 npm tarball was installed with its dependencies in a fresh temporary project. Both adapters installed their default `npx --no-install --package mason-context mason-auto` handlers. With npm offline, replaying all five lifecycle events through those exact commands passed and retained verification against the fixture's clean commit. The packaged MCP server reported version 0.12.0, exposed the same 21 tools as the bundle manifest, and returned the observed automation status. This closes the default-command packaging gap from the existing-project trial; it is deterministic command replay, not an additional live host test. The detailed check and result are retained locally under `.mason/reports/release-0.12.0/`.
+
+
+## Completion feedback smoke test — 2026-09-28
+
+The hooks-plus-instructions rename scenario passed on Claude Code 2.1.278 and Codex CLI 0.153.4 against PR #14 runtime commit `8b992d7`. Both used bundle SHA-256 `677a77f4ce076483784b18e38d7efab0c22d4d32ddf670492bd2e1cbfb250769`. Each host observed all five lifecycle events, retained original documentation evidence, preserved executable behavior, and passed the grader's final committed audit.
+
+| Host | Duration | Usage | Outcome |
+|---|---|---|---|
+| Claude Code | 77.2 seconds | $0.291695 | Rename and documentation updated together; final audit verified. |
+| Codex | 42.9 seconds | 84,671 input tokens (77,056 cached), 709 output tokens | Three retained findings resolved during the task; final audit verified. |
+
+Claude changed the source and documentation in one command, so that run did not exercise a transient finding notice. Codex renamed first and repaired the references afterward, but the requested task already required those edits. These runs show host integration and task completion; they do not establish that notices caused repairs or improve outcomes over instructions alone. Claude also misinterpreted reused checks as proof that changes had not been evaluated, despite the retained clean result; clearer cache-result explanations remain a possible follow-up.
+
+The first Codex attempt stopped before model execution because the live harness still read the former `.mason/automation.json` location. The harness now reads and protects `.mason/local/automation.json`; the subsequent Codex preflight and session passed. The two deterministic benchmark tests also passed after this harness correction. No product runtime code changed after the earlier full run of 819 passing tests and 2 skipped tests.
+
+Reports, fixtures, and transcripts are retained locally in the ignored directories `bench/harness/results/automation/pr14-20260928-claude/` and `bench/harness/results/automation/pr14-20260928-codex/`. The Claude report contains the completed first cell; the failed initial Codex preflight interrupted that matrix before its Markdown report was written. The separate Codex report records the successful rerun. Live continuation counts remain unmeasured.

@@ -60,7 +60,7 @@ describe("dependency precision and policy", () => {
     const result = await automate(root, { event: "session_start", host: "claude", sessionId: "fixture" });
     expect(result.report.status).toBe("verified");
     expect(result.report.counts["review-required"]).toBe(0);
-    expect(result.message).not.toContain("awaiting review");
+    expect(result.message).toBeNull();
   });
 
   it("includes configured guides with root dependency scope and respects Git ignores", async () => {

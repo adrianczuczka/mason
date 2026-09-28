@@ -108,12 +108,15 @@ describe("adoption workflows", { timeout: 30000 }, () => {
     expect(await hook(outside, outside, "claude", { tool_name: "Bash", tool_use_id: "rename" })).not.toContain("unavailable");
     await fs.rename(path.join(root, "src/main.ts"), path.join(root, "src/renamed.ts"));
     const checked = await hook(outside, outside, "claude", { hook_event_name: "PostToolUse", tool_name: "Bash", tool_use_id: "rename" });
-    expect(checked).toContain("src/main.ts");
+    expect(JSON.parse(checked)).toMatchObject({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: expect.stringContaining("src/main.ts") } });
     expect(checked).not.toContain("not a git repository");
     expect(await fs.readFile(path.join(root, baseline))).toEqual(original);
     const ws = await workspace(root), revision = (await loadSetup(root))!.hosts.claude!.revision;
     const observation = await readObservation(root, ws.directory, "claude", revision, version);
     expect(Object.values(observation!.sessions)[0].events).toEqual(["before_tool", "after_tool"]);
+    const completion = await hook(outside, outside, "claude", { hook_event_name: "Stop" });
+    expect(completion).toContain("src/main.ts");
+    expect(JSON.parse(completion)).not.toHaveProperty("decision");
   });
 
   it("updates the MCP reminder after explicit setup without inventing activation", async () => {

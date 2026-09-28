@@ -20,7 +20,7 @@ function inspectKnowledgePermissions(cwd) {
 /** Inspect all effective hook sources before bypassing trust in a disposable fixture. */
 export function inspectCodexHooks(cwd) {
   const configPath = path.join(cwd, ".codex/hooks.json");
-  const expected = JSON.parse(fs.readFileSync(path.join(cwd, ".mason/automation.json"), "utf8")).hosts.codex.command;
+  const expected = JSON.parse(fs.readFileSync(path.join(cwd, ".mason/local/automation.json"), "utf8")).hosts.codex.command;
   return new Promise(resolve => {
     const child = spawn("codex", ["app-server", "--stdio", "-c", trustedProject(cwd)], { cwd });
     let buffer = "", settled = false;

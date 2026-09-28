@@ -22,7 +22,6 @@ export function normalizeHook(host: Host, raw: unknown): { cwd: string; name: st
   return { cwd: input.cwd, name: input.hook_event_name, readOnly, event: {
     event: lifecycle[input.hook_event_name], host, sessionId: input.session_id, toolId: input.tool_use_id,
     mutating: !!input.tool_name && !readOnly,
-    stopHookActive: input.stop_hook_active || input.permission_mode === "plan",
   } };
 }
 
@@ -56,8 +55,8 @@ export async function runAutomationHook(host: Host, stdin: string, options: { ma
     if (warning) result.message = [result.message, warning].filter(Boolean).join("\n");
     if (!result.message) return null;
     if (name === "Stop") {
-      // A single continuation for actionable task findings; advisories never create a loop.
-      return result.continueOnce ? { decision: "block", reason: result.message } : { systemMessage: result.message };
+      // Completion feedback never starts an automatic repair loop.
+      return { systemMessage: result.message };
     }
     return { hookSpecificOutput: { hookEventName: name, additionalContext: result.message } };
   } catch (error) {

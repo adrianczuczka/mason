@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Capture supported lessons immediately as proposals, keeping unimplemented remedies tentative and acceptance subject to explicit review.
+- Give assistants new or worsened audit findings during the task and show remaining findings at response completion. Keep the existing backlog quiet; explicit checks still report it in full.
+- Preserve notification history across restarts, ignore report-only changes, and retain overflow for later notices. Notices never force another agent turn.
+- Recover notification tracking from unreadable upgrade reports while preserving repair evidence. Deduplicate verification warnings per session.
+- Show uncommitted decision records and pending proposals in explicit status, with paths, ages, and oldest proposals first.
+
 ## 0.19.1 — 2026-09-25
 
 - Match supported dependency changes to named document passages; retain unmatched manifest recency as information without a review obligation. Preserve specific findings, original baselines and prior assessments, and label historical evidence explicitly.

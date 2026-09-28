@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { withStoreLock } from "../utils/store-lock.js";
+import { notificationStateSchema } from "./notifications.js";
 
 export const hostSchema = z.enum(["claude", "codex"]);
 export type Host = z.infer<typeof hostSchema>;
@@ -9,14 +10,16 @@ export const stateSchema = z.object({
   version: z.literal(1), root: z.string(), gitDir: z.string(), branch: z.string(),
   baselines: z.array(z.object({ path: z.string(), at: z.string(), event: z.string(), fingerprint: z.string() })).max(128),
   sessions: z.record(z.object({
-    host: hostSchema, seen: z.string().nullable(), continued: z.boolean(),
-    initialIssues: z.array(z.string()), initialDocs: z.record(z.string().nullable()),
-    lastUsed: z.string(), mutationObserved: z.boolean(),
+    host: hostSchema,
+    lastUsed: z.string(),
+    notifiedDiagnostics: z.array(z.string()).default([]),
     pending: z.record(z.string()), coverageGaps: z.array(z.string()),
     events: z.record(z.object({ at: z.string(), count: z.number().int().positive() })),
   })),
   updatedAt: z.string(), fingerprint: z.string().nullable(),
   latest: z.string().nullable(),
+  notifications: notificationStateSchema.optional(),
+  agentNotifications: notificationStateSchema.optional(),
   analysis: z.object({ id: z.string(), fingerprint: z.string(), completedAt: z.number(), path: z.string() }).optional(),
 });
 export type State = z.infer<typeof stateSchema>;

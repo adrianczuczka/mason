@@ -39,7 +39,8 @@ describe("portable automation", { timeout: 20000 }, () => {
     await hook(host, "PreToolUse", tool);
     await fs.rename(path.join(root, "old-module"), path.join(root, "greeting-module"));
     const output = await hook(host, "PostToolUse", tool);
-    expect(JSON.stringify(output)).toContain("old-module/index.js");
+    expect(output).toMatchObject({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: expect.stringContaining("old-module/index.js") } });
+    expect(JSON.stringify(await hook(host, "Stop"))).toContain("old-module/index.js");
     const before = await automationStatus(root);
     expect(before.baselinePaths).toHaveLength(2);
     const saved = await Promise.all(before.baselinePaths.map(p => fs.readFile(path.join(root, p), "utf8")));
@@ -67,7 +68,9 @@ describe("portable automation", { timeout: 20000 }, () => {
     const original = (await automationStatus(root)).baselinePaths;
     await write("CLAUDE.md", "The `old-module/index.js` module provides a greeting. Updated instructions.\n");
     const resumed = await hook("codex", "SessionStart");
-    expect(JSON.stringify(resumed)).toContain("unverified");
+    expect(resumed).toBeNull();
+    const retained = await automate(root, { event: "task_end" });
+    expect(retained.report.findings.some(f => f.original.type === "deps-changed")).toBe(true);
     expect((await automationStatus(root)).baselinePaths).toEqual(original);
     await commitAll(root, "update instructions");
     const checked = await automate(root, { event: "task_end" });
@@ -113,14 +116,16 @@ describe("portable automation", { timeout: 20000 }, () => {
     } finally { await git(["worktree", "remove", "--force", worktree], root); }
   });
 
-  it.each(["claude", "codex"] as const)("continues %s once for new issues without looping or treating advisories as approval", async host => {
+  it.each(["claude", "codex"] as const)("reports %s new issues once at completion without a repair loop", async host => {
     await seed();
     await hook(host, "SessionStart");
     const tool = { tool_name: "Bash", tool_use_id: "rename" };
     await hook(host, "PreToolUse", tool);
     await fs.rename(path.join(root, "old-module"), path.join(root, "greeting-module"));
     await hook(host, "PostToolUse", tool);
-    expect(await hook(host, "Stop")).toMatchObject({ decision: "block" });
+    const completion = await hook(host, "Stop");
+    expect(completion).toHaveProperty("systemMessage");
+    expect(completion).not.toHaveProperty("decision");
     expect(await hook(host, "Stop", { stop_hook_active: true })).toBeNull();
     expect(await hook(host, "Stop")).toBeNull();
   });
