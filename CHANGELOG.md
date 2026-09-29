@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.19.2 — 2026-09-29
+
+- Use operating-system trusted certificates in standalone Mason, preserving bundled and extra certificates, so company TLS certificates work for upgrades and other requests. Report GitHub release lookup failures with their underlying error code and certificate or network guidance.
+
 - Capture supported lessons immediately as proposals, keeping unimplemented remedies tentative and acceptance subject to explicit review.
 - Give assistants new or worsened audit findings during the task and show remaining findings at response completion. Keep the existing backlog quiet; explicit checks still report it in full.
 - Preserve notification history across restarts, ignore report-only changes, and retain overflow for later notices. Notices never force another agent turn.

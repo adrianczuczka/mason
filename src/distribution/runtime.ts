@@ -8,6 +8,7 @@ import { withLock } from "../automation/store.js";
 import { readStoreJson, storePath, writeStoreJson } from "../utils/storage.js";
 import { readInstallation, standaloneLocation } from "./state.js";
 import { verifyBundle } from "./bundle.js";
+import { configureSystemTrust } from "./trust.js";
 
 const leaseSchema = z.object({ pid: z.number().int().positive(), host: z.string(), bundle: z.string().regex(/^[a-f0-9]{24}$/) });
 
@@ -15,6 +16,7 @@ const leaseSchema = z.object({ pid: z.number().int().positive(), host: z.string(
 export async function registerRuntime() {
   const location = standaloneLocation();
   if (!location) return;
+  configureSystemTrust();
   const { home, bundle } = location;
   const name = `runtimes/${randomUUID()}.json`;
   await withLock(home, ".install-lock", async () => {
