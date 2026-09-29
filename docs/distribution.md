@@ -57,6 +57,14 @@ The npm distribution and existing dedicated commands remain supported. Install g
 
 ## Automatic updates
 
+### Corporate certificates
+
+From 0.19.2, standalone Mason adds operating-system trusted certificates to Node's default certificates at startup, including company certificates installed in macOS Keychain. Existing bundled and `NODE_EXTRA_CA_CERTS` certificates remain trusted. TLS certificate verification stays enabled. Set `NODE_USE_SYSTEM_CA=0` to opt out of Mason's automatic system trust configuration. npm installations retain the certificate settings of their Node runtime.
+
+For version 0.19.1, use `NODE_USE_SYSTEM_CA=1 mason upgrade` on macOS to upgrade through a company network that requires its system certificate store. This workaround is needed once more to install 0.19.2 or later. If the company's certificate is not installed in the system store, use `NODE_EXTRA_CA_CERTS=/path/to/company-ca.pem` with a PEM certificate supplied by your IT team.
+
+### Update policy
+
 New, unpinned public standalone installations enable automatic updates and disclose the preference when installation finishes. An existing installation that predates the updater stays opted out after its first manual upgrade. Enable it with `mason updates enable`; no project setup changes are required.
 
 ```sh

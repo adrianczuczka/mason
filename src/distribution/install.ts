@@ -11,6 +11,7 @@ import { configurePath, removePath } from "./path.js";
 import type { Progress } from "../utils/progress.js";
 import { automaticUpdatesAllowed, currentInstallation, defaultHome, newerStableVersion, readInstallation, recordSchema, type InstallRecord } from "./state.js";
 import { hasRunningMcp, registerMcp } from "./sessions.js";
+import { releaseRequestError } from "./trust.js";
 
 export { defaultHome } from "./state.js";
 const shQuote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
@@ -232,7 +233,7 @@ export async function upgradeStandalone(version?: string, progress?: Progress) {
     progress?.step("Checking the latest release");
     const response = await fetch("https://github.com/adrianczuczka/mason/releases/latest", {
       method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(30000),
-    });
+    }).catch(error => { throw releaseRequestError(error); });
     if (!response.ok) throw new Error(`Latest release request failed (HTTP ${response.status}).`);
     selected = new URL(response.url).pathname.split("/").pop()?.replace(/^v/, "");
     if (!selected || !/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(selected)) throw new Error("Invalid Mason release version.");

@@ -67,3 +67,19 @@ it("does not install when latest discovery fails", async () => {
   await expect(upgradeStandalone()).rejects.toThrow("HTTP 503");
   expect(spawn).not.toHaveBeenCalled();
 });
+
+it("explains certificate failures without starting the installer", async () => {
+  vi.mocked(fetch).mockRejectedValue(new TypeError("fetch failed", {
+    cause: Object.assign(new Error("unable to get local issuer certificate"), { code: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" }),
+  }));
+  await expect(upgradeStandalone()).rejects.toThrow(/GitHub.*UNABLE_TO_GET_ISSUER_CERT_LOCALLY.*NODE_EXTRA_CA_CERTS/);
+  expect(spawn).not.toHaveBeenCalled();
+});
+
+it("distinguishes network failures from certificate failures", async () => {
+  vi.mocked(fetch).mockRejectedValue(new TypeError("fetch failed", {
+    cause: Object.assign(new Error("getaddrinfo failed"), { code: "ENOTFOUND" }),
+  }));
+  await expect(upgradeStandalone()).rejects.toThrow(/GitHub.*ENOTFOUND.*network and proxy/);
+  expect(spawn).not.toHaveBeenCalled();
+});
