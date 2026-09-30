@@ -27,7 +27,7 @@ async function fixture(version: string, healthy = true) {
     "app/package.json": JSON.stringify({ name: "mason-context", version, type: "module" }),
     "app/dist/mason.js": healthy ? `console.log(${JSON.stringify(version)});` : "process.exit(2);",
     "app/dist/mason-runtime.js": "// runtime leases",
-    "app/dist/mason-auto.js": "// automation", "app/dist/mason-mcp.js": "// MCP",
+    "app/dist/mason-mcp.js": "// MCP",
   };
   const files: Record<string, string> = { [runtime]: sha256(await fs.readFile(path.join(source, runtime))) };
   for (const [file, content] of Object.entries(texts)) { await fs.writeFile(path.join(source, file), content); files[file] = sha256(content); }

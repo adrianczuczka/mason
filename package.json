@@ -10,7 +10,6 @@
     "mason-context": "dist/mason-mcp.js",
     "mason-drift": "dist/mason-drift.js",
     "mason-audit": "dist/mason-audit.js",
-    "mason-auto": "dist/mason-auto.js",
     "mason-hook": "dist/mason-hook.js",
     "mason-review": "dist/mason-review.js"
   },
@@ -23,6 +22,7 @@
     "bench:patches": "node bench/harness/run-patches.mjs",
     "bench:validate": "node bench/harness/run-patches.mjs --validate",
     "bench:automation": "node bench/harness/run-automation.mjs",
+    "bench:behavior": "node bench/harness/run-behavior.mjs",
     "bench:knowledge": "node bench/harness/run-knowledge.mjs",
     "bench:knowledge:lifecycle": "node bench/harness/run-lifecycle.mjs",
     "bench:knowledge:upload": "node bench/harness/run-upload.mjs",

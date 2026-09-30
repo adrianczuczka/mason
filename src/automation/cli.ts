@@ -1,3 +1,4 @@
+import { configureUsefulness, rateUsefulness, usefulnessRating, usefulnessStatus, summarizeUsefulness } from "./usefulness.js";
 import { automationFailure, failureMessage } from "./execution.js";
 import { parseArgs } from "node:util";
 import { automate, automationStatus, summarize } from "./runtime.js";
@@ -21,13 +22,28 @@ Edited or ambiguous entries are retained for manual cleanup. Restart assistants
 after teardown. Run mason setup --host codex or --host claude to reconnect.
 Exit 0: complete/no-op. Exit 2: cleanup needs attention (also in dry runs).`;
 
-const USAGE = `Usage: mason-auto <setup|teardown|install|config|status|check|hook> [options]
+const STATS_USAGE = `Usage: mason stats [options]
+
+Show aggregate local observations, or inspect one session.
+
+  --enable | --disable       Enable/disable collection (setup enables it)
+  --json                     Include session/finding IDs and evidence paths
+  --dir <path>               Project directory (defaults to cwd)
+  --session <id>             Filter to one retained session
+  --session <id> --finding <id> --rating helpful|already-knew|irrelevant|deferred
+                             Supply feedback without changing audit status
+
+No uploads. Observed resolution does not establish causation.`;
+
+const USAGE = `Usage: mason auto <setup|teardown|install|config|status|check|hook|stats> [options]
 
   setup [--host claude|codex]  Connect MCP, instructions and hooks to mason on PATH; retain the initial audit
   teardown [--host claude|codex] Disconnect one host or all project hosts; retain knowledge and evidence
   install --host claude|codex  Merge lifecycle hooks into this project's host config
   config --host claude|codex   Print the host config without writing
   status                      Read configured hooks and observed runtime events
+  stats                       Aggregate local observations; --enable/--disable to configure
+                              Rate with --session <id> --finding <id> --rating helpful|already-knew|irrelevant|deferred
   check                       Capture/resume and verify retained audit evidence
   hook --host claude|codex     Handle host JSON on stdin
 
@@ -47,6 +63,7 @@ const parseCli = (argv: string[]) => parseArgs({ args: argv, allowPositionals: t
       help: { type: "boolean", short: "h" },
       "dry-run": { type: "boolean" },
       profile: { type: "boolean" },
+      enable: { type: "boolean" }, disable: { type: "boolean" }, session: { type: "string" }, finding: { type: "string" }, rating: { type: "string" },
     } });
 export function isHookCommand(argv: string[]): boolean {
   try { const parsed = parseCli(argv); return parsed.positionals[0] === "hook" && !parsed.values.help; }
@@ -62,10 +79,12 @@ export async function runAutomationCli(argv: string[], stdin = "", io = defaultI
   let progress: Progress | undefined;
   try {
     const { values, positionals } = parseCli(argv);
-    if (values.help || !positionals.length) { io.out(positionals[0] === "teardown" ? TEARDOWN_USAGE : USAGE); return 0; }
+    if (values.help || !positionals.length) { io.out(positionals[0] === "teardown" ? TEARDOWN_USAGE : positionals[0] === "stats" ? STATS_USAGE : USAGE); return 0; }
     if (positionals.length !== 1) throw new Error("Expected one command.");
     [action] = positionals;
     if (values.profile && !["check", "hook"].includes(action)) throw new Error("--profile applies only to check/hook.");
+    const trackingOptions = [values.enable, values.disable, values.session, values.finding, values.rating].some(v => v !== undefined);
+    if (trackingOptions && action !== "stats") throw new Error("Tracking options apply only to stats.");
     const measured = <T>(run: () => Promise<T>) => values.profile ? withProfile(run, io.err) : run();
     const dir = values.dir ?? process.cwd();
     if (values["dry-run"] !== undefined && action !== "teardown") throw new Error("--dry-run applies only to teardown.");
@@ -101,6 +120,21 @@ export async function runAutomationCli(argv: string[], stdin = "", io = defaultI
       return 0;
     }
     if (values.host || values.command) throw new Error("--host and --command apply only to install/config/hook.");
+    if (action === "stats") {
+      const configuring = values.enable !== undefined || values.disable !== undefined;
+      const rating = values.finding !== undefined || values.rating !== undefined;
+      if (values.enable !== undefined && values.disable !== undefined || configuring && (rating || values.session !== undefined)) throw new Error("Choose tracking configuration or session inspection/feedback separately.");
+      if (rating && (!values.session || !values.finding || !values.rating)) throw new Error("Rating requires --session, --finding, and --rating.");
+      if (configuring) {
+        const result = await configureUsefulness(dir, !!values.enable);
+        io.out(values.json ? JSON.stringify(result, null, 2) : `Local stats ${result.enabled ? "enabled" : "disabled"}. Existing observations retained. View with mason stats.`);
+        return 0;
+      }
+      if (rating) await rateUsefulness(dir, values.session!, values.finding!, usefulnessRating.parse(values.rating));
+      const result = await usefulnessStatus(dir, values.session);
+      io.out(values.json ? JSON.stringify(result, null, 2) : summarizeUsefulness(result));
+      return 0;
+    }
     if (action === "status") {
       const { setupStatus, summarizeActivation } = await import("../setup/status.js");
       const setup = await setupStatus(dir);

@@ -178,17 +178,17 @@ describe("portable automation", { timeout: 20000 }, () => {
       { type: "agent", prompt: "Review the task evidence." },
     ] }] } };
     await write(".claude/settings.json", JSON.stringify(existing));
-    await installAutomation(root, "claude", "node /installed/mason-auto.js");
+    await installAutomation(root, "claude", "node /installed/mason.js auto");
     const first = await fs.readFile(path.join(root, ".claude/settings.json"), "utf8");
-    await installAutomation(root, "claude", "node /installed/mason-auto.js");
+    await installAutomation(root, "claude", "node /installed/mason.js auto");
     expect(await fs.readFile(path.join(root, ".claude/settings.json"), "utf8")).toBe(first);
     expect(JSON.parse(first).permissions).toEqual(existing.permissions);
     expect(JSON.parse(first).hooks.Stop[0]).toEqual(existing.hooks.Stop[0]);
-    await installAutomation(root, "claude", "node /updated/mason-auto.js");
+    await installAutomation(root, "claude", "node /updated/mason.js auto");
     const updated = JSON.parse(await fs.readFile(path.join(root, ".claude/settings.json"), "utf8"));
     expect(updated.hooks.Stop).toHaveLength(2);
     expect(updated.hooks.Stop[0]).toEqual(existing.hooks.Stop[0]);
-    expect(updated.hooks.Stop[1].hooks[0].command).toBe("node /updated/mason-auto.js hook --host claude");
+    expect(updated.hooks.Stop[1].hooks[0].command).toBe("node /updated/mason.js auto hook --host claude");
     await installAutomation(root, "codex");
     expect(await installedAutomation(root)).toMatchObject({ claude: { status: "configured" }, codex: { status: "configured" } });
     expect((await automationStatus(root)).status).toBe("not-observed");

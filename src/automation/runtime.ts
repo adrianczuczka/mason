@@ -1,3 +1,4 @@
+import { observeUsefulness } from "./usefulness.js";
 import { completionFindings, completionSummary, createNotificationState } from "./notifications.js";
 import { profilePhase } from "../utils/profile.js";
 import { withRepositoryInspection } from "../audit/inspection.js";
@@ -16,6 +17,7 @@ export interface AutomationEvent {
   sessionId?: string;
   toolId?: string;
   mutating?: boolean;
+  retrievedDecisionIds?: string[];
 }
 export interface AutomationReport {
   version: 1;
@@ -74,7 +76,7 @@ export function summarize(report: AutomationReport): string {
     }),
     ...(open.length > 4 ? [`${open.length - 4} more findings in the report.`] : []),
     ...report.diagnostics.slice(0, 2).map(cleanText),
-    `Evidence: ${report.reportPath}. Resume/check with mason_automation(action: "check") or mason-auto check.`,
+    `Evidence: ${report.reportPath}. Resume/check with mason_automation(action: "check") or mason check.`,
     "Keep original evidence. Address findings relevant to the authorized task; report unrelated findings with a brief scope reason and suggested follow-up. Use review_advisory for authorized assessments; otherwise leave advisories open without approving them.",
   ].join("\n");
 }
@@ -259,7 +261,7 @@ async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, st
 export async function automate(dir: string, event: AutomationEvent) {
   const startedAt = Date.now();
   const ws = await profilePhase("automation.workspace", () => workspace(dir));
-  return recordExecution(ws.root, ws.directory, event.event, () => withRepositoryInspection(ws.root, async () => {
+  const output = await recordExecution(ws.root, ws.directory, event.event, () => withRepositoryInspection(ws.root, async () => {
     const inputs = await readInputs(ws.root);
     const result = await profilePhase("automation.analysis", () => analyze(ws, inputs, event, startedAt));
     if (result.shared) {
@@ -345,9 +347,16 @@ export async function automate(dir: string, event: AutomationEvent) {
       state.updatedAt = now; state.fingerprint = inputs.fingerprint; state.latest = report.reportPath;
       if (persistReport) await writeStoreJson(ws.root, report.reportPath, report);
       await writeStoreJson(ws.root, ws.directory + "/state.json", state);
-      return { report, message };
+      return { report, message, observedAt: now, delivery: { agent: feedback.slice(0, 4), completion: selected.slice(0, 4) } };
     }));
   }));
+  try {
+    await observeUsefulness(ws.root, event, output.report, output.delivery.agent, output.delivery.completion, Date.now() - startedAt, output.observedAt);
+  } catch {
+    // Optional observations must never suppress the audit result or existing feedback.
+    if (event.event === "task_end") output.message = [output.message, "Mason: local usefulness tracking unavailable; inspect mason stats --json."].filter(Boolean).join("\n");
+  }
+  return output;
 }
 
 /** Read-only inspection: configured hooks and observed runtime events are different facts. */

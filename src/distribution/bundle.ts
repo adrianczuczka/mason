@@ -21,7 +21,7 @@ export async function readBundle(root: string) {
       throw new Error("Unsafe path in Mason bundle: " + file);
     }
   }
-  for (const required of [windows ? "node.exe" : "node", "app/package.json", "app/dist/mason.js", "app/dist/mason-auto.js", "app/dist/mason-mcp.js"]) {
+  for (const required of [windows ? "node.exe" : "node", "app/package.json", "app/dist/mason.js", "app/dist/mason-mcp.js"]) {
     if (!manifest.files[required]) throw new Error("Incomplete Mason bundle: " + required);
   }
   return { manifest, manifestHash: sha256(bytes) };

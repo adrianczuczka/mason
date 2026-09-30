@@ -66,7 +66,7 @@ Mason provides recorded decisions and file impact over MCP. A concept map is opt
 
 - For a dependency advisory, \`review_advisory(action: "dismiss", baselinePath, findingId, reasonCode, note)\` records a one-step dismissal without reviewer or token. Use \`no-dependency-claims\` for a document with no dependency claims (reopens on document content changes), or \`unrelated-manifest-change\` for reviewed changes that do not affect its guidance (reopens on document or manifest changes). Keep the relevant scope committed; commit the dismissal to share it. This never approves a decision.
 
-- When Mason automation is installed, use \`mason_automation(action: "status")\` to inspect configured hooks and observed events, and \`mason_automation(action: "check")\` to resume its retained repair evidence. CLI fallback: \`mason-auto status\` / \`mason-auto check\`. Preserve existing baselines across sessions. Automatic checks do not authorize unrelated repairs or approve advisories.
+- When Mason automation is installed, use \`mason_automation(action: "status")\` to inspect configured hooks and observed events, and \`mason_automation(action: "check")\` to resume its retained repair evidence. CLI fallback: \`mason status\` / \`mason check\`. Preserve existing baselines across sessions. Automatic checks do not authorize unrelated repairs or approve advisories.
 
 Inspect source for what the retrieved context does not answer.
 <!-- mason:end -->`;
@@ -74,8 +74,8 @@ Inspect source for what the retrieved context does not answer.
 export type InitMode = "quickstart" | "map" | "setup";
 
 const ASSISTANT_SETUP = `UNIFIED SETUP
-When the user requests Mason setup, call mason_init again with mode: "setup" and host: "codex" or "claude" for the assistant being configured. This uses the same engine as mason-auto setup: retain the initial audit before instruction edits, use the installed mason command on PATH, merge project MCP configuration and hooks, update marker-delimited instructions and Git ignore rules, and record setup. A concept map is optional.
-If the user only requested inspection or review, report findings without running setup. The setup result distinguishes configured from observed activation. Explain the host's native trust step and request a new session; never trust hooks on the user's behalf or claim activation from generated configuration alone. After a normal task finishes, mason_automation(action: "status") or mason-auto status reports observed context use and hook events. Existing findings remain reviewable; setup does not approve advisories or manufacture decisions.
+When the user requests Mason setup, call mason_init again with mode: "setup" and host: "codex" or "claude" for the assistant being configured. This uses the same engine as mason setup: retain the initial audit before instruction edits, use the installed mason command on PATH, merge project MCP configuration and hooks, update marker-delimited instructions and Git ignore rules, and record setup. A concept map is optional.
+If the user only requested inspection or review, report findings without running setup. The setup result distinguishes configured from observed activation. Explain the host's native trust step and request a new session; never trust hooks on the user's behalf or claim activation from generated configuration alone. After a normal task finishes, mason_automation(action: "status") or mason status reports observed context use and hook events. Existing findings remain reviewable; setup does not approve advisories or manufacture decisions.
 
 The managed project guidance is:
 ${CLAUDE_MD_SECTION}`;

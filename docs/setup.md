@@ -6,7 +6,7 @@ Install the [standalone CLI](distribution.md) to use Mason without system Node o
 
 - [Unified project setup](#unified-project-setup)
 - [Disconnect a project](#disconnect-a-project)
-- [Automatic documentation checks (mason-auto)](#automatic-documentation-checks-mason-auto)
+- [Automatic documentation checks (mason)](#automatic-documentation-checks-mason)
 - [Decision injection (mason-hook)](#decision-injection-mason-hook)
 - [Other clients](#other-clients)
 - [Upgrading from earlier versions](#upgrading-from-earlier-versions)
@@ -80,7 +80,33 @@ Use `--json` for a structured list of planned or applied `changes` and retained-
 
 To reconnect, run `mason setup --host codex` or `--host claude`. To remove the standalone application as well, run `mason uninstall` after tearing down the projects you want to disconnect. For an npm installation, use `npm uninstall -g mason-context` instead.
 
-## Automatic documentation checks (mason-auto)
+## Local usefulness tracking
+
+`mason setup` enables local stats automatically and explains where they are stored. An explicit `mason stats --disable` choice survives repeated setup and adding another host. Running `mason stats` only reads observations; it does not enable collection. For an existing checkout, rerun setup or use `--enable`.
+
+```sh
+mason stats
+mason stats --json
+mason stats --session <session-id>
+mason stats --disable
+```
+
+Tracking uses installed lifecycle hooks. `mason stats` shows aggregate counts for retained sessions in the current branch; `--session <id>` shows one session and its findings. `--json` includes the aggregate summary and session details. Counts are summed per session, so the same finding or record can appear in more than one session. Retrieval coverage distinguishes sessions with observed responses from unknown activity. The summary shows distinct findings emitted to the agent or completion channel, their latest observed check status, supplied feedback, decision records returned by observed `get_context` calls, and time spent in successful automation observations. Existing quiet backlog and undisplayed notification overflow do not count as delivered findings. Missing evidence is unknown, not resolved; review-required advisories remain open. Summaries are available on demand and do not add another automatic completion notice.
+
+Add an optional rating using the session and finding IDs from `--json`; the session's `reportPath` links the IDs to audit evidence:
+
+```sh
+mason stats --session <session-id> --finding <finding-id> --rating helpful
+# Other ratings: already-knew, irrelevant, deferred
+```
+
+Ratings are supplied feedback, not authenticated human judgments. A deferred rating does not close an audit finding. A repair after a notice is an observation, not proof that Mason caused it. Retrieval counts require a successful `mcp__mason__get_context` response exposed by the host's PostToolUse hook. Other tool names, missing receipts, and unsupported response shapes are not inferred from calls. Returned records do not establish that a lesson was applied or reused in a later session. Model-token cost is not available from these hooks. Timing includes audit orchestration and cache reuse, but excludes optional tracking writes, read-only tool observations, and failed checks.
+
+Data stays under `.mason/local/usefulness/`, with its own Git ignore rule. It contains hashed session and decision IDs, finding IDs/types/statuses, channels, ratings, timestamps, counts, timing, and report paths—not prompts, tool arguments, decision bodies, or source contents. Nothing is uploaded. Each branch/worktree retains up to 50 sessions and each session up to 200 findings and 200 returned decision IDs; truncated sessions are marked. Disabling stops collection and retains observations. To erase them, disable tracking and remove `.mason/local/usefulness/` while no Mason process is writing. Removing that directory also clears the preference, so a later setup enables stats again. Historical summaries describe the last observed check, not a fresh verification.
+
+Tracking errors do not suppress audits, existing findings, or setup. Setup reports unavailable stats and preserves unreadable preferences. `mason stats --disable` can reset a malformed preference even when observation files are unreadable; it retains those files. Delayed delivery records use newer retained audit evidence, or report an unknown outcome if that evidence is unavailable. At task end, unavailable tracking produces a short diagnostic; `mason stats --json` reports invalid storage explicitly.
+
+## Automatic documentation checks (mason)
 
 Mason can preserve documentation audit evidence and resume unfinished repairs through Claude Code or Codex lifecycle hooks. A shared engine owns the evidence, verification, and cache; each host adapter handles its event format. No concept map or model call is required for the checks.
 
@@ -88,9 +114,9 @@ Unified setup already installs these hooks. For manual npm hook installation (av
 
 ```bash
 npm install -D mason-context@0.16.2
-npx mason-auto install --host claude   # Claude Code
-npx mason-auto install --host codex    # Codex; review/trust the hooks using /hooks
-npx mason-auto status
+mason auto install --host claude   # Claude Code
+mason auto install --host codex    # Codex; review/trust the hooks using /hooks
+mason status
 ```
 
 Install only the adapters you use. Installation merges the project's `.claude/settings.json` or `.codex/hooks.json`, preserves other hooks/settings, and records its own handler in ignored `.mason/local/automation.json`. Repeating installation updates only those handlers. Commit the host configuration. Installation adds ignore rules for `.mason/local/` and `.mason/reports/`; shared configuration and decision records remain available to Git. Start a new assistant session after installation. The default handler uses the locally installed package with `npx --no-install`; `--command` accepts an executable prefix for an existing installation.
@@ -101,11 +127,11 @@ When upgrading an existing MCP setup, update any separately pinned server comman
 
 Mason checks documentation as you work. It gives the assistant new or worsened findings after tool calls and when you submit a prompt. At the end of a response, a separate notice shows you any remaining new findings. Existing findings stay quiet, and notices never force the assistant to continue.
 
-Run `mason-auto check` to see all outstanding findings, including the quiet backlog. Exit codes are 0 for verified checks, 1 for outstanding issues, and 2 for incomplete or unavailable verification. A quiet completion notice does not mean the audit passed.
+Run `mason check` to see all outstanding findings, including the quiet backlog. Exit codes are 0 for verified checks, 1 for outstanding issues, and 2 for incomplete or unavailable verification. A quiet completion notice does not mean the audit passed.
 
 Mason compares the underlying condition, so changes to wording, line numbers, or commit metadata do not repeat a notice. A finding can notify again if it worsens or returns after a confirmed resolution. Delivery history survives restarts and is shared within the branch/worktree. Assistant feedback and user notices have separate histories; explicit checks consume neither. Each notice shows up to four findings, with overflow kept for later delivery.
 
-Use `mason-auto status` or `mason_automation(action: "status")` to review uncommitted decision records and pending proposals, with the oldest proposals first. Assistants retrieve relevant proposals through `get_context`. Proposals require explicit review before acceptance; their presence alone does not fail a check.
+Use `mason status` or `mason_automation(action: "status")` to review uncommitted decision records and pending proposals, with the oldest proposals first. Assistants retrieve relevant proposals through `get_context`. Proposals require explicit review before acceptance; their presence alone does not fail a check.
 
 Checks preserve original repair evidence before later edits can obscure it. Known read-only tools record activity without rescanning. If an old notification report cannot be loaded, Mason starts notification tracking from the current audit and reports the recovery; original repair evidence remains intact. Verification warnings are deduplicated per session.
 
@@ -116,18 +142,18 @@ Unified setup generates an inline availability guard. Hooks stay quiet if Mason 
 Checks reuse cached results only when their dependencies match. Documentation and history, module candidates, documented workspace counts, command manifests, and decision evidence have separate invalidation keys. Unrelated generated build output does not invalidate these checks; explicitly documented generated files and workspace members still do. Changes to a dirty manifest invalidate its checks even when Git's status text is unchanged. Skipped checks are retried. Cache corruption causes recomputation; invalid original baselines or active state remain errors. Concurrent events serialize writes, and interrupted local writers' locks are recovered only when their process is gone. New reports are written atomically. Unchanged tool events reuse the existing full report.
 
 ```bash
-npx mason-auto check --json   # Capture/resume the active evidence and verify it
+mason check --json   # Capture/resume the active evidence and verify it
 # After any final documentation commit:
-npx mason-auto check
+mason check
 ```
 
 The equivalent MCP operation is `mason_automation(action: "check")`. Its response is concise and links the full local report. `status` is read-only; `check` writes evidence. Exit codes are 0 for verified checks, 1 for unresolved issues, and 2 for incomplete/unavailable checks. When only advisory assessments remain, the human summary says “advisories awaiting review”; the JSON status and exit code remain `incomplete` and 2. Summaries use current finding evidence when available and identify historical conditions that no longer appear in the current check. Original `mason_repair` baselines remain separately verifiable by their paths. Hook errors are visible and advisory; exit 0 from a hook means the host can continue, not that verification passed. CLI JSON and MCP failures include a category (`inputs-changed`, `storage-full`, `busy`, `invalid-input`, `history-unavailable`, `invalid-evidence`, `io-error`, or `internal`), retryability, and whether a failure receipt was saved. Changing inputs require another check on a stable checkout; they never produce a cached pass.
 
 `status` includes a bounded history of the latest 32 execution attempts, their duration after lock acquisition, and the number of older receipts omitted. A completed attempt includes its verification outcome. A started attempt without a matching live local lock owner is unknown, and a failed or unfinished latest attempt prevents an older report from being presented as current verification. Storage exhaustion can prevent even a failure receipt from being saved; the caller reports that explicitly. Receipts contain no prompts or tool arguments. The existing `mason-hook` decision injector keeps its previous behavior.
 
-Evidence is local to the worktree and branch. Switching assistants in that worktree resumes the same repair; another worktree or branch has separate state. Detached-HEAD commits retain evidence; moving that checkout to a different history requires inspection. Hooks select the active checkout from the event payload’s working directory, including subdirectories and linked worktrees. A linked worktree without a local setup record can inherit host activation from the primary checkout identified by Git’s common directory; it never borrows the primary checkout’s audit evidence or ownership records. Status includes `activationRoot` when setup is present. If Git cannot identify a primary checkout (for example, a bare repository or separately stored metadata without a recorded checkout location), run setup in the linked worktree explicitly. If a tool changes checkouts between its pre- and post-hooks, pairing remains unknown and the diagnostic says so; this does not prevent subsequent worktree checks. For managed hooks installed by setup, an event outside Git can use the launch directory or Claude's `CLAUDE_PROJECT_DIR` as a fallback only when there is one unambiguous checkout. Conflicting roots, unavailable project history, or multiple worktrees remain unverified: return to the intended checkout and run `mason check`. Standalone `mason-auto hook` calls retain their explicit payload directory. Claude's project environment variable stays at the original checkout after entering a worktree, so it cannot safely override the payload. See the [Claude hook directory contract](https://code.claude.com/docs/en/hooks).
+Evidence is local to the worktree and branch. Switching assistants in that worktree resumes the same repair; another worktree or branch has separate state. Detached-HEAD commits retain evidence; moving that checkout to a different history requires inspection. Hooks select the active checkout from the event payload’s working directory, including subdirectories and linked worktrees. A linked worktree without a local setup record can inherit host activation from the primary checkout identified by Git’s common directory; it never borrows the primary checkout’s audit evidence or ownership records. Status includes `activationRoot` when setup is present. If Git cannot identify a primary checkout (for example, a bare repository or separately stored metadata without a recorded checkout location), run setup in the linked worktree explicitly. If a tool changes checkouts between its pre- and post-hooks, pairing remains unknown and the diagnostic says so; this does not prevent subsequent worktree checks. For managed hooks installed by setup, an event outside Git can use the launch directory or Claude's `CLAUDE_PROJECT_DIR` as a fallback only when there is one unambiguous checkout. Conflicting roots, unavailable project history, or multiple worktrees remain unverified: return to the intended checkout and run `mason check`. Standalone `mason auto hook` calls retain their explicit payload directory. Claude's project environment variable stays at the original checkout after entering a worktree, so it cannot safely override the payload. See the [Claude hook directory contract](https://code.claude.com/docs/en/hooks).
 
-Reports are not automatically transferred to CI. CI can call `mason-auto check` on retained local artifacts, or `mason-audit --verify-repair <baseline>` after restoring the original artifacts at their recorded root. A fresh checkout cannot reconstruct missing pre-edit evidence. Audits discover README and instruction files at any depth, preserving filename case and respecting exclusions; see [audit scope](checks.md#context-file-audit). Setup continues to write only its host instruction entry points. References into `.git/` are reported as skipped Git metadata, whose layout varies between checkouts; they do not abort setup or count as verified repository references.
+Reports are not automatically transferred to CI. CI can call `mason check` on retained local artifacts, or `mason-audit --verify-repair <baseline>` after restoring the original artifacts at their recorded root. A fresh checkout cannot reconstruct missing pre-edit evidence. Audits discover README and instruction files at any depth, preserving filename case and respecting exclusions; see [audit scope](checks.md#context-file-audit). Setup continues to write only its host instruction entry points. References into `.git/` are reported as skipped Git metadata, whose layout varies between checkouts; they do not abort setup or count as verified repository references.
 
 Automation reads each check's dependencies rather than inventorying every file and directory. Module discovery uses Git's tracked and non-ignored source paths, then applies Mason's built-in exclusions and `.mason/config.json` `ignore` patterns. Tracked source remains visible under Git ignore rules. Explicit documentation references and workspace declarations still observe ignored paths; exclusions cannot silently remove those claims from verification. Workspace command discovery runs only when a documented script is absent from the root manifest.
 
@@ -241,4 +267,4 @@ The pre-v0.4.0 LLM-driven CLI workflows were removed. MCP tools handle assistant
 | `mason impact File.kt` | Ask your assistant: *"what would changing File.kt affect?"* — it calls `get_impact`. |
 | `mason snapshot --install-hook` | Removed. The map auto-refreshes when the assistant detects stale state. |
 
-The package provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-auto`, `mason-hook`, and `mason-review`. Versions through 0.13.0 use `mason` as a migration shim. From 0.14.0, `mason` provides `setup`, `status`, `check`, `audit`, `review`, `drift`, and `mcp`, while retaining the dedicated commands. The removed pre-0.4 workflows stay removed.
+Use `mason` for `setup`, `teardown`, `status`, `check`, `stats`, `audit`, `review`, `drift`, and `mcp`. Hook configuration and execution use `mason auto`. The package also provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-hook`, and `mason-review`. The removed pre-0.4 workflows stay removed.

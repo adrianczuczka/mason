@@ -62,8 +62,8 @@ async function installLocked(root: string, host: Host, command?: string) {
   return { version: 1, host, configPath: file, status: "configured", command: newCommand,
     events: HOOK_EVENTS,
     next: host === "codex"
-      ? "Review/trust these hooks using Codex /hooks and start a new session. mason-auto status reports observed events separately from configuration."
-      : "Start a new Claude Code session. mason-auto status reports observed events separately from configuration.",
+      ? "Review/trust these hooks using Codex /hooks and start a new session. mason status reports observed events separately from configuration."
+      : "Start a new Claude Code session. mason status reports observed events separately from configuration.",
     note: "Install mason-context in the project before using the default command. Ignore .mason/reports/ to keep local evidence out of commits. Hooks preserve evidence and suggest scoped repairs; they do not approve edits or decisions." };
 }
 

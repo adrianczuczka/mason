@@ -74,7 +74,7 @@ it("shares a slow check across parallel MCP hooks while read observations remain
 
 it("preserves separate process receipts and pre/post pairs during a hook burst", async () => {
   const invoke = (name: string, id: string) => new Promise<string>((resolve, reject) => {
-    const child = spawn(process.execPath, [path.resolve("dist/mason-auto.js"), "hook", "--host", "claude"], { cwd: root, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(process.execPath, [path.resolve("dist/mason.js"), "auto", "hook", "--host", "claude"], { cwd: root, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "", stderr = "";
     child.stdout.on("data", chunk => { stdout += chunk; });
     child.stderr.on("data", chunk => { stderr += chunk; });

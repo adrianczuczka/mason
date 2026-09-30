@@ -14,7 +14,6 @@ async function fixture(version = "1.0.0") {
     [process.platform === "win32" ? "node.exe" : "node"]: "fixture runtime",
     "app/package.json": JSON.stringify({ name: "mason-context", version }),
     "app/dist/mason.js": "fixture CLI " + version,
-    "app/dist/mason-auto.js": "fixture automation",
     "app/dist/mason-mcp.js": "fixture MCP",
     "app/node_modules/example/index.js": "dependency",
   };

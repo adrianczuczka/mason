@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Keep optional stats failures from blocking setup, allow disabling with damaged stats storage, and preserve newer audit outcomes when delivery observations arrive late.
+
+- Remove the `mason-auto` executable. Use `mason setup`, `mason status`, `mason check`, and `mason stats`; hook configuration and execution use `mason auto`.
+
+- Enable local stats during setup, preserving explicit opt-outs, with summaries for hook finding delivery, observed resolution, returned decision IDs, automation timing, and supplied feedback ratings. Keep uncertain outcomes explicit; no prompts or source contents are stored or uploaded.
+
 ## 0.19.2 — 2026-09-29
 
 - Use operating-system trusted certificates in standalone Mason, preserving bundled and extra certificates, so company TLS certificates work for upgrades and other requests. Report GitHub release lookup failures with their underlying error code and certificate or network guidance.

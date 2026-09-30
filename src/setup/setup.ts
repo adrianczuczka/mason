@@ -1,3 +1,4 @@
+import { configureUsefulness } from "../automation/usefulness.js";
 import { randomUUID } from "node:crypto";
 import { hash, workspace } from "../automation/evidence.js";
 import { withLock, type Host } from "../automation/store.js";
@@ -73,11 +74,15 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
     options.progress?.step("Checking configuration and retained findings");
     const checked = await automate(ws.root, { event: "turn_start" });
     const configured = await inspectHostConfig(ws.root, host, undefined);
+    const stats = await configureUsefulness(ws.root, true, { onlyIfUnset: true }).catch(() => ({
+      enabled: null, storage: ".mason/local/usefulness",
+      note: "Local stats unavailable. Inspect mason stats --json, or use mason stats --disable to reset the preference. Existing observations were retained.",
+    }));
     await writeStoreJson(ws.root, receiptPath, { version: 1, host, status: "configured", initialReportPath,
       initialBaselinePaths, root: ws.root, revision, configuredAt: new Date().toISOString() });
     return { version: 1, action: "setup", status: "configured", host, root: ws.root,
       runtime: { kind: "global", command: "mason", version: installed.version }, changedFiles, initialReportPath, findings, reportPath: checked.report.reportPath,
-      activation: await setupStatus(ws.root),
+      activation: await setupStatus(ws.root), stats,
       next: configured.disabled || configured.mcpDisabled ? "Mason hooks or MCP are disabled in project configuration. Review that setting before activation."
         : host === "codex" ? "Review/trust this project's MCP configuration and hooks in Codex (/hooks in the CLI), then start a new session and give it a normal task."
         : "Approve the project MCP server in Claude Code, then start a new session and give it a normal task.",
@@ -91,12 +96,15 @@ export function summarizeSetup(result: Awaited<ReturnType<typeof setupProject>>)
     "  MCP server and lifecycle hooks use mason from PATH.",
     "  Project instructions updated; original audit evidence retained.",
     `  ${result.changedFiles.length} files changed.`,
+    result.stats.enabled === null ? result.stats.note : result.stats.enabled
+      ? "Local stats enabled: metadata stays in .mason/local/usefulness/; nothing is uploaded. View with mason stats; disable with mason stats --disable."
+      : "Local stats remain disabled by your saved preference. Enable with mason stats --enable.",
     `Initial audit: ${audit.status}${"counts" in audit ? `; ${audit.counts.issues} issues, ${audit.counts.advisories + audit.counts.suppressedAdvisories} advisories` : ""}.`,
     ...("issues" in audit ? audit.issues.slice(0, 3).map(f => "  " + f.message) : []),
     `Original evidence: ${result.initialReportPath}`,
     "Activation: " + result.activation.status + ".",
     result.next,
     "If the assistant cannot find mason, restart the desktop app so it picks up PATH.",
-    "After the task finishes, run mason-auto status. Configuration alone does not establish activation.",
+    "After the task finishes, run mason status. Configuration alone does not establish activation.",
   ].join("\n");
 }

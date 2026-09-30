@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse } from "smol-toml";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { setupProject } from "../src/setup/setup.js";
+import { configureUsefulness, usefulnessStatus } from "../src/automation/usefulness.js";
+import { setupProject, summarizeSetup } from "../src/setup/setup.js";
 import { setupStatus } from "../src/setup/status.js";
 import { observeActivation, observationPath } from "../src/setup/observations.js";
 import { loadSetup } from "../src/setup/model.js";
@@ -48,6 +49,32 @@ beforeEach(async () => {
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); await fs.rm(root, { recursive: true, force: true }); }, 120000);
 
 describe("unified setup", { timeout: 20000 }, () => {
+  it("completes setup and retries when optional stats configuration is corrupt", async () => {
+    await write(".mason/local/usefulness/config.json", "broken-json");
+    for (const host of ["codex", "claude"] as const) {
+      const result = await setupProject(root, { host });
+      expect(result.status).toBe("configured");
+      expect(result.stats.enabled).toBeNull();
+      expect(summarizeSetup(result)).toContain("Local stats unavailable");
+      expect(result.activation.status).not.toBe("attention");
+      expect(await fs.readFile(path.join(root, ".mason/local/usefulness/config.json"), "utf8")).toBe("broken-json");
+    }
+  });
+
+  it("enables local stats during setup and preserves an explicit disable across hosts and repeated setup", async () => {
+    expect((await usefulnessStatus(root)).enabled).toBe(false);
+    const result = await setupProject(root, { host: "codex" });
+    expect(result.stats.enabled).toBe(true);
+    expect(summarizeSetup(result)).toContain("Local stats enabled");
+    expect(summarizeSetup(result)).toContain("nothing is uploaded");
+    expect((await usefulnessStatus(root)).sessions).toEqual([]);
+    await configureUsefulness(root, false);
+    const repeated = await setupProject(root, { host: "claude" });
+    expect(repeated.stats.enabled).toBe(false);
+    expect(summarizeSetup(repeated)).toContain("remain disabled");
+    expect((await setupProject(root, { host: "codex" })).stats.enabled).toBe(false);
+  });
+
   it("sets up with over 100,000 ignored generated paths and retains evidence for a later source change", async () => {
     await write(".gitignore", "artifacts/\n.mason/reports/\n");
     await commitAll(root, "ignore generated artifacts");

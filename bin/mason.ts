@@ -14,6 +14,8 @@ Usage: mason <command> [options]
   setup --host codex|claude   Connect this project to your assistant
   teardown [--host codex|claude] Disconnect project integrations; retain knowledge
   status                     Show configuration, observed use and verification
+  stats                      Show local stats and feedback
+  auto                       Configure and run lifecycle hooks
   check                      Resume and verify retained documentation findings
   audit                      Audit project instructions
   review --base <ref>         Review committed changes
@@ -25,7 +27,7 @@ Usage: mason <command> [options]
   rollback                   Restore and pin the previous standalone version
   uninstall                  Remove that installation; retain project data
 
-Use mason <command> --help for options. npm users can keep using mason-auto,
+Use mason <command> --help for options. npm users can also use
 mason-audit, mason-review, mason-drift, mason-hook and mason-mcp.`;
 
 let progress: Progress | undefined;
@@ -110,7 +112,7 @@ try {
       }
       else console.log((process.platform === "win32" ? "Finishing installation cleanup after runtime exit: " : "Removed standalone installation: ") + await uninstallStandalone() + ". Project configuration and knowledge were retained. Reinstall Mason to use its integrations.");
     }
-  } else if (["setup", "teardown", "status", "check", "auto"].includes(command)) {
+  } else if (["setup", "teardown", "status", "check", "stats", "auto"].includes(command)) {
     const forwarded = command === "auto" ? args : [command, ...args];
     let input = "";
     if (isHookCommand(forwarded) && !process.stdin.isTTY) for await (const chunk of process.stdin) {

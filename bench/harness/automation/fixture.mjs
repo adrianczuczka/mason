@@ -10,7 +10,7 @@ export const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 export const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 export function auto(binary, cwd, args, input) {
   try {
-    const output = execFileSync(process.execPath, [binary, ...args], { cwd, input: input ? JSON.stringify(input) : undefined, encoding: "utf8" });
+    const output = execFileSync(process.execPath, [binary, "auto", ...args], { cwd, input: input ? JSON.stringify(input) : undefined, encoding: "utf8" });
     return output.trim() ? JSON.parse(output) : null;
   }
   catch (error) { if (error.stdout?.trim().startsWith("{")) return JSON.parse(error.stdout); throw error; }
@@ -27,7 +27,7 @@ export async function fixture(root, host, arm, binary) {
   git(root, "init", "-b", "main");
   git(root, "config", "user.name", "Mason evaluation");
   git(root, "config", "user.email", "evaluation@example.invalid");
-  if (arm === "hooks") auto(binary, root, ["install", "--host", host, "--command", quote(process.execPath) + " " + quote(binary)]);
+  if (arm === "hooks") auto(binary, root, ["install", "--host", host, "--command", quote(process.execPath) + " " + quote(binary) + " auto"]);
   git(root, "add", ".");
   git(root, "commit", "-m", "fixture");
   const initialDocs = {};

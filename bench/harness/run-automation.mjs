@@ -18,7 +18,7 @@ const hosts = values.hosts.split(","), arms = values.validate ? ["hooks"] : valu
 if (hosts.some(h => !["claude", "codex"].includes(h)) || arms.some(a => !["baseline", "instructions", "hooks"].includes(a)) || tasks.some(t => !["rename", "control"].includes(t))) throw new Error("Invalid hosts, arms, or tasks.");
 const timeoutMs = Number(values["timeout-ms"]), budgetUsd = Number(values["budget-usd"]);
 if (!Number.isFinite(timeoutMs) || timeoutMs < 1000 || !Number.isFinite(budgetUsd) || budgetUsd <= 0) throw new Error("Invalid limits.");
-const binary = fileURLToPath(new URL("../../dist/mason-auto.js", import.meta.url));
+const binary = fileURLToPath(new URL("../../dist/mason.js", import.meta.url));
 await fs.access(binary);
 const output = values.output ? path.resolve(values.output) : fileURLToPath(new URL("./results/automation/" + new Date().toISOString().replaceAll(":", "-") + "-" + randomUUID().slice(0, 8), import.meta.url));
 await fs.mkdir(output, { recursive: true });

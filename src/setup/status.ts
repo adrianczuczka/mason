@@ -18,7 +18,7 @@ export async function setupStatus(dir: string) {
       receipt: await loadSetupReceipt(ws.root, ws.directory, host) })));
     const pending = partial.filter(item => item.receipt !== null).map(item => item.host);
     return { version: 1, status: pending.length ? "incomplete" : "not-configured", hosts: {},
-      next: pending.length ? "Setup did not finish. Rerun mason-auto setup --host " + pending[0] + " to resume using the retained original evidence."
+      next: pending.length ? "Setup did not finish. Rerun mason setup --host " + pending[0] + " to resume using the retained original evidence."
         : "Project hooks are inactive until local setup. Run mason setup --host codex or --host claude." };
   }
   const hosts: Record<string, { status: string; runtime: string; mcp: string; instructions: string; hookConfiguration: string;
@@ -51,7 +51,7 @@ export async function setupStatus(dir: string) {
     if (!mcp || !hooks || !instructionsCurrent || !configured) pending.push("Rerun setup to reconcile project configuration; inspect any disabled host settings.");
     if (!observation?.contextCalls) pending.push("Start a new assistant session and request task context through Mason's get_context tool.");
     if (!complete) pending.push("Review/trust the host configuration, then complete a normal task to observe the full hook lifecycle.");
-    if (automation.status === "unavailable") pending.push("The latest automation attempt did not establish verification. Run mason-auto check and inspect its diagnostics.");
+    if (automation.status === "unavailable") pending.push("The latest automation attempt did not establish verification. Run mason check and inspect its diagnostics.");
     const healthy = installed.available && mcp && hooks && instructionsCurrent && configured && automation.status !== "unavailable";
     hosts[host] = { status: healthy ? complete && observation?.contextCalls ? "active" : "pending" : "attention",
       runtime: installed.available ? "global (" + installed.version + ")" : "unavailable-on-path", mcp: mcp ? "configured" : "changed",

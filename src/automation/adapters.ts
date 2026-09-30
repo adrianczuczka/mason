@@ -1,3 +1,4 @@
+import { retrievedDecisions } from "./usefulness.js";
 import { failureMessage, hookFailureMessage } from "./execution.js";
 import { z } from "zod";
 import { automate, observeReadOnlyTool, type AutomationEvent } from "./runtime.js";
@@ -8,6 +9,7 @@ const inputSchema = z.object({
   cwd: z.string().min(1), session_id: z.string().min(1).max(500),
   hook_event_name: z.enum(["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]),
   tool_name: z.string().optional(), tool_use_id: z.string().max(500).optional(),
+  tool_response: z.unknown().optional(),
   tool_input: z.unknown().optional(), stop_hook_active: z.boolean().optional(), permission_mode: z.string().optional(),
 });
 const lifecycle: Record<z.infer<typeof inputSchema>["hook_event_name"], AutomationEvent["event"]> = {
@@ -22,6 +24,7 @@ export function normalizeHook(host: Host, raw: unknown): { cwd: string; name: st
   return { cwd: input.cwd, name: input.hook_event_name, readOnly, event: {
     event: lifecycle[input.hook_event_name], host, sessionId: input.session_id, toolId: input.tool_use_id,
     mutating: !!input.tool_name && !readOnly,
+    ...(input.hook_event_name === "PostToolUse" ? { retrievedDecisionIds: retrievedDecisions(input.tool_name, input.tool_response) } : {}),
   } };
 }
 
@@ -83,7 +86,7 @@ export function knownManagedHookCommands(host: Host) {
 export function compatibleManagedHookCommands(host: Host, platform = process.platform) {
   return [managedHookCommand(host, platform), `mason --setup-host ${host} auto hook --host ${host}`];
 }
-export function hookConfig(host: Host, command = "npx --no-install --package mason-context mason-auto") {
+export function hookConfig(host: Host, command = "npx --no-install --package mason-context mason auto") {
   const handler = { type: "command", command: command === `mason --setup-host ${host} auto`
     ? managedHookCommand(host) : command + " hook --host " + host, timeout: 30 };
   return { hooks: Object.fromEntries(HOOK_EVENTS.map(name => [name,

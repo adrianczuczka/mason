@@ -57,14 +57,19 @@ export function inspectCodexHooks(cwd) {
   });
 }
 
-export function hostArguments({ host, arm, cwd, prompt, model, budgetUsd = 1, mcpConfig = { mcpServers: {} }, isolated = false }) {
+export function hostArguments({ host, arm, cwd, prompt, model, budgetUsd = 1, mcpConfig = { mcpServers: {} }, isolated = false, controlled = false, effort }) {
   const args = host === "claude" ? ["-p", prompt, "--output-format", "stream-json", "--verbose", "--max-turns", "25",
     "--max-budget-usd", String(budgetUsd), "--setting-sources", "project", "--strict-mcp-config", "--mcp-config", JSON.stringify(mcpConfig),
     "--dangerously-skip-permissions", "--tools", "Read,Write,Edit,Glob,Grep,Bash"] :
     ["exec", "--json", "--ignore-rules", ...(isolated ? [] : ["--sandbox", "workspace-write"]),
       ...(arm === "hooks" ? ["--dangerously-bypass-hook-trust"] : ["--disable", "hooks"]),
       "-c", trustedProject(cwd), "--color", "never", prompt];
-  if (host === "claude" && arm !== "hooks" && !isolated) args.push("--settings", '{"disableAllHooks":true}');
+  if (host === "claude" && arm !== "hooks" && !isolated && !controlled) args.push("--settings", '{"disableAllHooks":true}');
+  if (controlled) {
+    if (host !== "claude") throw new Error("Controlled behavior pilot currently requires Claude.");
+    args.push("--no-session-persistence", "--settings", JSON.stringify({ disableAllHooks: arm !== "hooks", autoMemoryEnabled: false }), "--disallowedTools", "Agent,Task");
+    if (effort) args.push("--effort", effort);
+  }
   if (isolated && host === "claude") args.push("--no-session-persistence", "--settings", '{"disableAllHooks":true,"autoMemoryEnabled":false}', "--disallowedTools", "Agent,Task");
   if (isolated && host === "codex") {
     const inline = value => Array.isArray(value) ? '[' + value.map(inline).join(',') + ']' :
@@ -89,6 +94,8 @@ export async function runHost(options) {
     const output = fs.createWriteStream(transcript, { flags: "wx" });
     let stdout = "", stderr = "", timedOut = false, outputLimited = false;
     const kill = () => { try { process.platform === "win32" ? child.kill("SIGKILL") : process.kill(-child.pid, "SIGKILL"); } catch {} };
+    const interrupt = () => kill();
+    if (options.controlled) { process.once("SIGINT", interrupt); process.once("SIGTERM", interrupt); }
     const timer = setTimeout(() => { timedOut = true; kill(); }, timeoutMs);
     child.stdin.end();
     child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
@@ -101,6 +108,7 @@ export async function runHost(options) {
     output.on("error", error => { stderr += error.message; kill(); });
     child.on("close", code => {
       clearTimeout(timer);
+      if (options.controlled) { process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", interrupt); }
       const events = stdout.split("\n").flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
       const result = events.findLast(e => host === "claude" ? e.type === "result" : e.type === "turn.completed");
       const failed = host === "claude" ? result?.is_error || result?.subtype !== "success" : events.some(e => e.type === "turn.failed" || e.type === "error");
