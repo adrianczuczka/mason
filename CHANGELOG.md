@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-## 0.20.0 — 2026-09-30
+## 0.20.1 — 2026-09-30
+
+- Retry temporary Windows lock access failures during concurrent snapshot writes, preserving the acquisition timeout and persistent permission errors.
+- Includes the stats and CLI changes below; 0.20.0 was tagged but not published after its Windows release check failed.
+
+## 0.20.0 — not published
 
 - Keep optional stats failures from blocking setup, allow disabling with damaged stats storage, and preserve newer audit outcomes when delivery observations arrive late.
 - Remove the `mason-auto` executable. Use `mason setup`, `mason status`, `mason check`, and `mason stats`; hook configuration and execution use `mason auto`.

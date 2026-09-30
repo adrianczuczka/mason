@@ -38,7 +38,7 @@ jobs:
       - name: Automatic update policy, integrity and session activation
         run: npx vitest run test/distribution-updates.test.ts test/distribution-upgrade.test.ts --maxWorkers=2
       - name: Snapshot concurrency and verification regressions
-        run: npx vitest run test/snapshot-concurrency.test.ts test/snapshot-mcp.test.ts test/snapshot-trust.test.ts test/verify.test.ts --maxWorkers=2
+        run: npx vitest run test/snapshot-lock-access.test.ts test/snapshot-concurrency.test.ts test/snapshot-mcp.test.ts test/snapshot-trust.test.ts test/verify.test.ts --maxWorkers=2
       - name: Windows batch launcher regression
         if: runner.os == 'Windows'
         run: npx vitest run test/distribution.test.ts -t 'batch launcher'

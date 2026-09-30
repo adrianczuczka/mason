@@ -35,14 +35,14 @@ export async function withStoreLock<T>(root: string, directory: string, run: () 
   while (!handle) {
     try {
       handle = await fs.open(file, "wx", 0o600);
-      try { await handle.writeFile(JSON.stringify({ pid: process.pid, host: os.hostname() })); }
-      catch (error) {
-        await handle.close().catch(() => {});
-        handle = undefined;
-        await fs.rm(file, { force: true }).catch(() => {});
-        throw error;
-      }
     } catch (error) {
+      // Windows can deny opening a lock while another process finishes deleting it.
+      // Retry acquisition only, retaining the original error if access stays denied.
+      if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") {
+        if (Date.now() >= deadline) throw error;
+        await new Promise(resolve => setTimeout(resolve, 40));
+        continue;
+      }
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       // Do not steal malformed, remote, or live locks on a time-based guess.
       try {
@@ -65,6 +65,14 @@ export async function withStoreLock<T>(root: string, directory: string, run: () 
       } catch { /* Another writer may be creating/releasing/reclaiming it. */ }
       if (Date.now() >= deadline) throw new Error(label + " is busy or its lock needs inspection: " + file + ". " + await lockDiagnostic(file));
       await new Promise(resolve => setTimeout(resolve, 40));
+    }
+    if (handle) {
+      try { await handle.writeFile(JSON.stringify({ pid: process.pid, host: os.hostname() })); }
+      catch (error) {
+        await handle.close().catch(() => {});
+        await fs.rm(file, { force: true }).catch(() => {});
+        throw error;
+      }
     }
   }
   try { return await run(); }
