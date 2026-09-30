@@ -111,10 +111,15 @@ export function completionSummary(findings: RepairFinding[], reportPath: string)
     `Mason: ${findings.length} new or worsened finding(s) since the retained baseline.`,
     ...findings.slice(0, MAX_COMPLETION_FINDINGS).map(f => {
       const source = f.current ?? f.original;
-      const detail = source.evidence.kind === "decision-anchor"
-        ? `Changes to ${source.evidence.changedFiles.join(", ")} may affect decision "${source.evidence.title}". Inspect the diff if relevant; acceptance is not required.`
-        : source.message;
-      return `[${f.status === "unresolved" ? "issue" : "advisory"}] ${safe(source.anchor.doc)}: ${safe(detail)}`;
+      if (source.evidence.kind === "decision-anchor") {
+        const evidence = source.evidence;
+        return [
+          `[advisory] Decision "${safe(evidence.title)}" may no longer hold: ${evidence.changedFiles.length} anchored file(s) changed.`,
+          `Inspect the decision and diff with review_decision(action: "prepare", id: ${JSON.stringify(evidence.decisionId)}); acceptance is not required.`,
+          `Changed files: ${safe(evidence.changedFiles.join(", "))}`,
+        ].join("\n");
+      }
+      return `[${f.status === "unresolved" ? "issue" : "advisory"}] ${safe(source.anchor.doc)}: ${safe(source.message)}`;
     }),
     ...(findings.length > MAX_COMPLETION_FINDINGS ? [`${findings.length - MAX_COMPLETION_FINDINGS} more in the report; pending later feedback.`] : []),
     `Evidence: ${reportPath}. Explicit audit: mason_automation(action: "check").`,

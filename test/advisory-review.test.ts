@@ -211,6 +211,43 @@ describe("durable advisory assessments", () => {
     expect((await verifyRepair(root, target.baselinePath)).status).toBe("verified");
   });
 
+  it("closes both historical revisions after accepting a replacement rule, including automation", async () => {
+    await seed();
+    await write("src/client.ts", "export const retries = 1;\n");
+    await commitAll(root, "client");
+    const input = { title: "Retry once", body: "The client retries once.", category: "decision" as const,
+      files: ["src/client.ts"], owner: "Fixture team", sources: [{ kind: "document" as const, reference: "README.md" }] };
+    await upsertDecision(root, input);
+    const id = (await loadDecisions(root))[0].id;
+    const accept = async () => {
+      const prepared = await reviewDecision(root, { id });
+      if (prepared.status !== "prepared") throw new Error("Not prepared");
+      expect((await reviewDecision(root, { id, action: "accept", reviewer: "Fixture reviewer",
+        note: "Checked retry behavior against the committed client.", reviewToken: prepared.reviewToken })).status).toBe("accepted");
+      await commitAll(root, "accept rule");
+    };
+    await commitAll(root, "propose rule");
+    await accept();
+    await automate(root, { event: "session_start" });
+    await write("src/client.ts", "export const retries = 2;\n");
+    await commitAll(root, "change retry behavior");
+    await upsertDecision(root, { ...input, id, title: "Retry twice", body: "The client retries twice." });
+    await commitAll(root, "propose replacement rule");
+    const baseline = await prepareRepair(root, ["decision-anchor-drift"]);
+    expect(baseline.report.advisories).toHaveLength(2);
+    const before = await automate(root, { event: "after_tool" });
+    expect(before.report.findings.filter(f => f.original.type === "decision-anchor-drift" && f.status === "review-required")).toHaveLength(2);
+    await accept();
+    const verified = await verifyRepair(root, baseline.baselinePath);
+    expect(verified.status).toBe("verified");
+    expect(verified.findings).toHaveLength(2);
+    expect(verified.findings.every(f => f.status === "resolved" && f.review?.outcome === "accepted")).toBe(true);
+    const after = await automate(root, { event: "task_end" });
+    const historical = after.report.findings.filter(f => f.original.type === "decision-anchor-drift");
+    expect(historical).toHaveLength(2);
+    expect(historical.every(f => f.status === "resolved")).toBe(true);
+  });
+
   it("never lets an advisory assessment dismiss a newly provable issue", async () => {
     await seed(); await write("src/kept.ts", "export {};"); await write("README.md", "Use `src/missing.ts`.\n"); await commitAll(root, "claim");
     const baseline = await prepareRepair(root, ["deleted-reference"]);

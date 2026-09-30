@@ -58,6 +58,17 @@ it("does not treat verification loss as a new issue or erase its delivered notic
   expect(completionFindings(state, [issue])).toEqual([]);
 });
 
+it("keeps the decision and inspection action visible before long Android paths", () => {
+  const paths = ["OrdersStorage", "EventStorage", "SignedInSessionTracker"].map(name =>
+    `tickets/src/main/java/com/ticketmaster/tickets/newarchitecture/orders/local/${name}.kt`);
+  expect(paths.join(", ").length).toBeGreaterThan(250);
+  const summary = completionSummary([decision(paths)], "report.json")!;
+  expect(summary).toContain('Decision "Build convention" may no longer hold: 3 anchored file(s) changed.');
+  expect(summary).toContain('review_decision(action: "prepare", id: "build"); acceptance is not required.');
+  expect(summary.indexOf('Decision "Build convention"')).toBeLessThan(summary.indexOf(paths[0]));
+  expect(summary.indexOf("review_decision(")).toBeLessThan(summary.indexOf(paths[0]));
+});
+
 it("retains notification history through serialization and reopens resolved backlog findings", () => {
   const issue = count(3);
   const state = createNotificationState([issue], "baseline");

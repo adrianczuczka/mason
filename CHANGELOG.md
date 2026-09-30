@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.20.2 — 2026-09-30
+
+- Show decision titles and the inspection command before changed file paths in completion warnings, so long paths cannot hide the reason for review or the next step.
+- Add regression coverage for long Android paths and historical advisory closure after accepting a replacement decision, including automation checks.
+
 ## 0.20.1 — 2026-09-30
 
 - Retry temporary Windows lock access failures during concurrent snapshot writes, preserving the acquisition timeout and persistent permission errors.
