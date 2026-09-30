@@ -2,11 +2,13 @@
 
 ## Unreleased
 
+## 0.20.0 — 2026-09-30
+
 - Keep optional stats failures from blocking setup, allow disabling with damaged stats storage, and preserve newer audit outcomes when delivery observations arrive late.
-
 - Remove the `mason-auto` executable. Use `mason setup`, `mason status`, `mason check`, and `mason stats`; hook configuration and execution use `mason auto`.
-
 - Enable local stats during setup, preserving explicit opt-outs, with summaries for hook finding delivery, observed resolution, returned decision IDs, automation timing, and supplied feedback ratings. Keep uncertain outcomes explicit; no prompts or source contents are stored or uploaded.
+
+- Add a controlled agent-behavior benchmark with matched conditions, independent grading, and retained hook evidence. Pilot results establish delivery, not improved outcomes.
 
 ## 0.19.2 — 2026-09-29
 
