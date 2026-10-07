@@ -10,6 +10,8 @@ import { readStoreJson, storePath, writeStoreJson } from "../utils/storage.js";
 import { normalizeRepoPath } from "../utils/paths.js";
 import { withLock } from "../automation/store.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
+import { latestDecisionInspection } from "../decisions/provenance.js";
+import { captureAnchors, changedCaptureFiles } from "../decisions/anchors.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
 
 const git = async (root: string, ...args: string[]) => (await (
@@ -34,7 +36,7 @@ type ReviewRecord = z.infer<typeof recordSchema>;
 export const reviewSummarySchema = z.object({
   id: hashSchema, status: z.enum(["current", "reopened", "deferred", "unverified"]), reason: z.string(),
   recordPath: z.string().optional(), reviewer: z.string().optional(), note: z.string().optional(),
-  outcome: z.enum(["addressed", "inapplicable", "deferred", "accepted", "reaffirmed", "retired", "dismissed"]).optional(),
+  outcome: z.enum(["addressed", "inapplicable", "deferred", "accepted", "reaffirmed", "retired", "dismissed", "no_contradiction_found"]).optional(),
   reviewedHead: z.string().optional(),
 });
 export type AdvisoryReviewSummary = z.infer<typeof reviewSummarySchema>;
@@ -125,6 +127,17 @@ async function decisionAssessment(root: string, finding: Finding, baselineHead: 
   if (store.diagnostics.length) throw new Error("Decision records have unavailable or malformed evidence; review cannot be confirmed.");
   const record = store.records.find(record => record.id === evidence.decisionId);
   if (!record || record.version !== 2) return null;
+  const inspection = latestDecisionInspection(record);
+  if (inspection && record.status === "active") {
+    const capture = await captureAnchors(root, inspection.capture.anchors);
+    let ancestor = true;
+    try { await git(root, "merge-base", "--is-ancestor", baselineHead, inspection.headHash); } catch { ancestor = false; }
+    if (ancestor) return { id, status: !capture.complete || !inspection.capture.complete ? "unverified"
+      : changedCaptureFiles(inspection.capture, capture).length ? "reopened" : "current",
+      outcome: "no_contradiction_found", reviewer: inspection.inspector, note: inspection.note,
+      reviewedHead: inspection.headHash, recordPath: `.mason/decisions/${record.id}.json`,
+      reason: "A separate source inspection reports no contradiction; this does not accept or reaffirm the decision. Relevant anchor changes reopen the advisory." };
+  }
   const events = record.history.filter(event => ["accepted", "reaffirmed", "retired"].includes(event.kind));
   const event = events.at(-1);
   if (!event?.evidence || !event.actor || !event.note || !event.evidence.historyAvailable || event.evidence.localChanges.length) return null;
@@ -177,7 +190,7 @@ export async function reviewAdvisory(rootDir: string, input: AdvisoryReviewInput
   const finding = [...baseline.original.advisories, ...(baseline.original.suppressedAdvisories ?? [])].find(f => findingId(f) === request.findingId);
   if (!finding) throw new Error("No advisory with this findingId in the original baseline. Provable issues must be repaired and rechecked.");
   if (finding.evidence.kind === "decision-anchor") return { status: "decision-review-required", decisionId: finding.evidence.decisionId,
-    hint: "Use review_decision to prepare evidence and record authorized acceptance, reaffirmation or retirement, then verify this original repair baseline. An advisory assessment cannot approve a decision." };
+    hint: "Use review_decision to prepare evidence and record a source inspection without human approval, or an authorized acceptance, reaffirmation or retirement, then verify this original repair baseline. An advisory assessment cannot approve a decision." };
   if (request.action === "dismiss") {
     if (finding.type !== "deps-changed" || finding.evidence.kind !== "doc-behind-manifests") throw new Error("One-step dismissal is only available for dependency advisories.");
     if (!request.reasonCode || !request.note) throw new Error("Dismissal requires reasonCode and note; it does not require a reviewer or prepared token.");

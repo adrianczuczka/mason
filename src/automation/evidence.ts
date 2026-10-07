@@ -1,3 +1,6 @@
+import { captureAnchorScopes } from "../decisions/anchors.js";
+import { loadDecisionStore, readDecisionInputs } from "../decisions/decisions.js";
+import { decisionAnchors, latestDecisionInspection } from "../decisions/provenance.js";
 import { includedCheckPaths } from "../audit/policy.js";
 import { loadProjectConfig } from "../utils/files.js";
 import { execGit } from "../utils/git-read.js";
@@ -5,7 +8,6 @@ import { profilePhase } from "../utils/profile.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import fg from "fast-glob";
 import { z } from "zod";
 import { discoverDocPaths } from "../audit/docs.js";
 import { pathClaimScope, pathExists, optionalMasonPath, gitMetadataPath } from "../audit/scope.js";
@@ -99,30 +101,38 @@ async function collectInputs(root: string): Promise<Inputs> {
     if (error.code === "ENOENT") return "absent";
     throw error;
   });
-  const [modules, counts, commands, decisionFiles] = await Promise.all([
+  const [modules, counts, commands, decisionInputs] = await Promise.all([
     combinedDocs ? moduleCandidates(root, combinedDocs) : [],
     Promise.all(countClaims.map(({ doc, claim }) => resolveDocCountSource(root, doc, claim))),
     commandInputs(root, parsedDocs.filter(doc => allowed.get("dead-command")!.has(doc.path))),
-    fg(".mason/decisions/*.json", { cwd: root, dot: true, onlyFiles: false, followSymbolicLinks: false }),
+    readDecisionInputs(root),
   ]);
-  const decisions = await Promise.all(decisionFiles.sort().map(async file => {
-    await storePath(root, file);
-    return [file, await content(root, file)];
-  }));
+  if (decisionInputs.diagnostics.length) throw new Error("Cannot read decision inputs: " + decisionInputs.diagnostics.map(d => `${d.path}: ${d.message}`).join("; "));
+  const decisions = decisionInputs.inputs;
   // Decision freshness observes tracked and local anchor changes; other checks
   // do not need a repository-wide status or index scan.
   const [status, index] = decisions.length ? await Promise.all([
     git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".", ":(exclude).mason/reports"),
     git(root, "ls-files", "--stage", "-z", "--", ".", ":(exclude).mason/reports"),
   ]) : ["", ""];
-  const common = [7, engineVersion, head, shallow, replacements, docContents, auditPolicy];
+  const records = decisions.length ? (await loadDecisionStore(root)).records : [];
+  const scopes = new Map(records.filter(record => record.status === "active" && record.version === 2
+    && (record.capture || latestDecisionInspection(record))).map(record => {
+      const anchors = decisionAnchors(record).sort();
+      return [JSON.stringify(anchors), anchors] as const;
+    }));
+  // Dirty path/status alone cannot detect another edit to the same file.
+  // Preserve each scope's bound: a large union must not hide smaller complete captures.
+  const captures = await captureAnchorScopes(root, [...scopes.values()]);
+  const anchorContent = [...scopes.keys()].map((key, index) => [key, captures[index]]);
+  const common = [8, engineVersion, head, shallow, replacements, docContents, auditPolicy];
   const keys: Record<CheckName, string> = {
     "deleted-reference": hash([common, claims, docStatus]),
     "new-module": hash([common, modules]),
     "stale-count": hash([common, counts]),
     "dead-command": hash([common, commands]),
     "deps-changed": hash([common, docStatus]),
-    "decision-anchor-drift": hash([common, decisionPresence, decisions, status, index]),
+    "decision-anchor-drift": hash([common, decisionPresence, decisions, status, index, anchorContent]),
   };
   return { fingerprint: hash([keys, await advisoryReviewInventory(root)]), head, docs, keys };
 }

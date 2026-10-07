@@ -4,6 +4,8 @@
 
 Lifecycle hooks are synchronous and still spawn a process for each event. Known read-only tools now record lifecycle observations without running the audit inventory, verifier, or execution receipt writer. These observations do not refresh the last audit verdict. Shell, editor, unknown, and MCP tools retain before/after evidence checks; session start, prompt submission, and stop still check the repository. Narrowing to editor tools or removing pre-tool capture would lose shell edits or their original evidence.
 
+Subsecond combined pre/post overhead is an aspirational performance goal, not an acceptance requirement or a reason to weaken verification. The current correctness improvements are retained despite exceeding that goal in the public repository measurements below. Further optimization should be guided by observed interruptions in real host use, accounting for how often hooks run and the cost of the tool itself. Wall-clock benchmark results are not CI pass/fail thresholds.
+
 ## Repeated calls and retained repairs
 
 One invocation shares its current audit across retained repair baselines. Document status is collected in bounded batches, document history reads have bounded concurrency, and documents with the same last commit share their change history. Each baseline keeps its original findings, scope, and outcomes.
@@ -71,6 +73,83 @@ The delayed case adds 100 ms and a Node worker's startup to each inventory call.
 
 These measurements show reduced subprocess work, but do not establish comfortably subsecond pairs on the workplace repository. That repository and the actual host still need a follow-up measurement. No hook lifecycle stage or pre-edit evidence capture was removed to obtain these results.
 
+## Captured anchor measurement: 2026-10-06
+
+Apple Silicon macOS, Node v25.9.0, Claude adapter, the synthetic large fixture, and three sequential pre/post pairs per category. These are whole CLI timings including startup, with phase profiling and Git metrics enabled; they exclude host dispatch and the outer shell guard. The legacy rows use v1 records on the development implementation, not a comparison against a previous release. Capture and inspection records are created through the public MCP tools.
+
+The first capture implementation independently inventoried each decision on each evidence read. Twenty single-file proposals produced 82 inventory calls and 124 total `ls-files` calls per unchanged hook. Batched capture now shares policy, inventory and file hashes only within one repository inspection. Final validation uses a new inspection and must reread content. Captures keep their individual size bounds. Bulk file-policy checks avoid a separate glob walk and source read for every anchored file; bounded byte hashing and per-read symlink rejection remain in place.
+
+| Decision evidence / scope | Unchanged pair p50 / p95 | Four retained baselines p50 / p95 |
+|---|---|---|
+| Legacy Git baseline, 20 individual files | 806.3 / 834.9 ms | 924.7 / 936.3 ms |
+| First capture implementation, 20 individual files | 3,736.6 / 3,987.1 ms | 3,743.4 / 4,603.4 ms |
+| Batched captures, 20 individual files | 1,127.1 / 1,167.1 ms | 1,107.8 / 1,111.6 ms |
+| Legacy Git baseline, 20 directories | 820.6 / 856.0 ms | 824.6 / 829.7 ms |
+| Batched captures, 20 directories / 1,000 files | 1,541.4 / 1,772.1 ms | 1,554.2 / 1,727.9 ms |
+| Separate inspections, 20 directories / 1,000 files | 1,428.8 / 1,432.7 ms | 1,681.1 / 1,694.4 ms |
+
+Captured and inspected scenarios now use four inventory calls and eight total `ls-files` calls per unchanged hook; counts do not scale with the 20 decision records in this fixture. Known read-only invocations measured 160–168 ms at p50 on the final scenarios and do not hash anchors. The benchmark preserved all original baseline bytes, resolved the three reference deletions, and left three reopened decision advisories outstanding. It did not claim human acceptance.
+
+With three pairs, p95 is the maximum observed pair, and differences between nearby runs are not evidence that inspections are faster than captures. Content hashing adds measurable cost: approximately 0.32 seconds per pair for narrow captures and 0.61–0.72 seconds for the broader scopes in these runs. The development implementation still does **not** meet a consistently subsecond pair target. These synthetic results do not establish latency on the workplace repository or other machines; measure the actual host workflow before rollout.
+
+## Path lookup and decision reuse: 2026-10-06
+
+The next development change builds a path-component lookup for all anchor scopes and assigns inventory files in one pass. It replaces repeatedly searching the full inventory for each scope. Matching retains literal prefix boundaries, normalized paths, overlapping scopes, deduplication and inventory order. Its work scales with path components and actual matches rather than the product of scopes and inventory size.
+
+Raw decision bytes and validated records are shared within one inspection. Automation fingerprints and the audit use the same raw observation, including malformed records. Callers receive independent copies, tool writes invalidate these observations, and final validation starts a fresh inspection. Symlink rejection and size limits remain in place. These changes do not use Git blob shortcuts or trust unchanged timestamps.
+
+A CPU-only comparison against the original matching predicate produced identical results in every sample:
+
+| Scopes / inventory files | Repeated matching median | Indexed matching median |
+|---|---|---|
+| 20 / 1,000 | 33.46 ms | 0.76 ms |
+| 150 / 10,000 | 2,622.88 ms | 7.00 ms |
+
+This measures path matching alone, with three samples and two overlapping anchors per scope. It excludes file reads, policy checks and CLI startup. It establishes the algorithm's scaling improvement, not whole-hook latency.
+
+Sequential whole-CLI measurements used the same large fixtures, Node v25.9.0, Claude adapter, profiling and Git metrics, with three pairs per scenario. The previous build was saved before editing and both builds used the same installed dependencies.
+
+| Scenario | Before pair p50 / p95 | After pair p50 / p95 |
+|---|---|---|
+| Narrow captures, one baseline | 1,118.8 / 1,386.6 ms | 1,031.6 / 1,053.4 ms |
+| Narrow captures, four baselines | 1,079.8 / 1,085.2 ms | 1,022.5 / 1,107.4 ms |
+| Directory inspections, one baseline | 1,412.4 / 1,529.2 ms | 1,502.8 / 1,506.1 ms |
+| Directory inspections, four baselines | 2,020.8 / 2,028.4 ms | 1,657.6 / 2,056.1 ms |
+
+Whole-hook results are mixed: the directory case with one baseline was slower, and three samples are insufficient to claim a general latency improvement. With three pairs p95 is the maximum observed pair. Inventory counts stayed at four per hook, original baseline bytes were preserved, the three reference issues resolved, and the three reopened decision advisories remained outstanding. The subsecond pair target is still unmet. The changes improve scaling and remove repeated decision reads; they do not remove the cost of reading anchored files or process startup.
+
+## Public repository validation: 2026-10-06
+
+The development build was exercised against full-history clones of two pinned public Android repositories, using Node v25.9.0 on Apple Silicon macOS and the Claude adapter:
+
+- [Now in Android at a49ed253d75e61a2b6ab80a8da677b57437b08eb](https://github.com/android/nowinandroid/tree/a49ed253d75e61a2b6ab80a8da677b57437b08eb): 715 tracked files, including 310 Kotlin/Java files.
+- [WordPress Android at ceafcdcbb4812eb10856dd789a0b11d3fe95eaa8](https://github.com/wordpress-mobile/WordPress-Android/tree/ceafcdcbb4812eb10856dd789a0b11d3fe95eaa8): 6,701 tracked files, including 4,166 Kotlin/Java files.
+
+Each scenario creates 20 explicitly test-local proposals through the public MCP tools, with either individual source files or source directories as anchors. One proposal in each repository is grounded in its documentation: Now in Android's local-storage source of truth in `docs/ArchitectureLearningJourney.md`, and WordPress's activity titles for TalkBack in `docs/accessibility-guidelines.md`. The other proposals exercise anchored-change tracking; they do not claim project maintainer requirements or approval. Directory selection favors larger production source packages and avoids sensitive paths.
+
+All four scenarios passed these assertions:
+
+- Saving dirty source captures its current bytes; committing that source and its decision records together stays quiet.
+- An unrelated commit stays quiet, while a later anchored edit reopens drift.
+- A separate source inspection resolves the original advisory, leaving human approval, human review history and the original Git baseline unchanged.
+- Original repair baseline bytes survive inspection and managed hooks unchanged.
+- Another anchored edit reopens the inspected decision.
+
+The source edits append recognizable comments. The runner verifies exact byte equality with the original source plus those comments before recording an inspection. This validates capture, inspection and audit lifecycle behavior on real repositories; it does not test detection of arbitrary semantic contradictions. The Android applications were not built, and no model or live coding agent was invoked.
+
+Managed setup, SessionStart, UserPromptSubmit, read-only pre/post hooks, shell pre/post hooks and Stop were exercised with repository documentation in scope. Whole CLI timings include process startup and profiling, exclude host dispatch and network downloads, and use three unchanged shell pairs per scenario:
+
+| Repository / anchor scope | Unique anchored files | Pair p50 / p95 | Read-only invocation p50 |
+|---|---|---|---|
+| Now in Android / individual files | 20 | 1,308.4 / 1,311.4 ms | 155.4 ms |
+| Now in Android / directories | 142 | 1,452.4 / 1,535.6 ms | 160.7 ms |
+| WordPress Android / individual files | 20 | 1,997.7 / 2,061.0 ms | 165.3 ms |
+| WordPress Android / directories | 1,346 | 2,817.7 / 2,842.2 ms | 168.2 ms |
+
+With three pairs, p95 is the maximum observed pair. These results validate the intended drift behavior but still miss the subsecond pair target, especially in the larger repository. They are not a before/after performance comparison. Both repository audits retained unrelated documentation findings requiring review, so their overall status remained `incomplete`; neither had skipped checks or diagnostics. Those findings were not assessed as project defects or cleared to make the benchmark pass.
+
+Run `npm run build` followed by `npm run bench:open-source -- --samples 3`. The runner downloads full Git histories into the ignored `.mason/reports/benchmarks/oss-cache/` directory, verifies the pinned commits, creates isolated temporary clones, and removes those clones afterward. It preserves the cache for repeat runs. `--repository nowinandroid|wordpress-android|all`, `--host claude|codex`, `--binary`, `--cache`, and `--output` select the workload and destinations. Full histories are required; existing shallow caches must be unshallowed first. Results are written locally to `.mason/reports/benchmarks/open-source.json` by default. The recorded run is in `open-source-final.json` beside it.
+
 ## Reproduce
 
 ```sh
@@ -84,6 +163,9 @@ node scripts/bench-hooks.mjs --binary /path/to/previous/dist/mason.js --label be
 node scripts/bench-hooks.mjs --fixture wide --host claude --samples 3 --partial-check --git-metrics
 # Repeat against both builds with slower inventory reads:
 node scripts/bench-hooks.mjs --fixture wide --host claude --samples 3 --partial-check --git-delay-ms 100 --git-delay-command inventory
+# Compare actual capture and inspection records, using the public MCP tools:
+node scripts/bench-hooks.mjs --fixture large --host claude --samples 3 --decision-evidence captured --git-metrics
+node scripts/bench-hooks.mjs --fixture large --host claude --samples 3 --decision-evidence inspected --anchor-scope directory --git-metrics
 # Select a packaged Node runtime for both sides of a comparison:
 node scripts/bench-hooks.mjs --runtime /path/to/bundle/node --fixture wide --samples 3
 ```
@@ -93,6 +175,8 @@ The benchmark uses isolated temporary Git repositories and the built CLI, makes 
 `--partial-check` adds one command whose directory cannot be resolved. The benchmark requires that specific skipped check, retries it on subsequent calls, and retains incomplete status through the final commit. It does not count that scenario as fully verified. `--git-metrics` records each Git subprocess's command family, duration and inventory classification without arguments, paths or output. Unlike the in-CLI profile, this benchmark instrumentation also sees Git calls during the managed setup lookup.
 
 `--git-delay-ms 0..500` enables metrics and adds a delay to Git subprocesses. `--git-delay-command inventory` limits it to document/source inventories; the default `all` delays every Git command. Delayed queries run through an additional Node worker, which also adds startup overhead. These are comparative stress scenarios, not estimates of workplace latency. Use the same delay, fixture and runtime for both builds. The instrumentation lives only in the benchmark and is not shipped or enabled in normal Mason commands.
+
+`--decision-evidence legacy|captured|inspected` chooses v1 Git baselines, proposals saved through the public MCP tool, or proposals with a separate source inspection. The default is `legacy`. `--anchor-scope file|directory` selects one file or its containing source directory per decision. Large directory scenarios cover 50 files per decision, 1,000 anchored files in total. The small fixture contains no decisions, so use an expanded fixture to measure these modes. Inspection fixtures do not claim human acceptance. Source deletions must reopen their advisories, and the original repair evidence must remain unchanged.
 
 `--samples 10` produces 20 pre/post invocations per category. `--fixture small|large|wide|all` and `--host claude|codex|all` select workloads. Version, platform and the selected runtime's version are included in its JSON. It does not read the caller's project or automatically report metrics anywhere. Use the same fixtures, sample count, runtime and environment for comparisons. Wall-clock results are measurements, not portable CI thresholds; the regression tests separately enforce inventory/query budgets, audit reuse and evidence correctness.
 

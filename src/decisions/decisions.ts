@@ -1,8 +1,11 @@
+import { inspectionRead, invalidateInspectionReads } from "../audit/inspection.js";
+import { readBoundedFile } from "../utils/files.js";
+import { captureAnchors } from "./anchors.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { readStoreJson, writeStoreJson, storePath, type StoreDiagnostic } from "../utils/storage.js";
+import { writeStoreJson, storePath, type StoreDiagnostic } from "../utils/storage.js";
 import { sanitizeRepoPaths } from "../utils/paths.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { jaccard, tokenSet } from "../context/lexical.js";
@@ -35,25 +38,49 @@ export const decisionBodySchema = boundedText("body", BODY_MAX_CHARS,
 const DUPLICATE_JACCARD = 0.5;
 const DUPLICATE_JACCARD_WITH_SHARED_FILE = 0.35;
 
+/** Raw bytes also feed automation fingerprints, including malformed records. */
+export async function readDecisionInputs(rootDir: string): Promise<{ inputs: Array<[string, string | null]>; diagnostics: StoreDiagnostic[] }> {
+  return structuredClone(await inspectionRead(rootDir, "decision-store:inputs", async () => {
+    const inputs: Array<[string, string | null]> = [];
+    const diagnostics: StoreDiagnostic[] = [];
+    let entries: string[];
+    try { entries = await fs.readdir(await storePath(rootDir, ".mason/decisions")); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") diagnostics.push({ path: ".mason/decisions", message: String(error) });
+      return { inputs, diagnostics };
+    }
+    for (const entry of entries.sort()) {
+      if (!entry.endsWith(".json")) continue;
+      const relative = `.mason/decisions/${entry}`;
+      try {
+        const raw = await readBoundedFile(await storePath(rootDir, relative), 10 * 1024 * 1024);
+        if (raw === null) throw new Error("file is not regular or exceeds 10 MiB");
+        inputs.push([relative, raw]);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") inputs.push([relative, null]);
+        else diagnostics.push({ path: relative, message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { inputs, diagnostics };
+  }));
+}
+
 export async function loadDecisionStore(rootDir: string): Promise<{ records: DecisionRecord[]; diagnostics: StoreDiagnostic[] }> {
-  const records: DecisionRecord[] = [];
-  const diagnostics: StoreDiagnostic[] = [];
-  let entries: string[];
-  try { entries = await fs.readdir(await storePath(rootDir, ".mason/decisions")); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") diagnostics.push({ path: ".mason/decisions", message: String(error) });
+  // Callers may edit their returned records while preparing a write. Never expose
+  // mutable cached records, and never share this cache with final validation.
+  return structuredClone(await inspectionRead(rootDir, "decision-store:parsed", async () => {
+    const raw = await readDecisionInputs(rootDir);
+    const records: DecisionRecord[] = [];
+    const diagnostics = [...raw.diagnostics];
+    for (const [relative, content] of raw.inputs) {
+      try {
+        const record = decisionSchema.parse(content === null ? null : JSON.parse(content));
+        if (relative !== `.mason/decisions/${record.id}.json`) throw new Error("Record id does not match its filename");
+        records.push(record);
+      } catch (error) { diagnostics.push({ path: relative, message: error instanceof Error ? error.message : String(error) }); }
+    }
     return { records, diagnostics };
-  }
-  for (const entry of entries.sort()) {
-    if (!entry.endsWith(".json")) continue;
-    const relative = `.mason/decisions/${entry}`;
-    try {
-      const record = decisionSchema.parse(await readStoreJson(rootDir, relative));
-      if (entry !== `${record.id}.json`) throw new Error("Record id does not match its filename");
-      records.push(record);
-    } catch (error) { diagnostics.push({ path: relative, message: error instanceof Error ? error.message : String(error) }); }
-  }
-  return { records, diagnostics };
+  }));
 }
 
 export async function loadDecisions(rootDir: string): Promise<DecisionRecord[]> {
@@ -63,6 +90,7 @@ export async function loadDecisions(rootDir: string): Promise<DecisionRecord[]> 
 export async function saveDecisionRecord(rootDir: string, record: DecisionRecord): Promise<void> {
   const validated = decisionSchema.parse(record);
   await writeStoreJson(rootDir, `.mason/decisions/${validated.id}.json`, validated);
+  invalidateInspectionReads(rootDir, "decision-store:");
 }
 
 /**
@@ -182,7 +210,7 @@ export async function upsertDecision(rootDir: string, input: UpsertDecisionInput
       try { await fs.access(path.join(rootDir, file)); }
       catch { warnings.push(`anchor file does not exist on disk: ${file}`); }
     }
-    const hint = "Saved locally for review and commit. Proposals are not accepted constraints; an existing accepted revision remains operative while its replacement is proposed. Use review_decision to inspect evidence and record an authorized acceptance or reaffirmation.";
+    const hint = "Saved locally for review and commit. Proposals are not accepted constraints; an existing accepted revision remains operative while its replacement is proposed. Use review_decision to prepare evidence and record a separate inspection without human approval, or an authorized acceptance or reaffirmation.";
     if (input.id) {
       const original = byId.get(input.id);
       if (!original) return { status: "error", error: `no decision with id "${input.id}"` };
@@ -198,8 +226,9 @@ export async function upsertDecision(rootDir: string, input: UpsertDecisionInput
           hint: "Unchanged content; no review or freshness stamp was written. Use review_decision for explicit re-verification." };
       }
       const revision = record.revision + 1;
-      const updated: ReviewedDecisionRecord = { ...record, ...content, owner: content.owner, updatedAt: now, revision, approval: "proposed",
-        history: [...record.history, { kind: "revised", at: now, actor: attribution.data.actor, revision, content, approval: "proposed", status: "active", refreshedHash: record.refreshedHash }],
+      const capture = await captureAnchors(rootDir, content.files);
+      const updated: ReviewedDecisionRecord = { ...record, ...content, owner: content.owner, updatedAt: now, revision, approval: "proposed", capture,
+        history: [...record.history, { kind: "revised", at: now, actor: attribution.data.actor, revision, content, approval: "proposed", status: "active", refreshedHash: record.refreshedHash, capture }],
       };
       await saveDecisionRecord(rootDir, updated);
       return { status: "updated", id: record.id, totalActive: existing.filter(r => r.status === "active").length, approval: "proposed", warnings, hint };
@@ -216,9 +245,10 @@ export async function upsertDecision(rootDir: string, input: UpsertDecisionInput
     const id = decisionIdFor(title, body, new Set(byId.keys()));
     if (byId.has(id)) return { status: "error", error: `Decision id collision: ${id}. Choose a distinct title or revise the existing record.` };
     const content = decisionContent({ title, body, category: input.category, files, owner: attribution.data.owner ?? undefined, sources: attribution.data.sources ?? [] });
-    const record: ReviewedDecisionRecord = { ...content, version: 2, id, createdAt: now, updatedAt: now, refreshedHash: head,
+    const capture = await captureAnchors(rootDir, content.files);
+    const record: ReviewedDecisionRecord = { ...content, capture, version: 2, id, createdAt: now, updatedAt: now, refreshedHash: head,
       status: "active", approval: "proposed", revision: 1,
-      history: [{ kind: "created", at: now, actor: attribution.data.actor, revision: 1, content, approval: "proposed", status: "active", refreshedHash: head }],
+      history: [{ kind: "created", at: now, actor: attribution.data.actor, revision: 1, content, approval: "proposed", status: "active", refreshedHash: head, capture }],
     };
     // Write the replacement first: a failed second write leaves both records
     // available instead of removing the original before its replacement exists.
@@ -227,7 +257,7 @@ export async function upsertDecision(rootDir: string, input: UpsertDecisionInput
       const imported = importLegacy(old, now);
       await saveDecisionRecord(rootDir, { ...imported, status: "superseded", supersededBy: id, updatedAt: now,
         history: [...imported.history, { kind: "superseded", at: now, actor: attribution.data.actor, note: `Replaced by proposal ${id}`,
-          revision: imported.revision, content: decisionContent(imported), approval: imported.approval, status: "superseded", refreshedHash: imported.refreshedHash }],
+          revision: imported.revision, content: decisionContent(imported), approval: imported.approval, status: "superseded", refreshedHash: imported.refreshedHash, capture: imported.capture }],
       });
     }
     const totalActive = existing.filter(r => r.status === "active").length + (old ? 0 : 1);

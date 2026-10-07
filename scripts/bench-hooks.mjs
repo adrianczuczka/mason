@@ -6,6 +6,8 @@ import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const { values } = parseArgs({ options: {
   binary: { type: 'string', default: 'dist/mason.js' },
@@ -19,11 +21,15 @@ const { values } = parseArgs({ options: {
   'git-delay-ms': { type: 'string', default: '0' },
   'git-delay-command': { type: 'string', default: 'all' },
   runtime: { type: 'string', default: process.execPath },
+  'decision-evidence': { type: 'string', default: 'legacy' },
+  'anchor-scope': { type: 'string', default: 'file' },
 } });
 const samples = Number(values.samples);
 if (!Number.isInteger(samples) || samples < 2 || samples > 100) throw new Error('samples must be 2..100');
 if (!['small', 'large', 'wide', 'all'].includes(values.fixture)) throw new Error('fixture must be small, large, wide or all');
 if (!['claude', 'codex', 'all'].includes(values.host)) throw new Error('host must be claude, codex or all');
+if (!['legacy', 'captured', 'inspected'].includes(values['decision-evidence'])) throw new Error('decision-evidence must be legacy, captured or inspected');
+if (!['file', 'directory'].includes(values['anchor-scope'])) throw new Error('anchor-scope must be file or directory');
 const binary = path.resolve(values.binary);
 const runtime = path.resolve(values.runtime);
 const gitDelayMs = Number(values['git-delay-ms']);
@@ -129,11 +135,38 @@ async function benchmark(fixture, host) {
   await run('git', ['add', '.']);
   await run('git', ['commit', '-qm', 'initial']);
   const head = (await run('git', ['rev-parse', 'HEAD'])).stdout.trim();
-  for (let i = 0; i < dimensions.decisions; i++) await write(`.mason/decisions/lesson-${i}.json`, JSON.stringify({
-    version: 1, id: `lesson-${i}`, title: `Constraint ${i}`, body: 'Keep retries bounded because callers have a deadline.',
-    category: 'decision', status: 'active', files: [`${prefix(i)}/src/file-0.ts`], tags: [],
-    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', refreshedHash: head,
-  }));
+  const anchors = index => [`${prefix(index)}/src${values['anchor-scope'] === 'file' ? '/file-0.ts' : ''}`];
+  if (values['decision-evidence'] === 'legacy') {
+    for (let i = 0; i < dimensions.decisions; i++) await write(`.mason/decisions/lesson-${i}.json`, JSON.stringify({
+      version: 1, id: `lesson-${i}`, title: `Constraint ${i}`, body: 'Keep retries bounded because callers have a deadline.',
+      category: 'decision', status: 'active', files: anchors(i), tags: [],
+      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', refreshedHash: head,
+    }));
+  } else {
+    // Exercise the public save/inspection paths instead of forging capture receipts.
+    const client = new Client({ name: 'mason-hook-benchmark', version: '1' });
+    try {
+      await client.connect(new StdioClientTransport({ command: runtime, args: [binary, 'mcp'], cwd: root, env, stderr: 'pipe' }));
+      const call = async (name, args) => {
+        const result = await client.callTool({ name, arguments: { dir: root, ...args } });
+        if (result.isError) throw new Error(JSON.stringify(result));
+        const payload = JSON.parse(result.content.find(block => block.type === 'text').text);
+        if (['error', 'conflict'].includes(payload.status)) throw new Error(JSON.stringify(payload));
+        return payload;
+      };
+      for (let i = 0; i < dimensions.decisions; i++) {
+        const saved = await call('save_decision', { title: `Constraint ${i}`, body: 'Keep retries bounded because callers have a deadline.',
+          category: 'decision', files: anchors(i), force: true });
+        if (saved.status !== 'created') throw new Error('Benchmark proposal was not created');
+        if (values['decision-evidence'] === 'inspected') {
+          const prepared = await call('review_decision', { id: saved.id });
+          const inspection = await call('review_decision', { id: saved.id, action: 'inspect', inspector: 'Benchmark fixture',
+            note: 'Synthetic fixture: read the bounded constant exports; no contradiction found.', reviewToken: prepared.reviewToken });
+          if (inspection.status !== 'inspected') throw new Error('Benchmark inspection was not recorded');
+        }
+      }
+    } finally { await client.close(); }
+  }
   const masonVersion = (await run(runtime, [binary, '--version'])).stdout.trim();
   const runtimeVersion = (await run(runtime, ['--version'])).stdout.trim();
   await run(runtime, [binary, 'setup', '--host', host]);
@@ -207,7 +240,7 @@ async function benchmark(fixture, host) {
     throw new Error('Final repair changed the expected skipped checks or verification status');
   }
   if (JSON.stringify(baselineBytes) !== JSON.stringify(await Promise.all(retained.state.baselines.map(b => fs.readFile(path.join(root, b.path), 'utf8'))))) throw new Error('Original evidence changed');
-  return { fixture, host, masonVersion, runtimeVersion, dimensions, partialCheck: values['partial-check'], initialSkipped: skipped, initialBaselines: oneBaseline, retainedBaselines: retained.state.baselines.length,
+  return { fixture, host, masonVersion, runtimeVersion, dimensions, decisionEvidence: values['decision-evidence'], anchorScope: values['anchor-scope'], partialCheck: values['partial-check'], initialSkipped: skipped, initialBaselines: oneBaseline, retainedBaselines: retained.state.baselines.length,
     sessionStart: summarizeRuns([start]), readOnly: summarizeRuns(read), cachedMutation: summarizeRuns(mutation), cachedPair: summarize(pairs),
     retainedMutation: summarizeRuns(multiple), retainedPair: summarize(multiplePairs), changedInputs: summarizeRuns(edited),
     dirtyRepair: summarizeRuns([dirtyRepair]), finalCommit: summarizeRuns([final]), finalStatus: done.report.status, finalCounts: done.report.counts };

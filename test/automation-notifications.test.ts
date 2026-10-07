@@ -63,8 +63,8 @@ it("keeps the decision and inspection action visible before long Android paths",
     `tickets/src/main/java/com/ticketmaster/tickets/newarchitecture/orders/local/${name}.kt`);
   expect(paths.join(", ").length).toBeGreaterThan(250);
   const summary = completionSummary([decision(paths)], "report.json")!;
-  expect(summary).toContain('Decision "Build convention" may no longer hold: 3 anchored file(s) changed.');
-  expect(summary).toContain('review_decision(action: "prepare", id: "build"); acceptance is not required.');
+  expect(summary).toContain('Decision "Build convention" has 3 anchored file(s) changed since capture or review; consistency is unchecked.');
+  expect(summary).toContain('review_decision(action: "prepare", id: "build"). Record action: "inspect"');
   expect(summary.indexOf('Decision "Build convention"')).toBeLessThan(summary.indexOf(paths[0]));
   expect(summary.indexOf("review_decision(")).toBeLessThan(summary.indexOf(paths[0]));
 });

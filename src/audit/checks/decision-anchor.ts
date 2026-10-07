@@ -26,17 +26,21 @@ export async function checkDecisionAnchors(
     });
   }
 
-  const changed = records.flatMap(record => [
+  const changed = records.filter(record => record.status === "active").flatMap(record => [
     { record: effectiveDecision(record), changedFiles: drift.staleDecisions[record.id] ?? [], freshness: drift.freshness?.[record.id] ?? "unknown" },
-    { record, changedFiles: drift.pendingProposals?.[record.id]?.changedFiles ?? [], freshness: drift.pendingProposals?.[record.id]?.freshness ?? "unknown" },
+    ...(drift.pendingProposals?.[record.id] ? [{ record, ...drift.pendingProposals[record.id] }] : []),
   ] as const);
   for (const { record, changedFiles, freshness } of changed) {
+    if (freshness === "unknown" && record.files.length) {
+      result.skipped.push({ check: "decision-anchor-drift", reason: `Anchor evidence for decision ${record.id} is incomplete or unreadable` });
+      continue;
+    }
     if (!changedFiles.length) continue;
     const id = record.id;
     const provenance = decisionProvenance(record, freshness);
     result.advisories.push({
       type: "decision-anchor-drift",
-      message: `decision "${record.title}" (${provenance.approval}) has anchor files that changed since its evidence baseline – needs human review`,
+      message: `decision "${record.title}" (${provenance.approval}) has anchors changed since capture or review; consistency is unchecked`,
       anchor: {
         doc: `.mason/decisions/${id}.json`,
         line: null,

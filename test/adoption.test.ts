@@ -105,6 +105,9 @@ describe("Mason without a concept map", () => {
     const saved = JSON.parse(await saveDecision(repo, knowledge));
     const file = path.join(repo, ".mason/decisions", `${saved.id}.json`);
     const record = JSON.parse(await fs.readFile(file, "utf8"));
+    // Older records have only a Git baseline, without captured content.
+    delete record.capture;
+    delete record.history[0].capture;
     record.refreshedHash = "0".repeat(40);
     record.history[0].refreshedHash = record.refreshedHash;
     await fs.writeFile(file, JSON.stringify(record));

@@ -233,6 +233,8 @@ describe("durable advisory assessments", () => {
     await commitAll(root, "change retry behavior");
     await upsertDecision(root, { ...input, id, title: "Retry twice", body: "The client retries twice." });
     await commitAll(root, "propose replacement rule");
+    await write("src/client.ts", "export const retries = 2; // implementation clarified after capture\n");
+    await commitAll(root, "change both captured scopes");
     const baseline = await prepareRepair(root, ["decision-anchor-drift"]);
     expect(baseline.report.advisories).toHaveLength(2);
     const before = await automate(root, { event: "after_tool" });
