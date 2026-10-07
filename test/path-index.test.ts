@@ -12,5 +12,11 @@ it("preserves prefix boundaries, overlapping anchors, normalization and inventor
 it("matches the existing predicate across a broad inventory and many distinct scopes", () => {
   const scopes = Array.from({ length: 150 }, (_, i) => [`packages/pkg-${i}/src`, `packages/pkg-${i}/src/file-1.ts`]);
   const files = Array.from({ length: 10000 }, (_, i) => `packages/pkg-${i % 200}/src/file-${Math.floor(i / 200)}.ts`);
-  expect(indexMatchingPaths(scopes, files)).toEqual(scopes.map(scope => matchingPaths(scope, files)));
+  // Bound the slow reference comparison; scaling timings belong in benchmarks.
+  const referenceFiles = files.slice(0, 1000);
+  expect(indexMatchingPaths(scopes, referenceFiles)).toEqual(scopes.map(scope => matchingPaths(scope, referenceFiles)));
+  // The full inventory contains 50 ordered files per package. Overlapping
+  // file anchors must not duplicate the directory's matches.
+  expect(indexMatchingPaths(scopes, files)).toEqual(scopes.map((_, i) =>
+    Array.from({ length: 50 }, (_, j) => `packages/pkg-${i}/src/file-${j}.ts`)));
 });
