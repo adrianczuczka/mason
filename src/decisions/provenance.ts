@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { createHash } from "node:crypto";
+import { anchorCaptureSchema } from "./anchors.js";
 import { normalizeRepoPath } from "../utils/paths.js";
 import { assessTrust, type Freshness } from "../context/trust.js";
 
@@ -32,6 +34,7 @@ const eventSchema = z.object({
   revision: z.number().int().positive(), content: contentSchema,
   approval: approvalSchema, status: statusSchema, refreshedHash: z.string(),
   evidence: reviewEvidenceSchema.optional(),
+  capture: anchorCaptureSchema.optional(),
 });
 export type DecisionEvent = z.infer<typeof eventSchema>;
 export type DecisionApproval = z.infer<typeof approvalSchema>;
@@ -49,6 +52,12 @@ const currentSchema = legacySchema.extend({
   approval: approvalSchema, revision: z.number().int().positive(),
   owner: text(200).optional(), sources: z.array(decisionSourceSchema).max(20),
   history: z.array(eventSchema).min(1),
+  capture: anchorCaptureSchema.optional(),
+  inspections: z.array(z.object({
+    at: z.string().datetime(), inspector: text(200), note: text(1500),
+    outcome: z.literal("no_contradiction_found"), decisionDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    headHash: z.string(), capture: anchorCaptureSchema,
+  })).max(200).optional(),
 }).superRefine((record, ctx) => {
   const invalid = (message: string) => ctx.addIssue({ code: "custom", message });
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -74,8 +83,10 @@ const currentSchema = legacySchema.extend({
       if (!event.content.owner || !event.content.sources.length) invalid("Accepted decisions require an owner and source");
       if (!event.evidence || !/^[a-f0-9]{40,64}$/.test(event.evidence.headHash) || event.refreshedHash !== event.evidence.headHash || event.evidence.localChanges.length) invalid("Acceptance requires a committed evidence baseline");
     }
+    if (event.capture && !same([...event.content.files].sort(), event.capture.anchors)) invalid("Capture scope disagrees with decision anchors");
     previous = event;
   }
+  if (previous && !same(previous.capture, record.capture)) invalid("Capture does not match the final history event");
   if (!previous || !same(previous.content, decisionContent(record)) || previous.approval !== record.approval || previous.status !== record.status || previous.revision !== record.revision || previous.refreshedHash !== record.refreshedHash) invalid("Decision does not match the final history event");
 });
 
@@ -106,7 +117,7 @@ export function effectiveDecision(record: DecisionRecord): DecisionRecord {
   if (index < 0) return record;
   const event = record.history[index];
   return { ...record, ...event.content, owner: event.content.owner, approval: "accepted", revision: event.revision,
-    refreshedHash: event.refreshedHash, updatedAt: event.at, history: record.history.slice(0, index + 1) };
+    refreshedHash: event.refreshedHash, capture: event.capture, updatedAt: event.at, history: record.history.slice(0, index + 1) };
 }
 
 /** Anchors relevant to either the operative knowledge or its pending proposal. */
@@ -142,6 +153,18 @@ export function decisionTrust(record: DecisionRecord, freshness: Freshness) {
   return assessTrust(review ? { verifiedAt: review.at, verifiedHash: review.gitHash } : {}, freshness);
 }
 
+/** Inspection identity covers both the proposal and the operative accepted revision. */
+export function decisionInspectionDigest(record: DecisionRecord): string {
+  const effective = effectiveDecision(record);
+  return createHash("sha256").update(JSON.stringify([record.status, decisionApproval(record),
+    record.version === 2 ? record.revision : 0, decisionContent(record),
+    decisionContent(effective), effective.refreshedHash])).digest("hex");
+}
+
+export function latestDecisionInspection(record: DecisionRecord) {
+  return record.version === 2 ? record.inspections?.filter(i => i.decisionDigest === decisionInspectionDigest(record)).at(-1) : undefined;
+}
+
 function revisionKnowledge(record: DecisionRecord, freshness: Freshness) {
   return { ...decisionContent(record), ...decisionProvenance(record, freshness), trust: decisionTrust(record, freshness) };
 }
@@ -149,7 +172,10 @@ function revisionKnowledge(record: DecisionRecord, freshness: Freshness) {
 /** Readers show accepted content first and label the unaccepted draft separately. */
 export function decisionKnowledge(record: DecisionRecord, freshness: Freshness = "unknown", proposalFreshness: Freshness = "unknown") {
   const effective = effectiveDecision(record);
+  const inspection = latestDecisionInspection(record);
   return { ...revisionKnowledge(effective, freshness),
+    ...(inspection ? { inspection: { freshness, at: inspection.at, inspector: inspection.inspector, note: inspection.note,
+      outcome: inspection.outcome, headHash: inspection.headHash } } : {}),
     ...(effective !== record ? { pendingProposal: revisionKnowledge(record, proposalFreshness) } : {}) };
 }
 
@@ -160,4 +186,4 @@ export function compactDecisionKnowledge(...args: Parameters<typeof decisionKnow
   return { ...summary, pendingProposal: proposal };
 }
 
-export const DECISION_GUIDANCE = "Accepted decisions are recorded team constraints, subject to freshness checks. A pendingProposal is an unaccepted replacement; the accepted revision remains operative until explicit acceptance or retirement. Proposals are suggestions; legacy unreviewed records need confirmation. Use review_decision to inspect provenance and record an authorized review; identities and sources are recorded assertions, not authenticated proof.";
+export const DECISION_GUIDANCE = "Accepted decisions are recorded team constraints, subject to freshness checks. A pendingProposal is an unaccepted replacement; the accepted revision remains operative until explicit acceptance or retirement. Proposals are suggestions; legacy unreviewed records need confirmation. Use review_decision to prepare evidence and record a separate source inspection without human approval, or an authorized human review; identities and sources are recorded assertions, not authenticated proof.";

@@ -114,8 +114,8 @@ export function completionSummary(findings: RepairFinding[], reportPath: string)
       if (source.evidence.kind === "decision-anchor") {
         const evidence = source.evidence;
         return [
-          `[advisory] Decision "${safe(evidence.title)}" may no longer hold: ${evidence.changedFiles.length} anchored file(s) changed.`,
-          `Inspect the decision and diff with review_decision(action: "prepare", id: ${JSON.stringify(evidence.decisionId)}); acceptance is not required.`,
+          `[advisory] Decision "${safe(evidence.title)}" has ${evidence.changedFiles.length} anchored file(s) changed since capture or review; consistency is unchecked.`,
+          `Inspect the decision and diff with review_decision(action: "prepare", id: ${JSON.stringify(evidence.decisionId)}). Record action: "inspect" after source inspection finds no contradiction; human acceptance is not required.`,
           `Changed files: ${safe(evidence.changedFiles.join(", "))}`,
         ].join("\n");
       }

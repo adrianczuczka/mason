@@ -85,7 +85,7 @@ function formatContext(
 ): string {
   const lines: string[] = [];
   lines.push(
-    `Mason: decision knowledge relevant to ${relPath} or updated since this session saw it. This replaces earlier guidance for the same decision id. ${DECISION_GUIDANCE} Retired or superseded records are no longer active. Do not modify decision records in .mason/decisions/.`
+    `Mason: decision knowledge relevant to ${relPath} or updated since this session saw it. This replaces earlier guidance for the same decision id. ${DECISION_GUIDANCE} Retired or superseded records are no longer active. Use Mason tools to record decision changes and source inspections; do not edit the JSON in .mason/decisions/ directly.`
   );
   const append = (id: string, knowledge: ReturnType<typeof decisionKnowledge>, label: string, freshness: Freshness) => {
     const stale = freshness === "current" ? "" : freshness === "changed"

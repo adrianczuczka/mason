@@ -168,7 +168,7 @@ describe("decision provenance and reviews", () => {
     await saveDecisionRecord(repo, accepted);
     await upsertDecision(repo, { ...lesson, id: record.id, body: "A revised delivery constraint." });
     expect((await context()).decisions[record.id]).toMatchObject({ approval: "accepted", body: lesson.body,
-      trust: { freshness: "unknown" }, pendingProposal: { approval: "proposed", trust: { freshness: "unknown", verification: "unverified" } } });
+      trust: { freshness: "unknown" }, pendingProposal: { approval: "proposed", trust: { freshness: "current", verification: "unverified" } } });
   });
 
   it("keeps the latest accepted baseline across multiple drafts and the final metadata commit", async () => {

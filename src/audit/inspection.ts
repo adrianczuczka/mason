@@ -25,6 +25,13 @@ export function inspectionRead<T>(root: string, key: string, read: () => Promise
   return inspection.reads.get(key)! as Promise<T>;
 }
 
+/** Tool writes invalidate their cached observations within the active inspection. */
+export function invalidateInspectionReads(root: string, prefix: string): void {
+  const inspection = inspections.getStore();
+  if (!inspection || inspection.root !== path.resolve(root)) return;
+  for (const key of inspection.reads.keys()) if (key.startsWith(prefix)) inspection.reads.delete(key);
+}
+
 /** Exact arguments and limits preserve each history query's semantics. */
 export function inspectionGit(args: string[], options: GitReadOptions) {
   return inspectionRead(options.cwd, "git:" + JSON.stringify([args, options]), () => execGit(args, options));

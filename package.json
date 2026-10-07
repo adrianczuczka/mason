@@ -27,6 +27,7 @@
     "bench:knowledge:lifecycle": "node bench/harness/run-lifecycle.mjs",
     "bench:knowledge:upload": "node bench/harness/run-upload.mjs",
     "bench:hooks": "node scripts/bench-hooks.mjs",
+    "bench:open-source": "node scripts/bench-open-source.mjs",
     "test:watch": "vitest",
     "pack:mcpb": "node scripts/pack-mcpb.mjs",
     "pack:standalone": "node scripts/build-standalone.mjs",

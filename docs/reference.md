@@ -99,6 +99,14 @@ Tools operate on the data they need; none require the initialization marker. Dec
 
 Setup adds host-appropriate project instructions that route assistants to decisions and impact, with map navigation when available. The [setup guide](setup.md#unified-project-setup) explains instruction files, native imports, and observed activation.
 
+### Decision capture and inspection
+
+`save_decision` captures readable anchor content when creating or revising a proposal. Committing the proposal together with that unchanged content does not produce drift. Changes made after capture still do. The capture records content hashes, including the file inventory for directory anchors; it does not establish correctness or human approval. Existing records without captures retain their Git baseline behavior. Excluded, sensitive, symlinked, oversized or otherwise unreadable anchor scopes have unknown freshness.
+
+When an advisory appears, call `review_decision` with `action: "prepare"` and inspect the relevant source and diff. If the changes do not contradict the decision, call it again with `action: "inspect"`, the returned `reviewToken`, an `inspector` identifying the actual agent or person, and a `note` explaining the evidence. This records `no_contradiction_found` separately from human review history and resolves the covered drift advisory. It leaves approval, the accepted revision and `refreshedHash` unchanged. Later anchor edits or decision revisions invalidate that assessment; unrelated commits preserve it. Preparation tokens also detect edits to already dirty anchor files.
+
+Inspection can cover uncommitted anchor content. Commit the inspection record through the normal project workflow when it should be shared. Inspection is an assessment by its named inspector, not a deterministic proof of consistency. `accept`, `reaffirm` and `retire` still require an authorized reviewer; a proposal must be accepted before it can be reaffirmed.
+
 ### How the concept map is built
 
 An optional concept map connects feature names and flows to their implementing files:

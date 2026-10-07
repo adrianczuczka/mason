@@ -1,9 +1,10 @@
+import { captureAnchors } from "./anchors.js";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { loadDecisionStore, saveDecisionRecord, withDecisionWrite } from "./decisions.js";
-import { decisionApproval, decisionAnchors, decisionContent, decisionProvenance, effectiveDecision, importLegacy, type DecisionRecord, type ReviewedDecisionRecord } from "./provenance.js";
+import { decisionInspectionDigest, decisionApproval, decisionAnchors, decisionContent, decisionProvenance, effectiveDecision, importLegacy, type DecisionRecord, type ReviewedDecisionRecord } from "./provenance.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { getChangesWithStatus, getWorkingTree, touchedPaths } from "../drift/drift.js";
 import { anchorMatches, matchingPaths } from "../utils/paths.js";
@@ -12,7 +13,8 @@ import { createFileAccess } from "../utils/files.js";
 const exec = promisify(execFile);
 const requestSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
-  action: z.enum(["prepare", "accept", "reaffirm", "retire"]).default("prepare"),
+  action: z.enum(["prepare", "inspect", "accept", "reaffirm", "retire"]).default("prepare"),
+  inspector: z.string().trim().min(1).max(200).optional(),
   reviewer: z.string().trim().min(1).max(200).optional(),
   note: z.string().trim().min(1).max(1500).optional(),
   reviewToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
@@ -29,8 +31,9 @@ async function reviewState(root: string, record: DecisionRecord) {
     baseHash: record.refreshedHash, headHash, historyAvailable: changes !== null,
     changedFiles: touchedPaths(committed), localChanges: matchingPaths(anchors, workingTree.changedFiles),
   };
-  const reviewToken = createHash("sha256").update(JSON.stringify({ record, evidence, workingTreeAvailable: workingTree.available })).digest("hex");
-  return { reviewToken, evidence, committed, workingTreeAvailable: workingTree.available };
+  const capture = await captureAnchors(root, anchors);
+  const reviewToken = createHash("sha256").update(JSON.stringify({ record, evidence, capture, workingTreeAvailable: workingTree.available })).digest("hex");
+  return { reviewToken, evidence, capture, committed, workingTreeAvailable: workingTree.available };
 }
 
 async function previews(root: string, record: DecisionRecord, state: Awaited<ReturnType<typeof reviewState>>) {
@@ -78,10 +81,10 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
     return {
       status: "prepared", record, ...(operativeDecision !== record ? { operativeDecision } : {}), provenance: decisionProvenance(record), ...state, diagnostics,
       previews: await previews(root, record, state),
-      hint: "Inspect the proposed content, operativeDecision, sources, history, and code changes. A pending proposal leaves the prior accepted revision operative; accepting it replaces that revision, and retirement withdraws the entire decision including its proposal. Evidence covers both revisions' anchors. Only record acceptance or reaffirmation when the user or cited team review has authorized it. Supply that reviewer's identity, a reason, and this reviewToken. Do not invent identities or infer agreement from unchanged code. Acceptance and reaffirmation require committed anchor changes; retirement is available independently. Missing old history remains visible in the event even if a reviewer establishes a new baseline at HEAD. Saved reviews are local assertions for normal PR review, not authenticated approvals.",
+      hint: "Inspect the proposed content, operativeDecision, sources, history, and code changes. A pending proposal leaves the prior accepted revision operative; accepting it replaces that revision, and retirement withdraws the entire decision including its proposal. Evidence covers both revisions' anchors. After inspecting the relevant code, action inspect with inspector, note and reviewToken records no_contradiction_found without human approval; it does not accept or reaffirm the decision. Only record acceptance or reaffirmation when the user or cited team review has authorized it. Supply that reviewer's identity, a reason, and this reviewToken. Do not invent identities or infer agreement from unchanged code. Acceptance and reaffirmation require committed anchor changes; retirement is available independently. Missing old history remains visible in the event even if a reviewer establishes a new baseline at HEAD. Saved reviews are local assertions for normal PR review, not authenticated approvals.",
     };
   }
-  if (!request.reviewer || !request.note || !request.reviewToken) return { status: "error", error: "Prepare the review first, then provide reviewToken, reviewer, and note." };
+  if (!(request.action === "inspect" ? request.inspector : request.reviewer) || !request.note || !request.reviewToken) return { status: "error", error: "Prepare the review first, then provide reviewToken, note, and inspector for inspect or reviewer for a human verdict." };
   return withDecisionWrite(root, async () => {
     const { record: original, diagnostics } = await read();
     if (diagnostics.length) return { status: "error", error: "Repair malformed decision records before recording a review.", diagnostics };
@@ -89,6 +92,20 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
     const state = await reviewState(root, original);
     if (state.reviewToken !== request.reviewToken) return { status: "conflict", error: "The decision or code revision changed after preparation. Prepare and inspect a new review." };
     if (original.status !== "active") return { status: "error", error: "Archived decisions cannot be reviewed again; create a new proposal." };
+    if (request.action === "inspect") {
+      if (!state.capture.complete || !state.capture.anchors.length || state.evidence.headHash === "unknown" || !state.workingTreeAvailable) {
+        return { status: "error", error: "Inspection requires complete readable anchor content and Git evidence; narrow or repair the scope and prepare again." };
+      }
+      const record = importLegacy(original, new Date().toISOString());
+      if ((record.inspections?.length ?? 0) >= 200) return { status: "error", error: "Inspection history limit reached; existing evidence was retained." };
+      const inspection = { at: new Date().toISOString(), inspector: request.inspector!, note: request.note!,
+        outcome: "no_contradiction_found" as const, decisionDigest: decisionInspectionDigest(record),
+        headHash: state.evidence.headHash, capture: state.capture };
+      if ((await reviewState(root, original)).reviewToken !== state.reviewToken) return { status: "conflict", error: "Anchor content changed during inspection; prepare again." };
+      await saveDecisionRecord(root, { ...record, inspections: [...(record.inspections ?? []), inspection] });
+      return { status: "inspected", id: record.id, inspection, approval: record.approval,
+        hint: "Inspection recorded locally; no human acceptance or reaffirmation was claimed. Relevant content changes reopen the advisory. Review and commit this record through the project workflow." };
+    }
     const approval = decisionApproval(original);
     if (request.action === "accept" && approval === "accepted") return { status: "error", error: "This decision is already accepted. Use reaffirm to record a new review." };
     if (request.action === "reaffirm" && approval !== "accepted") return { status: "error", error: "Only accepted decisions can be reaffirmed. Review and accept this proposal or legacy record first." };
@@ -103,9 +120,9 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
     const refreshedHash = request.action === "retire" ? record.refreshedHash : state.evidence.headHash;
     const event = { kind: request.action === "accept" ? "accepted" : request.action === "reaffirm" ? "reaffirmed" : "retired",
       at: now, actor: request.reviewer, note: request.note, revision: record.revision, content: decisionContent(record),
-      approval: nextApproval, status, refreshedHash, evidence: state.evidence,
+      approval: nextApproval, status, refreshedHash, evidence: state.evidence, capture: request.action === "retire" ? record.capture : undefined,
     } as const;
-    const updated: ReviewedDecisionRecord = { ...record, status, approval: nextApproval, refreshedHash, updatedAt: now, history: [...record.history, event] };
+    const updated: ReviewedDecisionRecord = { ...record, status, approval: nextApproval, refreshedHash, capture: event.capture, updatedAt: now, history: [...record.history, event] };
     // Detect an external Git operation during review preparation, too.
     if ((await reviewState(root, original)).reviewToken !== state.reviewToken) return { status: "conflict", error: "Code changed while the review was being recorded. Prepare a new review." };
     await saveDecisionRecord(root, updated);

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Capture readable decision anchors when saving proposals, so committing a proposal with its implementing code does not create false drift. Later source edits still require inspection; unreadable scopes retain unknown freshness.
+- Add separate source inspections that resolve covered drift without claiming human acceptance or changing the accepted revision. Bind preparation tokens to source bytes, preserve original audit evidence, and reopen inspections after relevant changes.
+- Batch anchor inventories, index path scopes, and reuse decision reads within each inspection while retaining fresh final validation. Add reproducible validation against pinned Now in Android and WordPress Android repositories, with measured hook costs documented in `docs/hook-performance.md`.
+
 ## 0.20.2 — 2026-09-30
 
 - Show decision titles and the inspection command before changed file paths in completion warnings, so long paths cannot hide the reason for review or the next step.

@@ -143,5 +143,5 @@ export async function createFileAccess(rootDir: string) {
       return content === null ? null : { path: relative, content, totalLines: content.split("\n").length };
     } catch { return null; }
   }
-  return { root, config, list, read };
+  return { root, config, list, read, inventory: () => gitFiles ? [...gitFiles].sort() : null };
 }
