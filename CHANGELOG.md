@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Deliver file-scoped decision knowledge through standard Claude hooks after `Read` and before `Edit`/`Write`, reusing the existing injector and session deduplication. Confine delivery to the active checkout, retain approval/freshness labels and audit diagnostics, and preserve the standalone PostToolUse contract. Shell commands and Codex remain outside direct lesson injection.
+
 ## 0.21.0 — 2026-10-10
 
 - Continue Claude once at Stop when outstanding decision drift overlaps observed session anchor edits. Require source inspection, preserve human approval boundaries, and keep repeat Stops and Codex advisory. Add local `mason auto config --stop-block off|drift` controls and status reporting. Include uncommitted anchor changes in drift findings for accepted and legacy decisions using Git baselines.

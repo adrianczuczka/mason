@@ -10,7 +10,7 @@ This describes the current source implementation. It is not a promise that every
 
 The host sends JSON on stdin, including prompt text, tool arguments such as shell commands and file contents, tool responses, identifiers, and a transcript path, depending on the event. The binary receives that data in memory even when a field is unused. See the [Claude hook contract](https://code.claude.com/docs/en/hooks) and [Codex hook contract](https://learn.chatgpt.com/docs/hooks).
 
-Automation uses the working directory, event, tool name, tool/session identifiers, and continuation/plan flags. It does not execute supplied commands, read the supplied transcript, or persist raw prompts, tool argument bodies, or tool responses. Inputs above 1 MiB are rejected; malformed JSON diagnostics do not quote payload contents. The separate decision-injection hook uses a touched file path to retrieve decisions.
+Automation uses the working directory, event, tool name, tool/session identifiers, and continuation/plan flags. Its standard Claude decision injector also uses `file_path` on supported read/edit/write events to retrieve file-scoped knowledge from the active checkout. It does not execute supplied commands, read the supplied transcript, or persist raw prompts, tool argument bodies, or tool responses. Inputs above 1 MiB are rejected; malformed JSON diagnostics do not quote payload contents. The separate decision-injection hook remains available for custom integrations.
 
 Mason separately reads files and Git history needed by the requested checks or tools. Reports can contain proprietary document excerpts, paths, commit information, and decision evidence. Context tools can return code previews and decision bodies to the assistant.
 
@@ -21,6 +21,7 @@ Mason separately reads files and Git history needed by the requested checks or t
 | `.mason/snapshot.json`, `.mason/config.json` | Optional architecture map and repository settings. Shared when committed; maps can contain proprietary descriptions and paths. |
 | `.mason/local/` | Setup and ownership records, ignored by generated setup rules. |
 | `.mason/reports/` | Original evidence, findings, caches, execution/activation receipts; ignored by generated setup rules. Receipts can contain root paths, branch, hostname, PID, timing, event names, hashed session identifiers, and tool call identifiers. Baselines persist; execution history is bounded. |
+| OS temporary directory, `mason-hook-*.json` | Decision IDs and record hashes already delivered in a session/agent; shared by standard Claude delivery and the standalone injector. No decision bodies or source bytes. Best-effort deduplication state; not shared review evidence. |
 | `~/.mason/config.json` | Optional Confluence credentials and LLM configuration. User-level JSON; credentials are not encrypted by Mason. |
 | Standalone installation directory | Executable, bundled Node, dependencies, receipts, update policy and last-attempt diagnostics, staged/previous versions, command and MCP process leases, and cached Sigstore trust metadata. Defaults to `~/.local/share/mason` or `%LOCALAPPDATA%\Mason`. |
 

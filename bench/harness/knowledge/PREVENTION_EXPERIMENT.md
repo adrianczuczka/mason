@@ -67,3 +67,5 @@ npm run bench:knowledge:lifecycle -- --resume /absolute/path/to/live-output --re
 ```
 
 Exit 2 is a review boundary, not a successful completed comparison. A reviewer who knows the harness implementation must disclose that the review is unblinded. Save a tracked results summary linking this spec; raw transcripts and fixture records remain in ignored local output. Record missing coverage explicitly rather than silently widening the interpretation of existing results.
+
+The subsequent [seeded standard-hook experiment](HOOK_PREVENTION_EXPERIMENT.md) and [results](HOOK_PREVENTION_RESULTS.md) cover the independent seeded path, standard lifecycle notifications, repeated inspections and request/policy conflict. They retain the delivery gap, interrupted development evidence and limits; stale/missing check receipts and real-project proof remain open.

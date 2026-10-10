@@ -8,7 +8,11 @@ The [conditional lifecycle case](LIFECYCLE.md) extends this through changed requ
 
 The [repeat-mistake prevention experiment](PREVENTION_EXPERIMENT.md) defines the next product evaluation, including capture and existing-lesson paths, grading gates, cost diagnostics, and the hook/conflict controls that the current lifecycle runner does not yet cover.
 
-The [2026-10-10 prevention baseline](PREVENTION_BASELINE_RESULTS.md) completed eight live Codex sessions. Both current Mason and notes passed; Mason reported higher token usage. Hook-enabled prevention and the additional controls remain to be evaluated.
+The [2026-10-10 prevention baseline](PREVENTION_BASELINE_RESULTS.md) completed eight live Codex sessions. Both current Mason and notes passed; Mason reported higher token usage. That baseline disabled hooks; the subsequent delivery comparison is described below.
+
+The subsequent [seeded standard-hook protocol](HOOK_PREVENTION_EXPERIMENT.md) and [twelve-session Claude results](HOOK_PREVENTION_RESULTS.md) separate notes, MCP-only and standard lifecycle hooks. Hooks added post-edit inspections but delivered no technical lesson before edits; MCP and notes supplied that rationale. The conflict case and development grading defects are retained explicitly. This comparison is separate from the Codex baseline.
+
+The [standard delivery candidate protocol](STANDARD_DELIVERY_EXPERIMENT.md) and [sixteen-session results](STANDARD_DELIVERY_RESULTS.md) compare saved baseline binaries with integrated file-scoped injection. The candidate delivered one full lesson after a supported read before a later edit, without duplicate or unrelated hook lessons. Ordinary Bash workflows remained uncovered, and correctness matched baseline hooks. PreToolUse context does not replan an already requested tool call.
 
 The [interrupted-upload probe](UPLOAD.md) tests maintenance of deliberately seeded, reviewed knowledge under a changed retention assumption, with a local publishing simulator, fresh-session reuse and a first-upload control. It measures maintenance rather than original capture.
 

@@ -39,6 +39,10 @@ const hookStdinSchema = z.object({
 export interface HookEnv {
   /** Override for tests; defaults to os.tmpdir(). */
   stateDir?: string;
+  /** Standard lifecycle integration confines delivery to its active checkout. */
+  rootDir?: string;
+  /** Standalone hooks retain PostToolUse; the lifecycle adapter can deliver before edits. */
+  hookEventName?: "PreToolUse" | "PostToolUse";
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -168,6 +172,7 @@ export async function runHook(stdinText: string, env: HookEnv = {}): Promise<str
     : path.resolve(input.cwd ?? process.cwd(), filePath);
   const root = await findMasonRoot(path.dirname(absPath));
   if (!root) return null;
+  if (env.rootDir && (await fs.realpath(root)) !== (await fs.realpath(env.rootDir))) return null;
   const relPath = path.relative(root, absPath).split(path.sep).join("/");
   if (relPath.startsWith("..")) return null;
 
@@ -215,7 +220,7 @@ export async function runHook(stdinText: string, env: HookEnv = {}): Promise<str
 
   return JSON.stringify({
     hookSpecificOutput: {
-      hookEventName: "PostToolUse",
+      hookEventName: env.hookEventName ?? "PostToolUse",
       additionalContext: formatContext(relPath, selected, drift),
     },
   });

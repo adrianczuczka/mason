@@ -4,6 +4,7 @@ import { z } from "zod";
 import { automate, observeReadOnlyTool, type AutomationEvent } from "./runtime.js";
 import { hostSchema, type Host } from "./store.js";
 import { resolveHookRoot } from "./hook-root.js";
+import { runHook } from "../hook/hook.js";
 
 const inputSchema = z.object({
   cwd: z.string().min(1),
@@ -30,6 +31,33 @@ const lifecycle: Record<z.infer<typeof inputSchema>["hook_event_name"], Automati
     PostToolUse: "after_tool",
     Stop: "task_end",
   };
+
+/** Reuse the existing file-scoped injector; never infer file targets from shell text. */
+async function decisionContext(host: Host, raw: unknown, root: string): Promise<string | null> {
+  const input = inputSchema.parse(raw);
+  if (
+    host !== "claude" ||
+    !(
+      (input.hook_event_name === "PostToolUse" && input.tool_name === "Read") ||
+      (input.hook_event_name === "PreToolUse" && ["Edit", "Write"].includes(input.tool_name ?? ""))
+    )
+  )
+    return null;
+  try {
+    const output = await runHook(JSON.stringify(raw), {
+      rootDir: root,
+      hookEventName: input.hook_event_name,
+    });
+    if (!output) return null;
+    const parsed: unknown = JSON.parse(output);
+    return z
+      .object({ hookSpecificOutput: z.object({ additionalContext: z.string() }) })
+      .parse(parsed).hookSpecificOutput.additionalContext;
+  } catch (error) {
+    // Delivery failure must not discard an audit notice or an activation diagnostic.
+    return failureMessage(error) + " Decision knowledge was not delivered.";
+  }
+}
 
 /** Shell and unknown/MCP tools are conservatively observed: edits need not use a file editor. */
 export function normalizeHook(
@@ -91,7 +119,15 @@ export async function runAutomationHook(
         sessionId: input.event.sessionId,
         directory: observed.directory,
       });
-      return warning ? { systemMessage: warning } : null;
+      const knowledge = await decisionContext(host, raw, observed.root);
+      return knowledge
+        ? {
+            ...(warning ? { systemMessage: warning } : {}),
+            hookSpecificOutput: { hookEventName: name, additionalContext: knowledge },
+          }
+        : warning
+          ? { systemMessage: warning }
+          : null;
     }
     const result = await automate(input.cwd, input.event);
     const { observeActivation } = await import("../setup/observations.js");
@@ -101,6 +137,8 @@ export async function runAutomationHook(
       reportPath: result.report.reportPath,
     });
     if (warning) result.message = [result.message, warning].filter(Boolean).join("\n");
+    const knowledge = await decisionContext(host, raw, result.report.root);
+    if (knowledge) result.message = [result.message, knowledge].filter(Boolean).join("\n\n");
     if (name === "Stop" && result.stopBlockReason) {
       return { decision: "block", reason: result.message ?? result.stopBlockReason };
     }

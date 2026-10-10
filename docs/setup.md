@@ -127,6 +127,10 @@ When upgrading an existing MCP setup, update any separately pinned server comman
 
 Mason checks documentation as you work. It gives the assistant new or worsened findings after tool calls and when you submit a prompt. At the end of a response, a separate notice shows you any remaining new findings. Existing findings normally stay quiet. Claude Stop can continue the assistant once when outstanding decision drift overlaps anchor edits observed during that session.
 
+The current development implementation also delivers file-scoped decision bodies through Claude's standard lifecycle handlers: after `Read`, or before `Edit`/`Write` when their payload includes `file_path`. No additional hook configuration is needed. Existing PATH-based setups receive this behavior after upgrading and restarting the assistant. Accepted guidance stays distinct from pending proposals and includes source, scope and freshness labels. Delivery is confined to the active checkout and deduplicated per session/agent; changed records and withdrawals can be delivered again. Reading a file does not advance the audit verification result.
+
+Direct lesson delivery does not parse Bash commands or cover Codex/unsupported tool payloads. Use `get_context` for those workflows. Claude reads hook context on the next model request, alongside tool results: a post-read lesson can guide a later edit, while returning context before `Edit`/`Write` executes does not stop or replan the already requested tool call. See [Claude's context timing contract](https://code.claude.com/docs/en/hooks#add-context-for-claude). Delivery is advisory; audit messages and source-inspection requirements remain separate. MCP and hooks may both return the same lesson.
+
 Claude Stop review blocking defaults to `drift`. Mason compares paired pre-tool and post-tool anchor content, including directory additions/deletions, separately for each session and branch/worktree. Existing drift becomes eligible when the session changes the affected content again. Commits alone, read-only tools, and unmatched captures do not establish session edits. Intervals where HEAD moves are conservatively excluded from new edit attribution, so pulls/merges/checkouts stay advisory; an edit committed within one tool may therefore lack attributable evidence. Earlier observed edits survive later commits. Missing or unreadable evidence stays advisory. Concurrent writes during a tool can contribute; observed changes do not prove authorship.
 
 The reminder names each decision and asks the assistant to run `review_decision(action: "prepare", id: "...")`, inspect the claims against source and diff, and record `action: "inspect"` with supporting evidence when no contradiction is found. Conflicts or uncertainty require an explanation and user direction. Acceptance, reaffirmation, and retirement still require authorized human review. Editing a proposal does not silently replace the accepted revision.
@@ -177,13 +181,13 @@ The [automation evaluation](../bench/harness/automation/README.md) compares ordi
 
 ## Decision injection (mason-hook)
 
-Recorded knowledge only helps if it shows up. Retrieval tools depend on the model deciding to call them — and it often doesn't. `mason-hook` removes the gamble: it's a Claude Code `PostToolUse` hook that fires when a session reads or edits a file, looks up the decision records anchored to that file (exact path or directory prefix), and injects them into the model's context. Deterministic lookup, no LLM call, ~100ms, silent when nothing matches. Each decision is injected at most once per session, and records whose anchors drifted since verification carry a verify-before-relying marker.
+The current development implementation uses this injector in standard Claude setup as described above. The separate `mason-hook` command remains available for custom integrations and retains its `PostToolUse` behavior for `Read`, `Edit` and `Write`. Both entry points share the same per-session/agent deduplication state. Decisions use exact file or directory anchors, are capped at three per delivery, and include verify-before-relying markers when evidence has changed or is unknown. Unchanged records are quiet after delivery; record changes can be sent again. Delivery uses local files and Git without model calls; cost depends on the decision store and inspected anchors.
 
 ```bash
 npx -p mason-context mason-hook --print-config   # the settings block to add
 ```
 
-Add the printed block to `.claude/settings.json` — the *committed* project settings, so every teammate's sessions get the same rail. The loop this closes: someone captures a proposal with `save_decision` and records acceptance with `review_decision` ("this screen has a v1 and v2 — new work goes in v2 behind flag X"), and from then on any session that touches those files gets told, whether or not it thought to ask.
+For a custom integration, add the printed block to `.claude/settings.json`. Standard setup does not require this additional block. A separately configured post-edit injector cannot guarantee that the lesson arrived before the edit; prefer the standard supported read/pre-edit paths and inspect actual host delivery.
 
 For faster fires than `npx` resolution allows, install the package (`npm i -D mason-context`) and point the command at `node_modules/.bin/mason-hook`.
 
