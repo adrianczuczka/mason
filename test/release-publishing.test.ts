@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import fs from "node:fs/promises";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { createMcpServer } from "../src/mcp/server.js";
 import {
   validateRelease,
   validateNpm,
@@ -98,4 +102,35 @@ describe("release publication guards", () => {
       registryAlreadyPublished(server, 200, { ...response, server: { ...server, packages: [] } }),
     ).toThrow("package metadata");
   });
+});
+
+it("advertises the runtime decision inspection flow in the published bundle tool card", async () => {
+  vi.stubGlobal("PKG_VERSION", "test");
+  const server = createMcpServer();
+  const client = new Client({ name: "release-tool-card-test", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  try {
+    await server.connect(a);
+    await client.connect(b);
+    const tool = (await client.listTools()).tools.find((tool) => tool.name === "review_decision")!;
+    const manifest = JSON.parse(
+      await fs.readFile(new URL("../manifest.json", import.meta.url), "utf8"),
+    );
+    const declared = manifest.tools.find(
+      (entry: { name: string }) => entry.name === "review_decision",
+    );
+    expect(declared.description).toBe(tool.description);
+    for (const field of ["action", "inspector", "reviewer", "note", "reviewToken"]) {
+      expect(declared.inputSchema.properties[field]).toMatchObject(
+        tool.inputSchema.properties![field],
+      );
+    }
+    expect(declared.inputSchema.properties.action.enum).toContain("inspect");
+    expect(declared.inputSchema.required).not.toContain("reviewer");
+    expect(declared.inputSchema.required).not.toContain("inspector");
+  } finally {
+    await client.close();
+    await server.close();
+    vi.unstubAllGlobals();
+  }
 });

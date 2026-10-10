@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "never-rewrite-manifest-json-via-a-json-round-trip",
   "title": "Never rewrite manifest.json via a JSON round-trip",
   "body": "A scripted json.load/json.dump edit reformatted the whole hand-formatted file and produced a 322-line diff for three description changes (fixed in commit d68ffa2). Edit manifest.json with targeted string edits that preserve the existing compact formatting.",
@@ -10,5 +10,47 @@
   "createdAt": "2026-07-22T14:19:45.336Z",
   "updatedAt": "2026-09-04T21:23:42.648Z",
   "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f",
-  "status": "active"
+  "status": "active",
+  "approval": "unreviewed",
+  "revision": 1,
+  "sources": [],
+  "history": [
+    {
+      "kind": "imported",
+      "at": "2026-10-10T10:26:42.338Z",
+      "note": "Imported a legacy record. Prior authorship and review history are unknown.",
+      "revision": 1,
+      "content": {
+        "title": "Never rewrite manifest.json via a JSON round-trip",
+        "body": "A scripted json.load/json.dump edit reformatted the whole hand-formatted file and produced a 322-line diff for three description changes (fixed in commit d68ffa2). Edit manifest.json with targeted string edits that preserve the existing compact formatting.",
+        "category": "gotcha",
+        "files": [
+          "manifest.json"
+        ],
+        "sources": []
+      },
+      "approval": "unreviewed",
+      "status": "active",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    }
+  ],
+  "inspections": [
+    {
+      "at": "2026-10-10T10:26:42.339Z",
+      "inspector": "Codex",
+      "note": "Inspected the manifest.json diff: version updated and review_decision description, action enum, inspector and review field descriptions changed through targeted string edits. The original compact tool-schema layout is preserved; the file was not rewritten through JSON serialization. No contradiction found with the formatting lesson.",
+      "outcome": "no_contradiction_found",
+      "decisionDigest": "d9149270e3373ac9e9146dd5ed22b762a9863fd0e9cf479c1a63bc625da914d6",
+      "headHash": "05f1caacf04f4a0f92690e336bf29a08555d4d1f",
+      "capture": {
+        "anchors": [
+          "manifest.json"
+        ],
+        "files": {
+          "manifest.json": "988b2a01be94fbff2b397abb91fac0e815f7fa078041448a30054d3f6df66d06"
+        },
+        "complete": true
+      }
+    }
+  ]
 }
