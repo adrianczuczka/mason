@@ -1,6 +1,6 @@
 # Mason: becoming the definitive context engineer
 
-Originally captured by Codex on 2026-09-05, against release 0.11.0. Combined priorities updated on 2026-09-09, against release 0.16.1.
+Originally captured by Codex on 2026-09-05, against release 0.11.0. Combined priorities updated on 2026-09-09, against release 0.16.1. Product delivery proposal added on 2026-10-10, against release 0.21.0.
 
 Linked Mason memory: [direction and growth roadmap](.mason/decisions/mason-s-definitive-context-engineer-direction-and-growth-roa.json), recorded as a sourced proposal.
 
@@ -10,25 +10,83 @@ The earlier question was: "how close is this to becoming the definitive context 
 
 The maintainer requested that this direction be recorded and later asked to combine the ranked knowledge-debt ideas with the maintenance workflow below. This authorizes updating the roadmap and linked memory; the delivery sequence is a recommendation, not a claim that its implementation or every milestone has been approved. No roadmap owner or formal acceptance has been recorded.
 
-## Combined priorities: capture, maintain, and enforce
+## Current delivery plan — 2026-10-10
+
+**Product promise:** Your coding agent remembers why—and catches the moment that reasoning needs to change.
+
+The maintainer requested that the product discussion and all five bets be preserved here. The maintainer also authorized reconciling this plan with the earlier strategy. This section is the authoritative delivery sequence; recording it does not approve every implementation or establish its outcomes. The earlier priorities, requirements, and evidence remain below as supporting context. The linked Mason memory predates this proposal; consult this section for the latest delivery recommendation.
+
+### Five product bets
+
+| Bet | First useful slice | Proposed sequence |
+|---|---|---|
+| Surface lessons before edits | Deliver accepted, file-scoped constraints before relevant changes through supported host hooks, with concise rationale and session deduplication. | First milestone |
+| Turn accepted lessons into executable protection | Associate a specific accepted revision with a reviewed regression test or established check, expose current execution evidence, and demonstrate a deliberate violation failing and a valid alternative passing. | Basic linkage in the first milestone; broader enforcement follows evidence |
+| Explain context selection | Show why a lesson appeared, its scope, approval and freshness, and material omissions or missing evidence. Expand into a dedicated debugger as observed retrieval failures justify it. | Basic explanation in the first milestone |
+| Resume unfinished work across agents | Recover a bounded handoff containing the objective, rejected approaches, unresolved questions and pending checks, tied to repository, branch/worktree and inspected evidence. Revalidate changed state on resumption. | Candidate follow-up; order determined by pilot evidence |
+| Help teams maintain their knowledge | Offer a task-relevant review queue with changed evidence and proposed revision or retirement outcomes. Develop ownership and routing with pilot teams while preserving authorized review boundaries. | Candidate follow-up; order determined by pilot evidence |
+
+These are product outcomes rather than five independent infrastructure projects. The first milestone combines selective correction capture and maintained reuse with pre-edit guidance, basic check linkage, and selection explanations. It does not require a general enforcement engine or a dedicated context debugger. Basic handling of changed or conflicting evidence belongs in this milestone; broader contradiction detection and explicit reconsideration conditions remain follow-up capabilities. Continuity and team maintenance are provisional next bets: pilot evidence may instead prioritize better capture or retrieval. Cross-repository work remains demand-led. Trust, provenance, map-free adoption, and fair outcome evaluation apply throughout.
+
+### First milestone: Mason prevents a repeat mistake
+
+Target experience: “This change touches a known startup constraint. Here is why it exists, what evidence has changed, and the check that protects it.” A fresh agent should avoid a known mistake during an ordinary task without being told to consult Mason.
+
+Start with the existing [Jacket startup/R8 lifecycle case](bench/harness/knowledge/LIFECYCLE.md) as a development example. Its reduced JVM reproduction and prior trials provide a starting point, not independent real-project proof. Compare current Mason with well-maintained notes containing the same facts, inspect where delivery or behavior fails, and implement the smallest change supported by that evidence.
+
+Evaluate two paths: use a seeded accepted lesson to isolate delivery and prevention, and capture a useful sourced proposal from an ordinary correction, review it separately, then reuse it in a fresh session. Seeded retrieval alone does not satisfy the capture outcome. Reuse the existing capture and review lifecycle; keep the new delivery implementation focused on accepted lessons, existing file anchors, concise delivery, session deduplication, and supported host events. Proposed or uncertain guidance must remain visibly distinct from operative constraints. Check linkage must preserve the existing evidence and review model; an assistant's source inspection does not approve a decision. Evaluate host capabilities separately rather than assuming identical pre-edit delivery.
+
+Acceptance criteria:
+
+- An ordinary correction produces a useful, narrowly scoped, sourced proposal without Mason-specific prompting; skip summaries, temporary instructions, duplicates, and speculative conclusions. After authorized review, a fresh session retrieves and uses it.
+- Relevant guidance reaches the agent before the risky edit on supported paths; record missed delivery explicitly.
+- The resulting patch preserves the applicable constraint and passes the relevant validation. Delivery alone is not success.
+- Repeated tool calls do not repeat unchanged guidance; materially changed evidence can prompt renewed inspection.
+- Unrelated tasks receive no irrelevant guidance or unnecessary interruption and create no lesson records.
+- Changed assumptions lead to inspection and, when appropriate, an authorized revision or retirement; the agent does not blindly repeat obsolete advice.
+- Known conflicting guidance is exposed with its sources and scopes for inspection rather than silently choosing a winner. Historical, superseded, and differently scoped advice is distinguished from an actual conflict. Broad automatic contradiction detection is outside this initial slice.
+- Context explains selection, scope, approval, freshness, and unavailable evidence. Empty matches and omitted results do not imply safety.
+- A linked check fails for a deliberate violation and passes for a valid alternative. Missing or stale execution evidence remains explicit.
+
+### Immediate work and evaluation
+
+1. Use the [repeat-mistake experiment spec](bench/harness/knowledge/PREVENTION_EXPERIMENT.md), recorded on 2026-10-10, to freeze representative tasks, matched evidence, grading and host coverage before model calls. It sets development gates and a provisional 25% paired latency/token overhead diagnostic; population and broader review-effort targets remain to be established with pilots. Existing-runner coverage and missing seeded/hook/conflict controls are explicit.
+2. Run and retain a baseline using current Mason and ordinary notes, with both seeded-lesson and ordinary-correction paths, fresh sessions, changed-assumption, conflicting-guidance, and unrelated-task controls. Diagnose whether misses come from capture, retrieval, delivery, understanding, maintenance, or validation.
+3. Build the smallest prevention slice combining existing capture and maintained reuse with the first three bets, then repeat the same experiment. Retain failures and valid alternatives as well as successes.
+4. Broaden to independent incidents and recruit three to five maintainers of established repositories for ordinary-work pilots. Recruitment is proposed; no participants or outreach are recorded.
+5. Publish outcomes and limitations, including misses and maintenance cost, before claiming a repeat-mistake advantage. Use pilot evidence to choose the next milestone: improve capture/retrieval where necessary, or proceed to continuity or team review. Do not treat their table order as a commitment.
+
+The first useful onboarding loop should be: install Mason → inspect a recent correction → approve one useful lesson → retrieve it during the next relevant task. A required architecture-map build should not stand between installation and that outcome.
+
+### Current evidence and boundaries
+
+At 0.21.0, Mason has decision capture and review history, drift detection, durable advisory assessments, evidence imports, and host integrations. Claude can be continued once at Stop when outstanding decision drift overlaps observed session edits; Codex remains advisory. Completion-time inspection is progress toward prevention, but does not establish pre-edit influence. Current task retrieval uses lexical matching and file anchors with fixed result limits. Improve selection based on measured missed constraints, irrelevant inclusions, and context cost before choosing a more elaborate retrieval system.
+
+The initial ten-task patch comparison tied at 10/10, and the maintained-reuse development trials also succeeded with ordinary notes. Better patch outcomes and a durable advantage over notes remain unproven. See [benchmark limitations](docs/benchmarks.md), [lifecycle results](bench/harness/knowledge/LIFECYCLE_RESULTS.md), and [revision guidance results](bench/harness/knowledge/REVISION_GUIDANCE_RESULTS.md). No new experiment or implementation is completed by recording this proposal.
+
+The [2026-10-10 prevention baseline](bench/harness/knowledge/PREVENTION_BASELINE_RESULTS.md) subsequently completed eight live Codex sessions after deterministic native/lifecycle validation. Both current Mason and notes passed capture, reviewed revision, fresh reuse, and the unrelated control. Mason's reported input-plus-output tokens were about 33.4% higher and aggregate session time about 17.4% higher; these are one-run observations, with model identity and dollar cost unknown. Hooks were disabled. The independent seeded path, hook-enabled delivery, conflict and stale-evidence controls remain open; this baseline does not complete the prevention milestone. Next evaluate those paths and investigate context overhead rather than assuming an unobserved correctness gap.
+
+Source: maintainer product discussion in this chat on 2026-10-10, including the requests to preserve all five table entries, reconcile the earlier strategy into one delivery plan, and include capture, changed/conflicting evidence, and evidence-led follow-up ordering. The product promise, sequence and acceptance criteria are assistant recommendations captured at the maintainer's request; no conversation permalink was supplied.
+
+## Supporting strategy: capture, maintain, and enforce
 
 Context engineering supplies relevant information for the current task. Managing knowledge debt keeps the project's reasoning useful and trustworthy as its code, dependencies, and team change. Mason's proposed product loop is **capture useful rationale → review → retrieve during work → reconsider when evidence changes → reaffirm, revise, or retire**. Constraints that can be tested should also gain executable checks.
 
-The earlier ranking described likely everyday usefulness at Mason's current stage. The maintenance proposal supplies the lifecycle those ideas need. Preserve the ranking while distinguishing it from implementation order:
+The earlier ranking described likely everyday usefulness at Mason's current stage. The maintenance proposal supplies the lifecycle those ideas need. This historical usefulness ranking is retained; the current delivery plan above governs implementation order:
 
 | Earlier rank | Idea | Place in the combined roadmap |
 |---|---|---|
 | 1 | Capture knowledge from review corrections | First product outcome to prove: preserve a useful, sourced correction during ordinary work and prevent the mistake in a fresh session. Deliver alongside the maintenance foundation below. |
-| 2 | Turn constraints into executable checks | Next major capability after that loop: link accepted, testable constraints to reviewed tests or established analysis rules and current execution evidence. |
+| 2 | Turn constraints into executable checks | Basic reviewed check linkage joins the current prevention milestone; broader enforcement follows evidence from capture and maintained reuse. |
 | 3 | Detect contradictory guidance | Surface conflicting claims with their sources, scope, approval, and freshness for review; do not silently select or rewrite the winner. |
-| 4 | Context debugger | Explain why knowledge was included, omitted, or treated as uncertain. Include basic diagnostics in each milestone; a dedicated debugging workflow follows contradiction review. |
+| 4 | Context debugger | Explain why knowledge was included, omitted, or treated as uncertain. Include basic diagnostics in the current milestone; scope a dedicated debugger from observed retrieval failures and contradiction-review needs. |
 | 5 | Conditions for reconsidering decisions | Begin now with existing anchor changes and durable review outcomes. Add explicit dependency, assumption, and retirement conditions after the basic lifecycle works. |
 | 6 | Track changes across repositories | Expand when real multi-service users justify the added identity, access, ownership, and revision handling. Could move into the top two for those users. |
 | 7 | Measure individual context contributions | Run evaluation throughout, including comparisons with ordinary project notes and removal of individual context sources. Low customer-facing rank does not make this last in the build order. |
 
-### First milestone: a useful lesson survives change
+### Maintenance foundation and capture requirements
 
-**Slice A — close the maintenance gap first.** Basic proposal capture, decision review, hooks, and retained repair evidence already exist in 0.16.1. At that release, retained audit advisories remained `review-required` without a persisted assessment that verification could consume. The implementation authorized on 2026-09-11 builds on the existing CLI/MCP and decision history:
+**Slice A — durable advisory assessment (shipped in 0.17.0).** Basic proposal capture, decision review, hooks, and retained repair evidence already exist in 0.16.1. At that release, retained audit advisories remained `review-required` without a persisted assessment that verification could consume. The implementation authorized on 2026-09-11 builds on the existing CLI/MCP and decision history:
 
 - Record an advisory's assessment, reviewer, reason, and exact evidence inspected. Distinguish addressed, inapplicable, and deferred outcomes; deferral remains outstanding. Reuse decision acceptance, reaffirmation, revision, and retirement for decision findings. Closing an advisory must not implicitly approve a decision.
 - Bind the assessment to the finding, relevant code/document evidence, and decision revision. Reject a stale prepared review. Preserve closure across sessions, unrelated commits, and the final metadata commit; reopen it when relevant evidence changes. Unavailable evidence remains unknown.
@@ -46,13 +104,15 @@ The first development case is the [conditional R8 startup lifecycle](bench/harne
 
 The [first live Codex development trial](bench/harness/knowledge/LIFECYCLE_RESULTS.md) captured useful proposals and preserved release startup in both arms, with no records on the unrelated control. Notes completed the reviewed revision and subsequent reuse; Mason created a second proposal instead of revising the original accepted lesson. Revision guidance now explicitly favors the existing ID when that lesson's assumptions, scope or recommendation changes, while allowing distinct records and retaining approval boundaries. In the [unchanged repeat and interrupted-upload probe](bench/harness/knowledge/REVISION_GUIDANCE_RESULTS.md), both Mason and notes passed reviewed revision, fresh reuse and no-extra-record controls. These small development trials support the guidance change; they do not establish superiority or long-term reliability. Broader independent cases and distinct-lesson controls remain to be evaluated.
 
-### Subsequent delivery
+### Follow-up capability requirements
 
-1. **Enforce testable constraints.** Link a specific accepted revision to a reviewed regression test or existing check. Demonstrate that a deliberate violation fails and a valid alternative passes. Execution evidence must stay current; passing one check does not prove an entire decision, and revised or retired constraints require reviewing their checks too.
-2. **Review contradictions.** Begin with overlapping scope and explicit incompatible claims. Present both sources and a proposed resolution; distinguish an actual conflict from historical, superseded, or differently scoped guidance. Measure false alarms before broadening detection.
-3. **Make context explainable.** Build the dedicated context debugger around retrieval reasons, exclusions, freshness, and missing evidence. Validate that it helps diagnose a missed lesson or irrelevant result. Basic diagnostics and evaluation traces remain part of earlier work.
-4. **Express reconsideration conditions.** Extend file-anchor triggers with reviewable conditions such as a dependency upgrade or a workaround's removal criterion. A trigger requests investigation; it does not prove the decision obsolete. Avoid recurring review based solely on age.
-5. **Coordinate repositories when needed.** Start with a concrete shared-contract change across known repositories, preserving each revision and owner. Require evidence of missed cross-repository updates before expanding scope. Confluence remains lower priority until customer demand justifies it.
+These requirements support the current delivery plan and are not a separate ranked sequence:
+
+- **Broader executable protection.** Beyond the first milestone's reviewed check linkage, evaluate additional regression tests or established analysis rules. Passing one check does not prove an entire decision; revised or retired constraints require review of their checks too.
+- **Broader contradiction review.** Expand from known-conflict handling to detection of overlapping scope and explicit incompatible claims. Present sources and a proposed resolution; measure false alarms before broadening detection.
+- **Dedicated context debugger.** Extend the first milestone's selection explanations into a workflow for diagnosing missed lessons, irrelevant results, exclusions, freshness, and missing evidence. Prioritize it when observed failures justify it.
+- **Explicit reconsideration conditions.** Extend file-anchor triggers with reviewable conditions such as a dependency upgrade or a workaround's removal criterion. A trigger requests investigation; it does not prove the decision obsolete. Avoid recurring review based solely on age.
+- **Cross-repository coordination.** Start with a concrete shared-contract change across known repositories, preserving each revision and owner. Require evidence of missed cross-repository updates before expanding scope. Confluence remains lower priority until customer demand justifies it.
 
 ### Evaluation throughout
 
@@ -60,11 +120,11 @@ Extend the [knowledge evaluation](bench/harness/knowledge/README.md) through cap
 
 Measure repeated mistakes and missed updates, capture usefulness, unnecessary reviews, incorrect closures, repeated warnings, irrelevant context, review effort, latency, and token cost. Use context-source ablations to investigate contributions; retrieval or injection alone is not proof of usefulness. Define thresholds and representative tasks before live evaluations. A smaller backlog counts as progress only when knowledge remains trustworthy.
 
-On 2026-09-11 the maintainer authorized implementing **Slice A with its verification cases**, alongside broader audit evaluation and their ongoing decision-record trial. The unreleased implementation adds prepared advisory assessments, persisted addressed/inapplicable/deferred outcomes, scoped reopening, and reuse of decision reviews. [Lifecycle regressions](test/advisory-review.test.ts) cover final metadata commits, fresh clones, relevant and unrelated changes, stale tokens, concurrent submissions, malformed or unavailable evidence, and closure across multiple retained baselines. These are deterministic mechanism checks; ordinary-task use, review effort, and long-term usefulness remain to be measured. Slice B remains the next knowledge outcome to prove on that lifecycle. The original five priorities below remain the product's broader commitments.
+On 2026-09-11 the maintainer authorized implementing **Slice A with its verification cases**, alongside broader audit evaluation and their ongoing decision-record trial. Release 0.17.0 shipped prepared advisory assessments, persisted addressed/inapplicable/deferred outcomes, scoped reopening, and reuse of decision reviews. [Lifecycle regressions](test/advisory-review.test.ts) cover final metadata commits, fresh clones, relevant and unrelated changes, stale tokens, concurrent submissions, malformed or unavailable evidence, and closure across multiple retained baselines. These are deterministic mechanism checks; ordinary-task use, review effort, and long-term usefulness remain to be measured. Broader proof of Slice B is included in the current prevention milestone. The original five priorities below remain the product's broader commitments.
 
 ## Initial-check precision and language integrations
 
-On 2026-09-10 the maintainer authorized the shared foundation after an exploratory ElevenLabs trial. The current unreleased implementation expands discovery to nested instructions and READMEs with exact filename casing, preserves path/command scope, makes speculative omissions advisory, and carries scope through repair baselines and cache dependencies. New recheckable candidates can cease to be detected; historical advisories still need an assessment. Native validators can import individual outcomes and environment metadata through `mason-check-json`, alongside Vitest and SARIF.
+On 2026-09-10 the maintainer authorized the shared foundation after an exploratory ElevenLabs trial. Release 0.17.0 expanded discovery to nested instructions and READMEs with exact filename casing, preserves path/command scope, makes speculative omissions advisory, and carries scope through repair baselines and cache dependencies. New recheckable candidates can cease to be detected; historical advisories still need an assessment. Native validators can import individual outcomes and environment metadata through `mason-check-json`, alongside Vitest and SARIF.
 
 ### Separate feature: documentation examples backed by tests
 
@@ -131,7 +191,7 @@ Version **0.16.1** adds reference evidence that separates resolved imports from 
 
 Remaining gaps include broader ordinary-task evaluations, native verification on additional host versions and environments, broader native-validator adapters, real-project evaluation of the new advisory review lifecycle, and cost/latency as relevant inputs and retained evidence grow. Execution evidence is local to the worktree; CI cannot reconstruct uncaptured pre-edit state. Shareable advisory assessments now live in Git. The implementation bounds scoped discovery and retention and reports unsupported evidence rather than evicting unresolved findings. Keep this milestone within the broader growth roadmap.
 
-Version **0.16.2** addresses team-adoption feedback before the next knowledge-lifecycle milestone: generated hooks are quiet for missing executables and locally unconfigured checkouts, while active failures stay visible. Read-only observations avoid repository rescans without refreshing verification; potentially mutating tools retain original evidence capture. [Data/network documentation](docs/data-and-network.md), internal-mirror version requirements, and [hook measurements](docs/hook-performance.md) make the operating costs and boundaries reviewable. Local regression and benchmark evidence does not establish company approval, universal hook coverage, or large-repository performance. The advisory review-to-resolution implementation followed in the unreleased Slice A described above.
+Version **0.16.2** addresses team-adoption feedback before the next knowledge-lifecycle milestone: generated hooks are quiet for missing executables and locally unconfigured checkouts, while active failures stay visible. Read-only observations avoid repository rescans without refreshing verification; potentially mutating tools retain original evidence capture. [Data/network documentation](docs/data-and-network.md), internal-mirror version requirements, and [hook measurements](docs/hook-performance.md) make the operating costs and boundaries reviewable. Local regression and benchmark evidence does not establish company approval, universal hook coverage, or large-repository performance. The advisory review-to-resolution implementation shipped in 0.17.0 as Slice A described above.
 
 Judge future progress by outcomes: appropriate activation without reminders; fewer repeated mistakes and missed updates; false-positive and irrelevant-context rates; latency and token cost as repository size, history, and knowledge grow; and whether another session can recover the right intent and unfinished work. Agree on acceptance thresholds before claiming a milestone is met.
 

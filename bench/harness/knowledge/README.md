@@ -6,6 +6,10 @@ The [development smoke results](SMOKE_RESULTS.md) record the completed two-host 
 
 The [conditional lifecycle case](LIFECYCLE.md) extends this through changed requirements, a second independent review, and another fresh session. It uses a reduced R8 startup reproduction drawn from a real removal/reintroduction incident, with an ordinary-notes comparison and a no-capture control.
 
+The [repeat-mistake prevention experiment](PREVENTION_EXPERIMENT.md) defines the next product evaluation, including capture and existing-lesson paths, grading gates, cost diagnostics, and the hook/conflict controls that the current lifecycle runner does not yet cover.
+
+The [2026-10-10 prevention baseline](PREVENTION_BASELINE_RESULTS.md) completed eight live Codex sessions. Both current Mason and notes passed; Mason reported higher token usage. Hook-enabled prevention and the additional controls remain to be evaluated.
+
 The [interrupted-upload probe](UPLOAD.md) tests maintenance of deliberately seeded, reviewed knowledge under a changed retention assumption, with a local publishing simulator, fresh-session reuse and a first-upload control. It measures maintenance rather than original capture.
 
 ```sh
