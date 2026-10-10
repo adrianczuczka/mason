@@ -26,11 +26,20 @@ describe("snapshot verification evidence on retrieval", () => {
     await commitAll(repo, "source");
     await saveSnapshotData(repo, structuredClone(features), structuredClone(flows));
   });
-  afterEach(async () => { vi.restoreAllMocks(); await fs.rm(repo, { recursive: true, force: true }); });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fs.rm(repo, { recursive: true, force: true });
+  });
 
   async function verify(ok = true) {
-    const verdict = { ok, ...(ok ? {} : { note: "Description does not match the implementation" }) };
-    await saveVerification(repo, await prepareVerdicts(repo, { greeting: verdict, "greeting flow": verdict }));
+    const verdict = {
+      ok,
+      ...(ok ? {} : { note: "Description does not match the implementation" }),
+    };
+    await saveVerification(
+      repo,
+      await prepareVerdicts(repo, { greeting: verdict, "greeting flow": verdict }),
+    );
   }
   async function readings() {
     const snapshot = JSON.parse(await getSnapshot(repo));
@@ -38,7 +47,13 @@ describe("snapshot verification evidence on retrieval", () => {
     const fallback = JSON.parse(await getContext(repo, "zzzxxyy"));
     return [
       { trust: snapshot.trust, hint: snapshot.hint },
-      { trust: { features: { greeting: matched.features.greeting.trust }, flows: { "greeting flow": matched.flows["greeting flow"].trust } }, hint: matched.hint },
+      {
+        trust: {
+          features: { greeting: matched.features.greeting.trust },
+          flows: { "greeting flow": matched.flows["greeting flow"].trust },
+        },
+        hint: matched.hint,
+      },
       { trust: fallback.trust, hint: fallback.hint },
     ];
   }
@@ -50,7 +65,12 @@ describe("snapshot verification evidence on retrieval", () => {
     await fs.writeFile(source(), original);
     for (const result of await readings()) {
       for (const trust of [result.trust.features.greeting, result.trust.flows["greeting flow"]]) {
-        expect(trust).toMatchObject({ freshness: "current", verification: "stale", recordedVerdict: "passed", verifiedAt: expect.any(String) });
+        expect(trust).toMatchObject({
+          freshness: "current",
+          verification: "stale",
+          recordedVerdict: "passed",
+          verifiedAt: expect.any(String),
+        });
       }
       expect(result.hint).toMatch(/verification evidence changed/i);
       expect(result.hint).not.toMatch(/No changes detected/);
@@ -66,68 +86,114 @@ describe("snapshot verification evidence on retrieval", () => {
     await fs.writeFile(path.join(repo, "README.md"), "An unrelated commit");
     await commitAll(repo, "docs");
     for (const result of await readings()) {
-      expect(result.trust.features.greeting).toMatchObject({ freshness: "current", verification: "passed", recordedVerdict: "passed" });
+      expect(result.trust.features.greeting).toMatchObject({
+        freshness: "current",
+        verification: "passed",
+        recordedVerdict: "passed",
+      });
     }
   });
 
-  it.each(["changed", "missing"])("retains the historical failure and reason when evidence is %s", async state => {
-    await verify(false);
-    if (state === "changed") await fs.writeFile(source(), edited);
-    else await fs.unlink(source());
-    for (const result of await readings()) {
-      const trust = result.trust.features.greeting;
-      expect(trust).toMatchObject({ verification: state === "changed" ? "stale" : "unknown", recordedVerdict: "failed" });
-      expect(trust.reasons.join(" ")).toContain("Description does not match the implementation");
-      expect(result.hint).toMatch(/Verification failed/);
-    }
-  });
+  it.each(["changed", "missing"])(
+    "retains the historical failure and reason when evidence is %s",
+    async (state) => {
+      await verify(false);
+      if (state === "changed") await fs.writeFile(source(), edited);
+      else await fs.unlink(source());
+      for (const result of await readings()) {
+        const trust = result.trust.features.greeting;
+        expect(trust).toMatchObject({
+          verification: state === "changed" ? "stale" : "unknown",
+          recordedVerdict: "failed",
+        });
+        expect(trust.reasons.join(" ")).toContain("Description does not match the implementation");
+        expect(result.hint).toMatch(/Verification failed/);
+      }
+    },
+  );
 
-  it.each(["excluded", "oversized", "empty anchors"])("does not confirm a verdict with %s evidence", async state => {
-    if (state === "empty anchors") await saveSnapshotData(repo, { greeting: { description: "Greeting", files: [] } }, {});
-    await verify();
-    if (state === "excluded") await fs.writeFile(path.join(repo, ".mason/config.json"), JSON.stringify({ ignore: ["src/a.js"] }));
-    if (state === "oversized") await fs.writeFile(source(), "x".repeat(fileAccess.MAX_SOURCE_BYTES + 1));
-    expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting).toMatchObject({ verification: "unknown", recordedVerdict: "passed" });
-  });
+  it.each(["excluded", "oversized", "empty anchors"])(
+    "does not confirm a verdict with %s evidence",
+    async (state) => {
+      if (state === "empty anchors")
+        await saveSnapshotData(repo, { greeting: { description: "Greeting", files: [] } }, {});
+      await verify();
+      if (state === "excluded")
+        await fs.writeFile(
+          path.join(repo, ".mason/config.json"),
+          JSON.stringify({ ignore: ["src/a.js"] }),
+        );
+      if (state === "oversized")
+        await fs.writeFile(source(), "x".repeat(fileAccess.MAX_SOURCE_BYTES + 1));
+      expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting).toMatchObject({
+        verification: "unknown",
+        recordedVerdict: "passed",
+      });
+    },
+  );
 
   it("keeps matching unavailable-file markers unknown", async () => {
     await fs.unlink(source());
     await verify(false);
-    expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting).toMatchObject({ verification: "unknown", recordedVerdict: "failed" });
+    expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting).toMatchObject({
+      verification: "unknown",
+      recordedVerdict: "failed",
+    });
   });
 
-  it.each([undefined, "unsupported-token"])("treats legacy or malformed tokens (%s) as unknown without losing the verdict", async token => {
-    await verify();
-    const snapshot = JSON.parse(await fs.readFile(snapshotFile(), "utf8"));
-    snapshot.features.greeting.verificationToken = token;
-    await fs.writeFile(snapshotFile(), JSON.stringify(snapshot));
-    expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting).toMatchObject({ verification: "unknown", recordedVerdict: "passed" });
-  });
+  it.each([undefined, "unsupported-token"])(
+    "treats legacy or malformed tokens (%s) as unknown without losing the verdict",
+    async (token) => {
+      await verify();
+      const snapshot = JSON.parse(await fs.readFile(snapshotFile(), "utf8"));
+      snapshot.features.greeting.verificationToken = token;
+      await fs.writeFile(snapshotFile(), JSON.stringify(snapshot));
+      expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting).toMatchObject({
+        verification: "unknown",
+        recordedVerdict: "passed",
+      });
+    },
+  );
 
   it("keeps never-reviewed entries unverified and shares source reads only within each retrieval", async () => {
-    expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting.verification).toBe("unverified");
+    expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting.verification).toBe(
+      "unverified",
+    );
     await verify();
     const create = fileAccess.createFileAccess;
     const reads: string[] = [];
-    vi.spyOn(fileAccess, "createFileAccess").mockImplementation(async root => {
+    vi.spyOn(fileAccess, "createFileAccess").mockImplementation(async (root) => {
       const access = await create(root);
-      return { ...access, read: async file => { reads.push(file); return access.read(file); } };
+      return {
+        ...access,
+        read: async (file) => {
+          reads.push(file);
+          return access.read(file);
+        },
+      };
     });
     await getSnapshot(repo);
-    expect(reads.filter(file => file === "src/a.js")).toHaveLength(1);
+    expect(reads.filter((file) => file === "src/a.js")).toHaveLength(1);
     await getSnapshot(repo);
-    expect(reads.filter(file => file === "src/a.js")).toHaveLength(2);
+    expect(reads.filter((file) => file === "src/a.js")).toHaveLength(2);
   });
 
   it("does not validate entries omitted from matched context", async () => {
-    await saveSnapshotData(repo, { unrelated: { description: "Unrelated", files: ["src/b.js"] } }, {});
+    await saveSnapshotData(
+      repo,
+      { unrelated: { description: "Unrelated", files: ["src/b.js"] } },
+      {},
+    );
     await fs.writeFile(path.join(repo, "src/b.js"), "export const billing = true;");
     await saveVerification(repo, await prepareVerdicts(repo, { unrelated: { ok: true } }));
     const create = snapshotReview.createSnapshotEvidenceReader;
     const reads: string[] = [];
-    vi.spyOn(snapshotReview, "createSnapshotEvidenceReader").mockImplementation(access => {
+    vi.spyOn(snapshotReview, "createSnapshotEvidenceReader").mockImplementation((access) => {
       const read = create(access);
-      return async (kind, name, entry) => { reads.push(name); return read(kind, name, entry); };
+      return async (kind, name, entry) => {
+        reads.push(name);
+        return read(kind, name, entry);
+      };
     });
     await getContext(repo, "greeting");
     expect(reads).not.toContain("unrelated");
@@ -144,14 +210,24 @@ describe("snapshot verification evidence on retrieval", () => {
     expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting.verification).toBe("stale");
     await fs.writeFile(path.join(repo, files[0]), content);
     await fs.writeFile(path.join(repo, files[8]), "// outside verification sample\n");
-    expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting).toMatchObject({ freshness: "changed", verification: "passed" });
+    expect(JSON.parse(await getSnapshot(repo)).trust.features.greeting).toMatchObject({
+      freshness: "changed",
+      verification: "passed",
+    });
   });
 
   it("reports unavailable verification evidence if the verifier cannot initialize its file policy", async () => {
     await verify();
     const snapshot = JSON.parse(await fs.readFile(snapshotFile(), "utf8"));
-    vi.spyOn(fileAccess, "createFileAccess").mockRejectedValue(new Error("file policy unavailable"));
-    const trust = await createSnapshotTrustReader(repo)("feature", "greeting", snapshot.features.greeting, "current");
+    vi.spyOn(fileAccess, "createFileAccess").mockRejectedValue(
+      new Error("file policy unavailable"),
+    );
+    const trust = await createSnapshotTrustReader(repo)(
+      "feature",
+      "greeting",
+      snapshot.features.greeting,
+      "current",
+    );
     expect(trust).toMatchObject({ verification: "unknown", recordedVerdict: "passed" });
   });
 });

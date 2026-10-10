@@ -1,7 +1,6 @@
 import { inspectionGit } from "./inspection.js";
 import type { CommitRef } from "./types.js";
 
-
 const COMMIT_FORMAT = "%H%x09%cI%x09%s";
 
 function parseCommitLine(line: string): CommitRef | null {
@@ -13,12 +12,12 @@ function parseCommitLine(line: string): CommitRef | null {
 /** Most recent commit touching a path, or null if the path was never tracked. */
 export async function lastCommitOf(
   resolvedRoot: string,
-  relPath: string
+  relPath: string,
 ): Promise<CommitRef | null> {
   try {
     const { stdout } = await inspectionGit(
       ["log", "-1", `--format=${COMMIT_FORMAT}`, "--", `:(literal)${relPath}`],
-      { cwd: resolvedRoot }
+      { cwd: resolvedRoot },
     );
     const line = stdout.trim().split("\n")[0];
     return line ? parseCommitLine(line) : null;
@@ -30,19 +29,12 @@ export async function lastCommitOf(
 /** The commit that deleted a path, or null if none did. */
 export async function deletingCommitOf(
   resolvedRoot: string,
-  relPath: string
+  relPath: string,
 ): Promise<CommitRef | null> {
   try {
     const { stdout } = await inspectionGit(
-      [
-        "log",
-        "-1",
-        "--diff-filter=D",
-        `--format=${COMMIT_FORMAT}`,
-        "--",
-        `:(literal)${relPath}`,
-      ],
-      { cwd: resolvedRoot }
+      ["log", "-1", "--diff-filter=D", `--format=${COMMIT_FORMAT}`, "--", `:(literal)${relPath}`],
+      { cwd: resolvedRoot },
     );
     const line = stdout.trim().split("\n")[0];
     return line ? parseCommitLine(line) : null;
@@ -54,12 +46,12 @@ export async function deletingCommitOf(
 /** Oldest commit touching a path (used to date a directory's appearance). */
 export async function firstCommitOf(
   resolvedRoot: string,
-  relPath: string
+  relPath: string,
 ): Promise<CommitRef | null> {
   try {
     const { stdout } = await inspectionGit(
       ["log", "--reverse", `--format=${COMMIT_FORMAT}`, "--", `:(literal)${relPath}`],
-      { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }
+      { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 },
     );
     const line = stdout.trim().split("\n")[0];
     return line ? parseCommitLine(line) : null;
@@ -82,7 +74,7 @@ export interface RangeCommits {
 export async function commitsTouchingSince(
   resolvedRoot: string,
   fromHash: string,
-  pathspecs: string[]
+  pathspecs: string[],
 ): Promise<RangeCommits | null> {
   if (!fromHash || fromHash === "unknown") return null;
   try {
@@ -95,7 +87,7 @@ export async function commitsTouchingSince(
         "--",
         ...pathspecs,
       ],
-      { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 }
+      { cwd: resolvedRoot, maxBuffer: 10 * 1024 * 1024 },
     );
 
     const commits: Array<CommitRef & { files: string[] }> = [];

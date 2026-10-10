@@ -5,5 +5,5 @@ runReviewCli(process.argv.slice(2)).then(
   (err) => {
     process.stderr.write(`mason-review error: ${err}\n`);
     process.exit(2);
-  }
+  },
 );

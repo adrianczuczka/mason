@@ -12,13 +12,23 @@ import { initGitRepo, commitAll } from "./helpers.js";
 const server = path.resolve("dist/mason-mcp.js");
 let repo: string, control: string, preload: string;
 let clients: Client[];
-const exists = async (file: string) => { await expect(fs.access(file)).resolves.toBeUndefined(); };
-const waitForFile = (file: string) => vi.waitFor(() => exists(file), { timeout: 5000, interval: 10 });
+const exists = async (file: string) => {
+  await expect(fs.access(file)).resolves.toBeUndefined();
+};
+const waitForFile = (file: string) =>
+  vi.waitFor(() => exists(file), { timeout: 5000, interval: 10 });
 
 async function connect(barrier?: string, attempted?: string, lockStage?: string) {
   const transport = new StdioClientTransport({
-    command: process.execPath, args: ["--import", pathToFileURL(preload).href, server], cwd: repo,
-    env: { ...process.env, MASON_TEST_BARRIER: barrier ?? "", MASON_TEST_ATTEMPTED: attempted ?? "", MASON_TEST_LOCK_STAGE: lockStage ?? "" } as Record<string, string>,
+    command: process.execPath,
+    args: ["--import", pathToFileURL(preload).href, server],
+    cwd: repo,
+    env: {
+      ...process.env,
+      MASON_TEST_BARRIER: barrier ?? "",
+      MASON_TEST_ATTEMPTED: attempted ?? "",
+      MASON_TEST_LOCK_STAGE: lockStage ?? "",
+    } as Record<string, string>,
     stderr: "pipe",
   });
   const client = new Client({ name: "snapshot-regression", version: "1" });
@@ -31,8 +41,13 @@ async function connect(barrier?: string, attempted?: string, lockStage?: string)
   };
   return { call, transport };
 }
-const repairArgs = { features: { greeting: { description: "CORRECTED", files: ["src/a.js"] } }, flows: {}, removeFlows: ["hello to world"] };
-const snapshot = async () => JSON.parse(await fs.readFile(path.join(repo, ".mason/snapshot.json"), "utf8"));
+const repairArgs = {
+  features: { greeting: { description: "CORRECTED", files: ["src/a.js"] } },
+  flows: {},
+  removeFlows: ["hello to world"],
+};
+const snapshot = async () =>
+  JSON.parse(await fs.readFile(path.join(repo, ".mason/snapshot.json"), "utf8"));
 async function verdict(call: Awaited<ReturnType<typeof connect>>["call"]) {
   const reviewed = await call("verify_snapshot", { sample: 10 });
   const entry = reviewed.entries.find((e: { name: string }) => e.name === "greeting");
@@ -48,13 +63,19 @@ beforeEach(async () => {
   await fs.writeFile(path.join(repo, "src/a.js"), "export const hello = 'hello';\n");
   await fs.writeFile(path.join(repo, "src/b.js"), "export const world = 'world';\n");
   await commitAll(repo, "source");
-  await saveSnapshotData(repo, { greeting: { description: "ORIGINAL", files: ["src/a.js"] } }, {
-    "hello to world": { description: "a flow", chain: ["src/a.js", "src/b.js"] },
-  });
+  await saveSnapshotData(
+    repo,
+    { greeting: { description: "ORIGINAL", files: ["src/a.js"] } },
+    {
+      "hello to world": { description: "a flow", chain: ["src/a.js", "src/b.js"] },
+    },
+  );
   // Interpose only in these child processes. The production server has no test
   // hooks: pause its actual atomic rename while it holds a real write lock.
   preload = path.join(control, "barrier.mjs");
-  await fs.writeFile(preload, `
+  await fs.writeFile(
+    preload,
+    `
 import fs from 'node:fs/promises';
 import path from 'node:path';
 const rename = fs.rename, open = fs.open, unlink = fs.unlink;
@@ -90,10 +111,11 @@ fs.rename = async (...args) => {
   if (barrier && !held && !process.env.MASON_TEST_LOCK_STAGE && path.basename(String(args[1])) === 'snapshot.json') await hold();
   return rename(...args);
 };
-`);
+`,
+  );
 });
 afterEach(async () => {
-  await Promise.allSettled(clients.map(client => client.close()));
+  await Promise.allSettled(clients.map((client) => client.close()));
   await fs.rm(repo, { recursive: true, force: true });
   await fs.rm(control, { recursive: true, force: true });
 });
@@ -103,35 +125,63 @@ describe("snapshot writes through the built MCP server", { timeout: 15000 }, () 
     const { call } = await connect();
     await call("save_snapshot", repairArgs);
     const before = await snapshot();
-    expect(await call("save_verification", { verdicts: { greeting: { ok: true } } })).toMatchObject({ status: "review_required", stamped: [] });
+    expect(await call("save_verification", { verdicts: { greeting: { ok: true } } })).toMatchObject(
+      { status: "review_required", stamped: [] },
+    );
     expect(await snapshot()).toEqual(before);
-    expect(await call("save_verification", await verdict(call))).toMatchObject({ status: "saved", stamped: ["greeting"] });
+    expect(await call("save_verification", await verdict(call))).toMatchObject({
+      status: "saved",
+      stamped: ["greeting"],
+    });
     const saved = await snapshot();
-    expect(saved.features.greeting).toMatchObject({ description: "CORRECTED", verifiedAt: expect.any(String) });
+    expect(saved.features.greeting).toMatchObject({
+      description: "CORRECTED",
+      verifiedAt: expect.any(String),
+    });
     expect(saved.flows).toEqual({});
   });
 
   it.each([
-    ["same session", "verification"], ["same session", "repair"],
-    ["separate processes", "verification"], ["separate processes", "repair"],
+    ["same session", "verification"],
+    ["same session", "repair"],
+    ["separate processes", "verification"],
+    ["separate processes", "repair"],
   ])("serializes %s with %s first", async (mode, first) => {
-    const barrier = path.join(control, "write"), attempted = path.join(control, "attempted");
+    const barrier = path.join(control, "write"),
+      attempted = path.join(control, "attempted");
     const a = await connect(barrier, attempted);
     const b = mode === "same session" ? a : await connect(undefined, attempted);
     const args = await verdict(a.call);
-    const held = a.call(first === "verification" ? "save_verification" : "save_snapshot", first === "verification" ? args : repairArgs);
+    const held = a.call(
+      first === "verification" ? "save_verification" : "save_snapshot",
+      first === "verification" ? args : repairArgs,
+    );
     await waitForFile(barrier + ".ready");
     await fs.rm(attempted, { force: true });
     let finished = false;
-    const waiting = b.call(first === "verification" ? "save_snapshot" : "save_verification", first === "verification" ? repairArgs : args)
-      .then(result => { finished = true; return result; });
+    const waiting = b
+      .call(
+        first === "verification" ? "save_snapshot" : "save_verification",
+        first === "verification" ? repairArgs : args,
+      )
+      .then((result) => {
+        finished = true;
+        return result;
+      });
     try {
       await waitForFile(attempted);
       expect(finished).toBe(false);
       expect((await snapshot()).features.greeting.description).toBe("ORIGINAL");
-    } finally { await fs.writeFile(barrier + ".release", "release"); }
+    } finally {
+      await fs.writeFile(barrier + ".release", "release");
+    }
     const results = await Promise.all([held, waiting]);
-    if (first === "repair") expect(results[1]).toMatchObject({ status: "conflict", stamped: [], conflicts: ["greeting"] });
+    if (first === "repair")
+      expect(results[1]).toMatchObject({
+        status: "conflict",
+        stamped: [],
+        conflicts: ["greeting"],
+      });
     const saved = await snapshot();
     expect(saved.features.greeting.description).toBe("CORRECTED");
     expect(saved.flows).toEqual({});
@@ -139,20 +189,27 @@ describe("snapshot writes through the built MCP server", { timeout: 15000 }, () 
   });
 
   it("retains independent edits from simultaneous requests in separate processes", async () => {
-    const a = await connect(), b = await connect();
-    await Promise.all(Array.from({ length: 8 }, (_, i) => (i % 2 ? a : b).call("save_snapshot", {
-      features: { [`feature-${i}`]: { description: `Feature ${i}`, files: ["src/a.js"] } }, flows: {},
-    })));
+    const a = await connect(),
+      b = await connect();
+    await Promise.all(
+      Array.from({ length: 8 }, (_, i) =>
+        (i % 2 ? a : b).call("save_snapshot", {
+          features: { [`feature-${i}`]: { description: `Feature ${i}`, files: ["src/a.js"] } },
+          flows: {},
+        }),
+      ),
+    );
     const saved = await snapshot();
     expect(Object.keys(saved.features)).toHaveLength(9);
-    for (let i = 0; i < 8; i++) expect(saved.features[`feature-${i}`].description).toBe(`Feature ${i}`);
+    for (let i = 0; i < 8; i++)
+      expect(saved.features[`feature-${i}`].description).toBe(`Feature ${i}`);
   });
 
   it("recovers a terminated writer and retains the last complete snapshot", async () => {
     const barrier = path.join(control, "crash");
     const a = await connect(barrier);
     const before = await snapshot();
-    const pending = a.call("save_snapshot", repairArgs).catch(error => error);
+    const pending = a.call("save_snapshot", repairArgs).catch((error) => error);
     await waitForFile(barrier + ".ready");
     process.kill(a.transport.pid!, "SIGKILL");
     expect(await pending).toBeInstanceOf(Error);
@@ -162,42 +219,53 @@ describe("snapshot writes through the built MCP server", { timeout: 15000 }, () 
     const saved = await snapshot();
     expect(saved.features.greeting.description).toBe("CORRECTED");
     expect(saved.flows).toEqual({});
-    await expect(fs.access(path.join(repo, ".mason/local/snapshot-write/lock"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      fs.access(path.join(repo, ".mason/local/snapshot-write/lock")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it.each(["before-owner", "before-reclaim", "after-reclaim"])("preserves data and diagnoses an interrupted lock at %s", async stage => {
-    const before = await snapshot();
-    const lock = path.join(repo, ".mason/local/snapshot-write/lock");
-    async function interrupt(label: string, lockStage?: string) {
-      const barrier = path.join(control, label);
-      const writer = await connect(barrier, undefined, lockStage);
-      const pending = writer.call("save_snapshot", repairArgs).catch(error => error);
-      await waitForFile(barrier + ".ready");
-      process.kill(writer.transport.pid!, "SIGKILL");
-      expect(await pending).toBeInstanceOf(Error);
-      await writer.transport.close();
-    }
-    if (stage !== "before-owner") await interrupt("dead-writer");
-    await interrupt("interrupted-recovery", stage);
-    if (stage === "after-reclaim") {
-      await expect(fs.access(lock)).rejects.toMatchObject({ code: "ENOENT" });
-      await expect(withSnapshotWrite(repo, async () => "normal writes still work", 0)).resolves.toBe("normal writes still work");
-      // The orphaned guard only blocks a later dead writer's recovery.
-      await interrupt("later-dead-writer");
-    }
-    const owner = await fs.readFile(lock, "utf8");
-    const run = vi.fn(async () => {});
-    await expect(withSnapshotWrite(repo, run, 0)).rejects.toThrow(stage === "before-owner" ? "incomplete or malformed" : "lock.reclaim");
-    expect(run).not.toHaveBeenCalled();
-    expect(await fs.readFile(lock, "utf8")).toBe(owner);
-    expect(await snapshot()).toEqual(before);
-    // Every child writer has exited; exercise the documented manual recovery.
-    await fs.rm(lock, { force: true });
-    await fs.rm(lock + ".reclaim", { force: true });
-    const recovered = await connect();
-    expect(await recovered.call("save_snapshot", repairArgs)).toMatchObject({ status: "updated" });
-    expect((await snapshot()).features.greeting.description).toBe("CORRECTED");
-  });
+  it.each(["before-owner", "before-reclaim", "after-reclaim"])(
+    "preserves data and diagnoses an interrupted lock at %s",
+    async (stage) => {
+      const before = await snapshot();
+      const lock = path.join(repo, ".mason/local/snapshot-write/lock");
+      async function interrupt(label: string, lockStage?: string) {
+        const barrier = path.join(control, label);
+        const writer = await connect(barrier, undefined, lockStage);
+        const pending = writer.call("save_snapshot", repairArgs).catch((error) => error);
+        await waitForFile(barrier + ".ready");
+        process.kill(writer.transport.pid!, "SIGKILL");
+        expect(await pending).toBeInstanceOf(Error);
+        await writer.transport.close();
+      }
+      if (stage !== "before-owner") await interrupt("dead-writer");
+      await interrupt("interrupted-recovery", stage);
+      if (stage === "after-reclaim") {
+        await expect(fs.access(lock)).rejects.toMatchObject({ code: "ENOENT" });
+        await expect(
+          withSnapshotWrite(repo, async () => "normal writes still work", 0),
+        ).resolves.toBe("normal writes still work");
+        // The orphaned guard only blocks a later dead writer's recovery.
+        await interrupt("later-dead-writer");
+      }
+      const owner = await fs.readFile(lock, "utf8");
+      const run = vi.fn(async () => {});
+      await expect(withSnapshotWrite(repo, run, 0)).rejects.toThrow(
+        stage === "before-owner" ? "incomplete or malformed" : "lock.reclaim",
+      );
+      expect(run).not.toHaveBeenCalled();
+      expect(await fs.readFile(lock, "utf8")).toBe(owner);
+      expect(await snapshot()).toEqual(before);
+      // Every child writer has exited; exercise the documented manual recovery.
+      await fs.rm(lock, { force: true });
+      await fs.rm(lock + ".reclaim", { force: true });
+      const recovered = await connect();
+      expect(await recovered.call("save_snapshot", repairArgs)).toMatchObject({
+        status: "updated",
+      });
+      expect((await snapshot()).features.greeting.description).toBe("CORRECTED");
+    },
+  );
 
   it("reports a historical verdict as stale after reverting the local code it reviewed", async () => {
     const { call } = await connect();
@@ -206,7 +274,13 @@ describe("snapshot writes through the built MCP server", { timeout: 15000 }, () 
     await fs.writeFile(file, "export const hello = 'reviewed local edit';\n");
     await call("save_verification", await verdict(call));
     await fs.writeFile(file, original);
-    expect((await call("get_snapshot", {})).trust.features.greeting).toMatchObject({ freshness: "current", verification: "stale", recordedVerdict: "passed" });
-    expect((await call("get_context", { task: "greeting" })).features.greeting.trust).toMatchObject({ verification: "stale", recordedVerdict: "passed" });
+    expect((await call("get_snapshot", {})).trust.features.greeting).toMatchObject({
+      freshness: "current",
+      verification: "stale",
+      recordedVerdict: "passed",
+    });
+    expect((await call("get_context", { task: "greeting" })).features.greeting.trust).toMatchObject(
+      { verification: "stale", recordedVerdict: "passed" },
+    );
   });
 });

@@ -4,7 +4,11 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { automate, automationStatus } from "../src/automation/runtime.js";
 import { readInputs, workspace } from "../src/automation/evidence.js";
-import { automationFailure, executionStatus, recordExecution } from "../src/automation/execution.js";
+import {
+  automationFailure,
+  executionStatus,
+  recordExecution,
+} from "../src/automation/execution.js";
 import { runAutomationCli } from "../src/automation/cli.js";
 import { runAutomationHook } from "../src/automation/adapters.js";
 import { masonAutomation } from "../src/mcp/tools.js";
@@ -26,7 +30,10 @@ beforeEach(async () => {
   await write(".gitignore", ".mason/reports/\nbuild/\n.gradle/\n");
   await commitAll(root, "initial");
 });
-afterEach(async () => { vi.restoreAllMocks(); await fs.rm(root, { recursive: true, force: true }); });
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await fs.rm(root, { recursive: true, force: true });
+});
 
 describe("automation reliability", { timeout: 20000 }, () => {
   it("respects Git and Mason discovery exclusions and invalidates an exclusion change", async () => {
@@ -36,14 +43,20 @@ describe("automation reliability", { timeout: 20000 }, () => {
     await write("scratch/experiment.ts", "untracked experiment");
     await commitAll(root, "configure exclusions");
     const initial = await automate(root, { event: "session_start" });
-    expect(initial.report.findings.filter(f => f.original.type === "new-module")).toEqual([]);
+    expect(initial.report.findings.filter((f) => f.original.type === "new-module")).toEqual([]);
     await write("artifacts/more.ts", "more generated");
     expect((await automate(root, { event: "after_tool" })).report.checks.reused).toHaveLength(6);
     await write(".mason/config.json", '{"ignore":[]}');
     const changed = await automate(root, { event: "after_tool" });
     expect(changed.report.checks.ran).toContain("new-module");
-    expect(changed.report.findings.some(f => f.original.type === "new-module" && f.original.anchor.excerpt === "scratch")).toBe(true);
-    expect(changed.report.findings.some(f => f.original.anchor.excerpt === "artifacts")).toBe(false);
+    expect(
+      changed.report.findings.some(
+        (f) => f.original.type === "new-module" && f.original.anchor.excerpt === "scratch",
+      ),
+    ).toBe(true);
+    expect(changed.report.findings.some((f) => f.original.anchor.excerpt === "artifacts")).toBe(
+      false,
+    );
   });
 
   it("keeps tracked source visible under Git ignore rules and handles literal directory names", async () => {
@@ -51,7 +64,11 @@ describe("automation reliability", { timeout: 20000 }, () => {
     await commitAll(root, "add source module");
     await write(".gitignore", "feature*/\n.mason/reports/\n");
     const result = await automate(root, { event: "session_start" });
-    expect(result.report.findings.some(f => f.original.type === "new-module" && f.original.anchor.excerpt === "feature [draft]")).toBe(true);
+    expect(
+      result.report.findings.some(
+        (f) => f.original.type === "new-module" && f.original.anchor.excerpt === "feature [draft]",
+      ),
+    ).toBe(true);
   });
 
   it("does not turn a broken source symlink into an empty module", async () => {
@@ -69,18 +86,28 @@ describe("automation reliability", { timeout: 20000 }, () => {
     await expect(automate(root, { event: "task_end" })).rejects.toThrow("symbolic link");
   });
 
-  it.each(["directory", "manifest"])("does not hide a broken literal workspace %s link", async kind => {
-    await write("package.json", '{"workspaces":["packages/alias"]}');
-    await write("CLAUDE.md", "The src directory. There are 1 workspaces.\n");
-    await fs.mkdir(path.join(root, "packages"));
-    if (kind === "directory") {
-      await fs.symlink(path.join(root, "missing-package"), path.join(root, "packages/alias"), "junction");
-    } else {
-      await fs.mkdir(path.join(root, "packages/alias"));
-      await fs.symlink(path.join(root, "missing-package.json"), path.join(root, "packages/alias/package.json"));
-    }
-    await expect(automate(root, { event: "session_start" })).rejects.toThrow("symbolic link");
-  });
+  it.each(["directory", "manifest"])(
+    "does not hide a broken literal workspace %s link",
+    async (kind) => {
+      await write("package.json", '{"workspaces":["packages/alias"]}');
+      await write("CLAUDE.md", "The src directory. There are 1 workspaces.\n");
+      await fs.mkdir(path.join(root, "packages"));
+      if (kind === "directory") {
+        await fs.symlink(
+          path.join(root, "missing-package"),
+          path.join(root, "packages/alias"),
+          "junction",
+        );
+      } else {
+        await fs.mkdir(path.join(root, "packages/alias"));
+        await fs.symlink(
+          path.join(root, "missing-package.json"),
+          path.join(root, "packages/alias/package.json"),
+        );
+      }
+      await expect(automate(root, { event: "session_start" })).rejects.toThrow("symbolic link");
+    },
+  );
 
   it("ignores unrelated generated symlinks but refuses linked workspace dependencies", async () => {
     await write(".gitignore", "artifacts/\n.mason/reports/\n");
@@ -90,8 +117,14 @@ describe("automation reliability", { timeout: 20000 }, () => {
     await write("package.json", '{"workspaces":["build/packages/*"]}');
     await write("CLAUDE.md", "The src directory. There are 1 workspaces.\n");
     await write("build/packages/real/package.json", "{}");
-    await fs.symlink(path.join(root, "build/packages/real"), path.join(root, "build/packages/alias"), "junction");
-    await expect(automate(root, { event: "task_end" })).rejects.toMatchObject({ failure: { code: "invalid-evidence", receiptRecorded: true } });
+    await fs.symlink(
+      path.join(root, "build/packages/real"),
+      path.join(root, "build/packages/alias"),
+      "junction",
+    );
+    await expect(automate(root, { event: "task_end" })).rejects.toMatchObject({
+      failure: { code: "invalid-evidence", receiptRecorded: true },
+    });
     const ws = await workspace(root);
     expect((await executionStatus(root, ws.directory)).status).toBe("failed");
   });
@@ -100,7 +133,11 @@ describe("automation reliability", { timeout: 20000 }, () => {
     // Module discovery only needs src's immediate directories. Keep the link
     // below that depth; command discovery needs it only for a missing script.
     await write("src/nested/file.js", "code");
-    await fs.symlink(path.join(root, "src/nested"), path.join(root, "src/nested/alias"), "junction");
+    await fs.symlink(
+      path.join(root, "src/nested"),
+      path.join(root, "src/nested/alias"),
+      "junction",
+    );
     await commitAll(root, "document root command");
     const initial = await automate(root, { event: "session_start" });
     expect(initial.report.status).toBe("verified");
@@ -119,7 +156,7 @@ describe("automation reliability", { timeout: 20000 }, () => {
     expect(cached.report.checks.reused).toHaveLength(6);
     await write("package.json", '{"scripts":{"test":"changed"}}');
     const original = CHECKS["dead-command"];
-    vi.spyOn(CHECKS, "dead-command").mockImplementation(async ctx => {
+    vi.spyOn(CHECKS, "dead-command").mockImplementation(async (ctx) => {
       const result = await original(ctx);
       await write("build/intermediates/next.bin", "more output");
       return result;
@@ -129,7 +166,10 @@ describe("automation reliability", { timeout: 20000 }, () => {
 
   it("observes explicitly documented ignored files and workspace members", async () => {
     await write("AGENTS.md", "The src directory. An unfinished example:\n```\n");
-    await write("CLAUDE.md", "The src directory. Generated entry `build/public.js`. There are 1 workspaces.\n");
+    await write(
+      "CLAUDE.md",
+      "The src directory. Generated entry `build/public.js`. There are 1 workspaces.\n",
+    );
     await write("package.json", '{"workspaces":["build/packages/*"]}');
     await write("build/packages/one/package.json", "{}");
     await commitAll(root, "document generated workspace");
@@ -142,7 +182,7 @@ describe("automation reliability", { timeout: 20000 }, () => {
     const member = await readInputs(root);
     expect(member.keys["stale-count"]).not.toBe(file.keys["stale-count"]);
     const checked = await automate(root, { event: "task_end" });
-    expect(checked.report.findings.some(f => f.original.type === "stale-count")).toBe(true);
+    expect(checked.report.findings.some((f) => f.original.type === "stale-count")).toBe(true);
   });
 
   it("keeps malformed or symlinked decision stores out of clean cached evidence", async () => {
@@ -150,9 +190,14 @@ describe("automation reliability", { timeout: 20000 }, () => {
     await write(".mason/decisions/broken.json", "{broken");
     const checked = await automate(root, { event: "task_end" });
     expect(checked.report.status).toBe("incomplete");
-    expect(checked.report.checks.skipped.some(s => s.check === "decision-anchor-drift")).toBe(true);
+    expect(checked.report.checks.skipped.some((s) => s.check === "decision-anchor-drift")).toBe(
+      true,
+    );
     await fs.rm(path.join(root, ".mason/decisions/broken.json"));
-    await fs.symlink(path.join(root, "package.json"), path.join(root, ".mason/decisions/alias.json"));
+    await fs.symlink(
+      path.join(root, "package.json"),
+      path.join(root, ".mason/decisions/alias.json"),
+    );
     await expect(automate(root, { event: "task_end" })).rejects.toThrow("Symlink");
   });
 
@@ -160,7 +205,7 @@ describe("automation reliability", { timeout: 20000 }, () => {
     await automate(root, { event: "session_start" });
     await write("package.json", '{"scripts":{"test":"one"}}');
     const original = CHECKS["dead-command"];
-    vi.spyOn(CHECKS, "dead-command").mockImplementation(async ctx => {
+    vi.spyOn(CHECKS, "dead-command").mockImplementation(async (ctx) => {
       const result = await original(ctx);
       await write("package.json", '{"scripts":{"test":"two"}}');
       return result;
@@ -175,7 +220,7 @@ describe("automation reliability", { timeout: 20000 }, () => {
     await automate(root, { event: "task_end" });
     const recovered = await automationStatus(root);
     expect(recovered.verificationStatus).toBe("verified");
-    expect(recovered.execution.attempts.some(a => a.status === "failed")).toBe(true);
+    expect(recovered.execution.attempts.some((a) => a.status === "failed")).toBe(true);
   });
 
   it("distinguishes a missing completion from a live process without changing the receipt", async () => {
@@ -199,19 +244,26 @@ describe("automation reliability", { timeout: 20000 }, () => {
     expect(status.verificationStatus).toBe("unavailable");
     expect(await fs.readFile(file, "utf8")).toBe(bytes);
     await automate(root, { event: "task_end" });
-    expect((await automationStatus(root)).execution.attempts.some(a => a.status === "unknown")).toBe(true);
+    expect(
+      (await automationStatus(root)).execution.attempts.some((a) => a.status === "unknown"),
+    ).toBe(true);
   });
 
   it("reports storage exhaustion even when it also prevents a failure receipt", async () => {
     const ws = await workspace(root);
     const full = Object.assign(new Error("disk full"), { code: "ENOSPC" });
-    await expect(recordExecution(root, ws.directory, "task_end", async () => { throw full; }))
-      .rejects.toMatchObject({ failure: { code: "storage-full", receiptRecorded: true } });
+    await expect(
+      recordExecution(root, ws.directory, "task_end", async () => {
+        throw full;
+      }),
+    ).rejects.toMatchObject({ failure: { code: "storage-full", receiptRecorded: true } });
     expect((await executionStatus(root, ws.directory)).status).toBe("failed");
-    await expect(recordExecution(root, ws.directory, "task_end", async () => {
-      vi.spyOn(fs, "open").mockRejectedValue(full);
-      throw full;
-    })).rejects.toMatchObject({ failure: { code: "storage-full", receiptRecorded: false } });
+    await expect(
+      recordExecution(root, ws.directory, "task_end", async () => {
+        vi.spyOn(fs, "open").mockRejectedValue(full);
+        throw full;
+      }),
+    ).rejects.toMatchObject({ failure: { code: "storage-full", receiptRecorded: false } });
     vi.restoreAllMocks();
     expect((await executionStatus(root, ws.directory)).status).toBe("unknown");
     expect(automationFailure(new Error("wrapped", { cause: full })).code).toBe("storage-full");
@@ -220,7 +272,9 @@ describe("automation reliability", { timeout: 20000 }, () => {
   it("bounds receipt history and reports the size of the omitted history", async () => {
     const ws = await workspace(root);
     for (let i = 0; i < 35; i++) {
-      await recordExecution(root, ws.directory, "before_tool", async () => ({ report: { status: "verified", reportPath: "example.json" } }));
+      await recordExecution(root, ws.directory, "before_tool", async () => ({
+        report: { status: "verified", reportPath: "example.json" },
+      }));
     }
     const status = await executionStatus(root, ws.directory);
     expect(status.attempts).toHaveLength(32);
@@ -230,10 +284,14 @@ describe("automation reliability", { timeout: 20000 }, () => {
 
   it("does not claim success if publishing the completed receipt fails", async () => {
     const ws = await workspace(root);
-    await expect(recordExecution(root, ws.directory, "task_end", async () => {
-      vi.spyOn(fs, "rename").mockRejectedValue(Object.assign(new Error("quota"), { code: "EDQUOT" }));
-      return { report: { status: "verified", reportPath: "example.json" } };
-    })).rejects.toMatchObject({ failure: { code: "storage-full", receiptRecorded: false } });
+    await expect(
+      recordExecution(root, ws.directory, "task_end", async () => {
+        vi.spyOn(fs, "rename").mockRejectedValue(
+          Object.assign(new Error("quota"), { code: "EDQUOT" }),
+        );
+        return { report: { status: "verified", reportPath: "example.json" } };
+      }),
+    ).rejects.toMatchObject({ failure: { code: "storage-full", receiptRecorded: false } });
   });
 
   it("cleans up a lock whose owner metadata could not be written", async () => {
@@ -243,9 +301,16 @@ describe("automation reliability", { timeout: 20000 }, () => {
     vi.spyOn(fs, "open").mockImplementationOnce(async (...args) => {
       const handle = await open(...args);
       close.mockImplementation(() => handle.close());
-      return { writeFile: async () => { throw Object.assign(new Error("full"), { code: "ENOSPC" }); }, close } as any;
+      return {
+        writeFile: async () => {
+          throw Object.assign(new Error("full"), { code: "ENOSPC" });
+        },
+        close,
+      } as any;
     });
-    await expect(withLock(root, ws.directory, async () => "done")).rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(withLock(root, ws.directory, async () => "done")).rejects.toMatchObject({
+      code: "ENOSPC",
+    });
     expect(close).toHaveBeenCalledOnce();
     await expect(fs.access(path.join(root, ws.directory, "lock"))).rejects.toThrow();
     expect(await withLock(root, ws.directory, async () => "done")).toBe("done");
@@ -255,11 +320,17 @@ describe("automation reliability", { timeout: 20000 }, () => {
     await automate(root, { event: "session_start" });
     const ws = await workspace(root);
     await write(ws.directory + "/state.json", '{"version":999}');
-    await expect(automate(root, { event: "task_end" })).rejects.toMatchObject({ failure: { code: "invalid-evidence" } });
-    expect(await fs.readFile(path.join(root, ws.directory, "state.json"), "utf8")).toBe('{"version":999}');
+    await expect(automate(root, { event: "task_end" })).rejects.toMatchObject({
+      failure: { code: "invalid-evidence" },
+    });
+    expect(await fs.readFile(path.join(root, ws.directory, "state.json"), "utf8")).toBe(
+      '{"version":999}',
+    );
     await write(ws.directory + "/execution.json", '{"version":999}');
     expect(JSON.parse(await masonAutomation(root, "check")).failure.code).toBe("invalid-evidence");
-    expect(await fs.readFile(path.join(root, ws.directory, "execution.json"), "utf8")).toBe('{"version":999}');
+    expect(await fs.readFile(path.join(root, ws.directory, "execution.json"), "utf8")).toBe(
+      '{"version":999}',
+    );
   });
 
   it("returns machine-readable CLI/MCP failure and a visible advisory hook failure", async () => {
@@ -267,13 +338,31 @@ describe("automation reliability", { timeout: 20000 }, () => {
     const ws = await workspace(root);
     await write(ws.directory + "/state.json", "{broken");
     const output: string[] = [];
-    expect(await runAutomationCli(["check", "--dir", root, "--json"], "", { out: s => output.push(s), err: s => output.push(s) })).toBe(2);
-    expect(JSON.parse(output[0])).toMatchObject({ status: "unavailable", failure: { code: "invalid-evidence" } });
-    expect(JSON.parse(await masonAutomation(root, "check"))).toMatchObject({ failure: { code: "invalid-evidence" } });
-    const hook = await runAutomationHook("codex", JSON.stringify({ cwd: root, session_id: "test", hook_event_name: "Stop" }));
+    expect(
+      await runAutomationCli(["check", "--dir", root, "--json"], "", {
+        out: (s) => output.push(s),
+        err: (s) => output.push(s),
+      }),
+    ).toBe(2);
+    expect(JSON.parse(output[0])).toMatchObject({
+      status: "unavailable",
+      failure: { code: "invalid-evidence" },
+    });
+    expect(JSON.parse(await masonAutomation(root, "check"))).toMatchObject({
+      failure: { code: "invalid-evidence" },
+    });
+    const hook = await runAutomationHook(
+      "codex",
+      JSON.stringify({ cwd: root, session_id: "test", hook_event_name: "Stop" }),
+    );
     expect(hook?.systemMessage).toContain("[invalid-evidence]");
     const hookOutput: string[] = [];
-    expect(await runAutomationCli(["hook", "--host", "codex"], "{broken", { out: s => hookOutput.push(s), err: s => hookOutput.push(s) })).toBe(0);
+    expect(
+      await runAutomationCli(["hook", "--host", "codex"], "{broken", {
+        out: (s) => hookOutput.push(s),
+        err: (s) => hookOutput.push(s),
+      }),
+    ).toBe(0);
     expect(JSON.parse(hookOutput[0]).systemMessage).toContain("[invalid-input]");
   });
 });

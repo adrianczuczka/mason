@@ -9,15 +9,17 @@ import { emptyResult } from "./index.js";
  * path stays dark on bare repos). Decision records encode human knowledge —
  * they are surfaced for re-verification, never rewritten by the fix agent.
  */
-export async function checkDecisionAnchors(
-  ctx: CheckContext
-): Promise<CheckResult> {
+export async function checkDecisionAnchors(ctx: CheckContext): Promise<CheckResult> {
   const result = emptyResult();
   if (!ctx.decisionsPresent) return result;
 
   const store = await loadDecisionStore(ctx.root);
   const records = store.records;
-  for (const diagnostic of store.diagnostics) result.skipped.push({ check: "decision-anchor-drift", reason: `${diagnostic.path}: ${diagnostic.message}` });
+  for (const diagnostic of store.diagnostics)
+    result.skipped.push({
+      check: "decision-anchor-drift",
+      reason: `${diagnostic.path}: ${diagnostic.message}`,
+    });
   const drift = await computeDecisionDrift(ctx.root, records);
   if (!drift.historyAvailable) {
     result.skipped.push({
@@ -26,13 +28,27 @@ export async function checkDecisionAnchors(
     });
   }
 
-  const changed = records.filter(record => record.status === "active").flatMap(record => [
-    { record: effectiveDecision(record), changedFiles: drift.staleDecisions[record.id] ?? [], freshness: drift.freshness?.[record.id] ?? "unknown" },
-    ...(drift.pendingProposals?.[record.id] ? [{ record, ...drift.pendingProposals[record.id] }] : []),
-  ] as const);
+  const changed = records
+    .filter((record) => record.status === "active")
+    .flatMap(
+      (record) =>
+        [
+          {
+            record: effectiveDecision(record),
+            changedFiles: drift.staleDecisions[record.id] ?? [],
+            freshness: drift.freshness?.[record.id] ?? "unknown",
+          },
+          ...(drift.pendingProposals?.[record.id]
+            ? [{ record, ...drift.pendingProposals[record.id] }]
+            : []),
+        ] as const,
+    );
   for (const { record, changedFiles, freshness } of changed) {
     if (freshness === "unknown" && record.files.length) {
-      result.skipped.push({ check: "decision-anchor-drift", reason: `Anchor evidence for decision ${record.id} is incomplete or unreadable` });
+      result.skipped.push({
+        check: "decision-anchor-drift",
+        reason: `Anchor evidence for decision ${record.id} is incomplete or unreadable`,
+      });
       continue;
     }
     if (!changedFiles.length) continue;

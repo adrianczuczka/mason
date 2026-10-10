@@ -1,5 +1,5 @@
 import { loadSnapshot } from "../snapshot/snapshot.js";
-import type { MasonConfig, ConfluenceConfig } from "../llm/config.js";
+import type { MasonConfig } from "../llm/config.js";
 import { createConfluenceClient, type ConfluenceClient } from "./client.js";
 import {
   renderFeaturePage,
@@ -18,11 +18,7 @@ import {
   hashDescription,
   type SyncState,
 } from "./diff.js";
-import {
-  rewriteForProduct,
-  type RewriteResult,
-  type RewriteContext,
-} from "./rewrite.js";
+import { rewriteForProduct, type RewriteResult, type RewriteContext } from "./rewrite.js";
 import type { FeatureEntry, Snapshot } from "../snapshot/snapshot.js";
 
 export interface SyncOptions {
@@ -42,11 +38,7 @@ export interface SyncSummary {
 
 export interface SyncDeps {
   client: ConfluenceClient;
-  rewrite: (
-    snapshot: Snapshot,
-    config: MasonConfig,
-    ctx: RewriteContext
-  ) => Promise<RewriteResult>;
+  rewrite: (snapshot: Snapshot, config: MasonConfig, ctx: RewriteContext) => Promise<RewriteResult>;
 }
 
 const DEFAULT_INDEX_TITLE = "Mason — System Map";
@@ -57,19 +49,19 @@ export async function exportToConfluence(
   rootDir: string,
   config: MasonConfig,
   options: SyncOptions = {},
-  deps?: Partial<SyncDeps>
+  deps?: Partial<SyncDeps>,
 ): Promise<SyncSummary> {
   const confluence = config.confluence;
   if (!confluence) {
     throw new Error(
-      "No Confluence credentials configured. Ask your assistant to call mason_set_confluence first."
+      "No Confluence credentials configured. Ask your assistant to call mason_set_confluence first.",
     );
   }
 
   const snapshot = await loadSnapshot(rootDir);
   if (!snapshot) {
     throw new Error(
-      "No snapshot found. Build the concept map first (ask your assistant to run mason_init and follow the playbook)."
+      "No snapshot found. Build the concept map first (ask your assistant to run mason_init and follow the playbook).",
     );
   }
 
@@ -129,14 +121,11 @@ export async function exportToConfluence(
 
   for (const [name, entry] of Object.entries(publishSnapshot.features)) {
     const title = featurePageTitle(featurePrefix, name);
-    const productDescription =
-      productLanguage.features[name] ?? entry.description;
-    const relatedFlows = flowsForFeature(entry.files, publishSnapshot.flows).map(
-      (f) => ({
-        name: f.name,
-        description: productLanguage.flows[f.name] ?? f.description,
-      })
-    );
+    const productDescription = productLanguage.features[name] ?? entry.description;
+    const relatedFlows = flowsForFeature(entry.files, publishSnapshot.flows).map((f) => ({
+      name: f.name,
+      description: productLanguage.flows[f.name] ?? f.description,
+    }));
 
     const rendered = renderFeaturePage({
       name,

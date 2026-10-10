@@ -64,11 +64,19 @@ const ARCHITECTURAL_PATTERNS = [
   { glob: "**/*Store.*", category: "state", reason: "store (state management)" },
   { glob: "**/*Reducer.*", category: "state", reason: "reducer (state management)" },
   // Data layer — interface
-  { glob: "**/*Repository.*", category: "data-interface", reason: "repository interface (data layer contract)" },
+  {
+    glob: "**/*Repository.*",
+    category: "data-interface",
+    reason: "repository interface (data layer contract)",
+  },
   { glob: "**/*Dao.*", category: "data-interface", reason: "DAO (data access)" },
   { glob: "**/*DataSource.*", category: "data-interface", reason: "data source" },
   // Data layer — implementation (where actual patterns live: mappers, retry, IO dispatchers)
-  { glob: "**/*RepositoryImpl.*", category: "data-impl", reason: "repository implementation (data layer patterns)" },
+  {
+    glob: "**/*RepositoryImpl.*",
+    category: "data-impl",
+    reason: "repository implementation (data layer patterns)",
+  },
   { glob: "**/*ServiceImpl.*", category: "data-impl", reason: "service implementation" },
   { glob: "**/*Impl.*", category: "data-impl", reason: "implementation (concrete patterns)" },
   // Data transformation
@@ -119,10 +127,7 @@ export interface SampledFile {
   reason: string;
 }
 
-export async function sampleFiles(
-  rootDir: string,
-  maxFiles: number = 25
-): Promise<SampledFile[]> {
+export async function sampleFiles(rootDir: string, maxFiles: number = 25): Promise<SampledFile[]> {
   const selected = new Map<string, string>(); // path -> reason
   const access = await createFileAccess(rootDir);
   const projectConfig = access.config;
@@ -200,7 +205,7 @@ export async function sampleFiles(
     const { stdout } = await exec(
       "git",
       ["log", "--since=3 months ago", "--format=", "--name-only"],
-      { cwd: rootDir, maxBuffer: 5_000_000 }
+      { cwd: rootDir, maxBuffer: 5_000_000 },
     );
 
     const fileCounts = new Map<string, number>();
@@ -218,9 +223,7 @@ export async function sampleFiles(
       fileCounts.set(line, (fileCounts.get(line) ?? 0) + 1);
     }
 
-    const hotFiles = [...fileCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
+    const hotFiles = [...fileCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
     for (const [file, count] of hotFiles) {
       if (selected.size >= maxFiles) break;
@@ -239,8 +242,7 @@ export async function sampleFiles(
     if (patternCount >= 8 || selected.size >= maxFiles) break;
     if (seenCategories.has(pattern.category)) continue;
 
-    const matches = await access.list(pattern.glob, {
-    });
+    const matches = await access.list(pattern.glob, {});
 
     if (matches.length > 0) {
       for (const match of matches) {
@@ -257,8 +259,7 @@ export async function sampleFiles(
   // 5b. Custom patterns from project config
   for (const customGlob of projectConfig.patterns ?? []) {
     if (selected.size >= maxFiles) break;
-    const matches = await access.list(customGlob, {
-    });
+    const matches = await access.list(customGlob, {});
     for (const match of matches) {
       if (selected.size >= maxFiles) break;
       if (!selected.has(match)) {
@@ -286,8 +287,7 @@ export async function sampleFiles(
   let testCount = 0;
   for (const group of testPatternGroups) {
     if (testCount >= 3 || selected.size >= maxFiles) break;
-    const testFiles = await access.list(group.patterns, {
-    });
+    const testFiles = await access.list(group.patterns, {});
     if (testFiles.length > 0) {
       for (const file of testFiles) {
         if (!selected.has(file)) {
@@ -301,8 +301,7 @@ export async function sampleFiles(
 
   // 7. Directory breadth — fill remaining slots with one file per top-level dir
   const sourceGlobs = SOURCE_EXTENSIONS.map((ext) => `**/*.${ext}`);
-  const allSourceFiles = await access.list(sourceGlobs, {
-  });
+  const allSourceFiles = await access.list(sourceGlobs, {});
 
   const dirRepresentatives = new Map<string, string>();
   const boringFiles = /\.(gradle|gradle\.kts|json|toml|yaml|yml|xml|properties)$/;
@@ -346,7 +345,7 @@ export async function sampleFiles(
 
 export async function readFullFile(
   rootDir: string,
-  filePath: string
+  filePath: string,
 ): Promise<{ path: string; content: string; totalLines: number } | null> {
   return (await createFileAccess(rootDir)).read(filePath);
 }

@@ -21,18 +21,14 @@ describe("test map", () => {
       expect(appPair).toBeDefined();
       expect(appPair!.source).toContain("App.tsx");
 
-      const buttonPair = map.paired.find((p) =>
-        p.test.includes("Button.test.tsx")
-      );
+      const buttonPair = map.paired.find((p) => p.test.includes("Button.test.tsx"));
       expect(buttonPair).toBeDefined();
       expect(buttonPair!.source).toContain("Button.tsx");
     });
 
     it("pairs hook tests", async () => {
       const map = await parseTestMap("node-react");
-      const hookPair = map.paired.find((p) =>
-        p.test.includes("useAuth.test.ts")
-      );
+      const hookPair = map.paired.find((p) => p.test.includes("useAuth.test.ts"));
       expect(hookPair).toBeDefined();
       expect(hookPair!.source).toContain("useAuth.ts");
     });
@@ -41,9 +37,7 @@ describe("test map", () => {
   describe("kotlin-multiplatform", () => {
     it("pairs Kotlin test files", async () => {
       const map = await parseTestMap("kotlin-multiplatform");
-      const homeScreenPair = map.paired.find((p) =>
-        p.test.includes("HomeScreenTest.kt")
-      );
+      const homeScreenPair = map.paired.find((p) => p.test.includes("HomeScreenTest.kt"));
       expect(homeScreenPair).toBeDefined();
       expect(homeScreenPair!.source).toContain("HomeScreen.kt");
     });
@@ -59,15 +53,11 @@ describe("test map", () => {
   describe("python-django", () => {
     it("pairs Python test files", async () => {
       const map = await parseTestMap("python-django");
-      const modelsPair = map.paired.find((p) =>
-        p.test.includes("test_models.py")
-      );
+      const modelsPair = map.paired.find((p) => p.test.includes("test_models.py"));
       expect(modelsPair).toBeDefined();
       expect(modelsPair!.source).toContain("models.py");
 
-      const viewsPair = map.paired.find((p) =>
-        p.test.includes("test_views.py")
-      );
+      const viewsPair = map.paired.find((p) => p.test.includes("test_views.py"));
       expect(viewsPair).toBeDefined();
       expect(viewsPair!.source).toContain("views.py");
     });
@@ -76,15 +66,11 @@ describe("test map", () => {
   describe("go-api", () => {
     it("pairs Go test files", async () => {
       const map = await parseTestMap("go-api");
-      const handlerPair = map.paired.find((p) =>
-        p.test.includes("UserHandler_test.go")
-      );
+      const handlerPair = map.paired.find((p) => p.test.includes("UserHandler_test.go"));
       expect(handlerPair).toBeDefined();
       expect(handlerPair!.source).toContain("UserHandler.go");
 
-      const servicePair = map.paired.find((p) =>
-        p.test.includes("UserService_test.go")
-      );
+      const servicePair = map.paired.find((p) => p.test.includes("UserService_test.go"));
       expect(servicePair).toBeDefined();
       expect(servicePair!.source).toContain("UserService.go");
     });

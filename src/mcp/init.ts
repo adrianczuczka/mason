@@ -10,10 +10,13 @@ export interface ProjectMarker {
   };
 }
 
-const markerSchema = z.object({
-  version: z.literal(1), initializedAt: z.string(),
-  features: z.object({ confluence: z.boolean().optional() }).passthrough().optional(),
-}).passthrough();
+const markerSchema = z
+  .object({
+    version: z.literal(1),
+    initializedAt: z.string(),
+    features: z.object({ confluence: z.boolean().optional() }).passthrough().optional(),
+  })
+  .passthrough();
 
 export async function loadProjectMarker(rootDir: string): Promise<ProjectMarker | null> {
   const raw = await readStoreJson(rootDir, ".mason/local/project.json");
@@ -23,21 +26,37 @@ export async function loadProjectMarker(rootDir: string): Promise<ProjectMarker 
 }
 
 export async function loadProjectFeatures(rootDir: string) {
-  const config = z.record(z.unknown()).parse(await readStoreJson(rootDir, ".mason/config.json") ?? {});
-  return z.object({ confluence: z.boolean().optional() }).passthrough().parse(config.features ?? {});
+  const config = z
+    .record(z.unknown())
+    .parse((await readStoreJson(rootDir, ".mason/config.json")) ?? {});
+  return z
+    .object({ confluence: z.boolean().optional() })
+    .passthrough()
+    .parse(config.features ?? {});
 }
 
 export async function saveProjectMarker(rootDir: string, marker: ProjectMarker): Promise<void> {
   const { ancillaryEdits } = await import("../setup/config.js");
-  for (const edit of [...await ancillaryEdits(rootDir), ...await projectMarkerEdits(rootDir, marker)]) await applyEdit(rootDir, edit);
+  for (const edit of [
+    ...(await ancillaryEdits(rootDir)),
+    ...(await projectMarkerEdits(rootDir, marker)),
+  ])
+    await applyEdit(rootDir, edit);
 }
 
 async function projectMarkerEdits(rootDir: string, marker: ProjectMarker): Promise<FileEdit[]> {
   const { features, ...local } = markerSchema.parse(marker);
   const file = ".mason/local/project.json";
-  const edits = [{ path: file, before: await readText(rootDir, file), after: JSON.stringify(local, null, 2) + "\n" }];
+  const edits = [
+    {
+      path: file,
+      before: await readText(rootDir, file),
+      after: JSON.stringify(local, null, 2) + "\n",
+    },
+  ];
   if (features && Object.keys(features).length) {
-    const configPath = ".mason/config.json", before = await readText(rootDir, configPath);
+    const configPath = ".mason/config.json",
+      before = await readText(rootDir, configPath);
     const config = z.record(z.unknown()).parse(JSON.parse(before ?? "{}"));
     config.features = { ...z.record(z.unknown()).parse(config.features ?? {}), ...features };
     edits.push({ path: configPath, before, after: JSON.stringify(config, null, 2) + "\n" });

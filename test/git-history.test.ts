@@ -5,7 +5,6 @@ import os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { GitHistoryAnalyzer } from "../src/analyzers/git-history.js";
-import type { AnalyzerContext } from "../src/types.js";
 import { fixturePath } from "./helpers.js";
 
 const exec = promisify(execFile);
@@ -45,7 +44,7 @@ describe("git-history analyzer", () => {
 
     const result = await analyzer.analyze({ rootDir: tmpDir, gitAvailable: true });
     const conventionalFinding = result.findings.find((f) =>
-      f.summary.includes("conventional commit")
+      f.summary.includes("conventional commit"),
     );
     expect(conventionalFinding).toBeDefined();
     expect(conventionalFinding!.confidence).toBeGreaterThanOrEqual(0.6);
@@ -64,9 +63,7 @@ describe("git-history analyzer", () => {
     }
 
     const result = await analyzer.analyze({ rootDir: tmpDir, gitAvailable: true });
-    const ticketFinding = result.findings.find((f) =>
-      f.summary.includes("ticket")
-    );
+    const ticketFinding = result.findings.find((f) => f.summary.includes("ticket"));
     expect(ticketFinding).toBeDefined();
   });
 

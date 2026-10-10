@@ -17,7 +17,6 @@ import * as setupFiles from "../src/setup/files.js";
 import { runAutomationHook } from "../src/automation/adapters.js";
 import { automate } from "../src/automation/runtime.js";
 import { workspace } from "../src/automation/evidence.js";
-import { recordExecution } from "../src/automation/execution.js";
 import { runAutomationCli, isHookCommand } from "../src/automation/cli.js";
 import { masonInit, getContext } from "../src/mcp/tools.js";
 import { createMcpServer } from "../src/mcp/server.js";
@@ -35,18 +34,36 @@ async function activateEnvironment(host: "codex" | "claude") {
   vi.stubEnv("MASON_SETUP_REVISION", setup.hosts[host]!.revision);
 }
 async function hook(name: string, session = "ordinary-session") {
-  return runAutomationHook("codex", JSON.stringify({ cwd: root, session_id: session, hook_event_name: name, tool_name: "read_file", tool_use_id: "read" }));
+  return runAutomationHook(
+    "codex",
+    JSON.stringify({
+      cwd: root,
+      session_id: session,
+      hook_event_name: name,
+      tool_name: "read_file",
+      tool_use_id: "read",
+    }),
+  );
 }
 beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "mason-setup-")));
   await initGitRepo(root);
-  await write("src/main.kt", "fun main() = println(\"hello\")\n");
+  await write("src/main.kt", 'fun main() = println("hello")\n');
   await write("AGENTS.md", "The `src/main.kt` entry point.\n");
   await commitAll(root, "initial Kotlin project");
   vi.stubGlobal("PKG_VERSION", "test");
-  vi.spyOn(launcher, "installedCommand").mockResolvedValue({ available: true, version: "test", message: null });
+  vi.spyOn(launcher, "installedCommand").mockResolvedValue({
+    available: true,
+    version: "test",
+    message: null,
+  });
 });
-afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); await fs.rm(root, { recursive: true, force: true }); }, 120000);
+afterEach(async () => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  await fs.rm(root, { recursive: true, force: true });
+}, 120000);
 
 describe("unified setup", { timeout: 20000 }, () => {
   it("completes setup and retries when optional stats configuration is corrupt", async () => {
@@ -57,7 +74,9 @@ describe("unified setup", { timeout: 20000 }, () => {
       expect(result.stats.enabled).toBeNull();
       expect(summarizeSetup(result)).toContain("Local stats unavailable");
       expect(result.activation.status).not.toBe("attention");
-      expect(await fs.readFile(path.join(root, ".mason/local/usefulness/config.json"), "utf8")).toBe("broken-json");
+      expect(
+        await fs.readFile(path.join(root, ".mason/local/usefulness/config.json"), "utf8"),
+      ).toBe("broken-json");
     }
   });
 
@@ -86,11 +105,13 @@ describe("unified setup", { timeout: 20000 }, () => {
     // Real files exercise Git pruning and the complete setup path, including
     // the second capture after instruction/configuration edits.
     const count = 100001;
-    await Promise.all(Array.from({ length: 64 }, async (_, worker) => {
-      for (let index = worker; index < count; index += 64) {
-        await fs.writeFile(path.join(artifacts, `generated-${index}.ts`), "");
-      }
-    }));
+    await Promise.all(
+      Array.from({ length: 64 }, async (_, worker) => {
+        for (let index = worker; index < count; index += 64) {
+          await fs.writeFile(path.join(artifacts, `generated-${index}.ts`), "");
+        }
+      }),
+    );
     expect((await fs.readdir(artifacts)).length).toBe(count);
     const result = await setupProject(root, { host: "codex" });
     expect(result.status).toBe("configured");
@@ -99,8 +120,15 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(configured.report.baselinePaths).toContain(baseline);
     await write("new-feature/main.kt", "fun feature() = true\n");
     const changed = await automate(root, { event: "task_end" });
-    expect(changed.report.findings.some(f => f.original.type === "new-module" && f.status === "review-required")).toBe(true);
-    await fs.appendFile(path.join(root, "AGENTS.md"), "\nThe new-feature directory contains the added capability.\n");
+    expect(
+      changed.report.findings.some(
+        (f) => f.original.type === "new-module" && f.status === "review-required",
+      ),
+    ).toBe(true);
+    await fs.appendFile(
+      path.join(root, "AGENTS.md"),
+      "\nThe new-feature directory contains the added capability.\n",
+    );
     await commitAll(root, "document the new feature and commit setup metadata");
     const verified = await automate(root, { event: "task_end" });
     expect(verified.report.status).toBe("verified");
@@ -108,34 +136,56 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(await fs.readFile(path.join(root, baseline))).toEqual(original);
   }, 120000);
 
-  it.each(["codex", "claude"] as const)("sets up %s in a non-npm repo and retains original evidence before instruction edits", async host => {
-    const original = "The `src/missing.kt` entry point.\n";
-    await write("AGENTS.md", original);
-    await commitAll(root, "outdated instructions");
-    const result = await setupProject(root, { host });
-    expect(result.status).toBe("configured");
-    expect(result.activation.status).toBe("pending");
-    if (host === "claude") expect(await fs.readFile(path.join(root, "CLAUDE.md"), "utf8")).toContain("\n@AGENTS.md\n");
-    expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toContain(original);
-    await expect(fs.access(path.join(root, "package.json"))).rejects.toThrow();
-    await expect(fs.access(path.join(root, ".mason/decisions"))).rejects.toThrow();
-    const before = JSON.parse(await fs.readFile(path.join(root, result.initialReportPath), "utf8"));
-    expect(before.findings.some(f => f.original.type === "deleted-reference")).toBe(true);
-    expect(before.baselinePaths.length).toBeGreaterThan(0);
-    const baseline = JSON.parse(await fs.readFile(path.join(root, before.baselinePaths[0]), "utf8"));
-    expect(baseline.report.docs[0].dirty).toBe(false);
-    expect((await git(["status", "--porcelain"], root))).not.toContain("runtime/");
-    expect(await git(["check-ignore", ".mason/reports/example.json"], root)).toBe(".mason/reports/example.json");
-    expect(result.runtime).toMatchObject({ kind: "global", command: "mason" });
-    for (const file of ["runtime", "run.cjs", "run.sh", "run.ps1", "setup.json", "automation.json", "project.json"]) {
-      await expect(fs.access(path.join(root, ".mason", file))).rejects.toThrow();
-    }
-    expect(await git(["check-ignore", ".mason/local/setup.json", ".mason/local/automation.json"], root))
-      .toBe(".mason/local/setup.json\n.mason/local/automation.json");
-    await commitAll(root, "configure Mason");
-    expect((await git(["ls-files", ".mason"], root)).trim()).toBe("");
-    expect(JSON.parse(await masonInit(root)).initialized).toBe(true);
-  });
+  it.each(["codex", "claude"] as const)(
+    "sets up %s in a non-npm repo and retains original evidence before instruction edits",
+    async (host) => {
+      const original = "The `src/missing.kt` entry point.\n";
+      await write("AGENTS.md", original);
+      await commitAll(root, "outdated instructions");
+      const result = await setupProject(root, { host });
+      expect(result.status).toBe("configured");
+      expect(result.activation.status).toBe("pending");
+      if (host === "claude")
+        expect(await fs.readFile(path.join(root, "CLAUDE.md"), "utf8")).toContain("\n@AGENTS.md\n");
+      expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toContain(original);
+      await expect(fs.access(path.join(root, "package.json"))).rejects.toThrow();
+      await expect(fs.access(path.join(root, ".mason/decisions"))).rejects.toThrow();
+      const before = JSON.parse(
+        await fs.readFile(path.join(root, result.initialReportPath), "utf8"),
+      );
+      expect(before.findings.some((f) => f.original.type === "deleted-reference")).toBe(true);
+      expect(before.baselinePaths.length).toBeGreaterThan(0);
+      const baseline = JSON.parse(
+        await fs.readFile(path.join(root, before.baselinePaths[0]), "utf8"),
+      );
+      expect(baseline.report.docs[0].dirty).toBe(false);
+      expect(await git(["status", "--porcelain"], root)).not.toContain("runtime/");
+      expect(await git(["check-ignore", ".mason/reports/example.json"], root)).toBe(
+        ".mason/reports/example.json",
+      );
+      expect(result.runtime).toMatchObject({ kind: "global", command: "mason" });
+      for (const file of [
+        "runtime",
+        "run.cjs",
+        "run.sh",
+        "run.ps1",
+        "setup.json",
+        "automation.json",
+        "project.json",
+      ]) {
+        await expect(fs.access(path.join(root, ".mason", file))).rejects.toThrow();
+      }
+      expect(
+        await git(
+          ["check-ignore", ".mason/local/setup.json", ".mason/local/automation.json"],
+          root,
+        ),
+      ).toBe(".mason/local/setup.json\n.mason/local/automation.json");
+      await commitAll(root, "configure Mason");
+      expect((await git(["ls-files", ".mason"], root)).trim()).toBe("");
+      expect(JSON.parse(await masonInit(root)).initialized).toBe(true);
+    },
+  );
 
   it("repeats setup without duplicate instructions, hooks, baseline replacement, or activation reset", async () => {
     await write("CLAUDE.md", "Keep these project conventions exactly.\r\n");
@@ -157,8 +207,12 @@ describe("unified setup", { timeout: 20000 }, () => {
     await write(".claude/CLAUDE.md", "Existing conventions: use the src directory.\n");
     const first = await setupProject(root, { host: "codex" });
     expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toContain(".claude/CLAUDE.md");
-    expect(await fs.readFile(path.join(root, ".claude/CLAUDE.md"), "utf8")).toContain("Existing conventions: use the src directory.\n");
-    expect(await fs.readFile(path.join(root, ".claude/CLAUDE.md"), "utf8")).toContain("\n@../AGENTS.md\n");
+    expect(await fs.readFile(path.join(root, ".claude/CLAUDE.md"), "utf8")).toContain(
+      "Existing conventions: use the src directory.\n",
+    );
+    expect(await fs.readFile(path.join(root, ".claude/CLAUDE.md"), "utf8")).toContain(
+      "\n@../AGENTS.md\n",
+    );
     expect((await setupProject(root, { host: "codex" })).changedFiles).toEqual([]);
     expect(first.activation.hosts.codex.instructions).toBe("current");
   });
@@ -176,8 +230,14 @@ describe("unified setup", { timeout: 20000 }, () => {
   it("preserves unrelated TOML bytes, JSON settings, and existing hooks", async () => {
     const toml = '# comment\nmodel = "example"\n[mcp_servers.other]\ncommand = "other"\n';
     await write(".codex/config.toml", toml);
-    const originalHook = { hooks: [{ type: "command", command: "existing-tool" }], matcher: "Edit" };
-    await write(".codex/hooks.json", JSON.stringify({ setting: 7, hooks: { PreToolUse: [originalHook] } }));
+    const originalHook = {
+      hooks: [{ type: "command", command: "existing-tool" }],
+      matcher: "Edit",
+    };
+    await write(
+      ".codex/hooks.json",
+      JSON.stringify({ setting: 7, hooks: { PreToolUse: [originalHook] } }),
+    );
     await setupProject(root, { host: "codex" });
     const config = await fs.readFile(path.join(root, ".codex/config.toml"), "utf8");
     expect(config.startsWith(toml)).toBe(true);
@@ -188,12 +248,17 @@ describe("unified setup", { timeout: 20000 }, () => {
   });
 
   it("migrates an existing explicit Mason MCP table while preserving other settings", async () => {
-    await write(".codex/config.toml", '# before\nmodel = "test"\n[mcp_servers.mason]\ncommand = "old"\nargs = []\nenabled = false\ntool_timeout_sec = 80\n[mcp_servers.mason.env]\nPROJECT_OPTION = "keep"\n[mcp_servers.other]\ncommand = "keep"\n');
+    await write(
+      ".codex/config.toml",
+      '# before\nmodel = "test"\n[mcp_servers.mason]\ncommand = "old"\nargs = []\nenabled = false\ntool_timeout_sec = 80\n[mcp_servers.mason.env]\nPROJECT_OPTION = "keep"\n[mcp_servers.other]\ncommand = "keep"\n',
+    );
     const edit = await mcpEdit(root, "codex");
     const parsed = parse(edit.after);
     expect(parsed.model).toBe("test");
     expect(parsed.mcp_servers.other.command).toBe("keep");
-    expect(parsed.mcp_servers.mason.command).toBe(process.platform === "win32" ? "cmd.exe" : "mason");
+    expect(parsed.mcp_servers.mason.command).toBe(
+      process.platform === "win32" ? "cmd.exe" : "mason",
+    );
     expect(parsed.mcp_servers.mason.enabled).toBe(false);
     expect(parsed.mcp_servers.mason.tool_timeout_sec).toBe(80);
     expect(parsed.mcp_servers.mason.env).toEqual({ PROJECT_OPTION: "keep" });
@@ -204,7 +269,15 @@ describe("unified setup", { timeout: 20000 }, () => {
   });
 
   it("preserves Claude server options and replaces only its transport details", async () => {
-    await write(".mcp.json", JSON.stringify({ mcpServers: { mason: { type: "http", url: "https://example.invalid", env: { OPTION: "keep" } }, other: { command: "other" } } }));
+    await write(
+      ".mcp.json",
+      JSON.stringify({
+        mcpServers: {
+          mason: { type: "http", url: "https://example.invalid", env: { OPTION: "keep" } },
+          other: { command: "other" },
+        },
+      }),
+    );
     const result = await setupProject(root, { host: "claude" });
     const config = JSON.parse(await fs.readFile(path.join(root, ".mcp.json"), "utf8"));
     expect(config.mcpServers.mason.env).toEqual({ OPTION: "keep" });
@@ -215,7 +288,10 @@ describe("unified setup", { timeout: 20000 }, () => {
   });
 
   it("replaces obsolete secondary Mason guidance without changing surrounding conventions", async () => {
-    await write("CLAUDE.md", "Before\r\n<!-- mason:start -->\r\nObsolete commands\r\n<!-- mason:end -->\r\nAfter\r\n");
+    await write(
+      "CLAUDE.md",
+      "Before\r\n<!-- mason:start -->\r\nObsolete commands\r\n<!-- mason:end -->\r\nAfter\r\n",
+    );
     await setupProject(root, { host: "claude" });
     const text = await fs.readFile(path.join(root, "CLAUDE.md"), "utf8");
     expect(text).toContain("\n@AGENTS.md\r\n");
@@ -261,13 +337,19 @@ describe("unified setup", { timeout: 20000 }, () => {
     const done = await setupProject(root, { host: "codex" });
     const original = JSON.parse(await fs.readFile(path.join(root, done.initialReportPath), "utf8"));
     expect(original.baselinePaths).toHaveLength(1);
-    const baseline = JSON.parse(await fs.readFile(path.join(root, original.baselinePaths[0]), "utf8"));
+    const baseline = JSON.parse(
+      await fs.readFile(path.join(root, original.baselinePaths[0]), "utf8"),
+    );
     expect(baseline.report.docs[0].dirty).toBe(false);
     expect(done.activation.status).toBe("pending");
   });
 
   it("refuses concurrent file edits and symlinked setup files", async () => {
-    const edit = { path: "AGENTS.md", before: await fs.readFile(path.join(root, "AGENTS.md"), "utf8"), after: "replacement" };
+    const edit = {
+      path: "AGENTS.md",
+      before: await fs.readFile(path.join(root, "AGENTS.md"), "utf8"),
+      after: "replacement",
+    };
     await write("AGENTS.md", "new concurrent content");
     await expect(applyEdit(root, edit)).rejects.toThrow("changed during");
     expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toBe("new concurrent content");
@@ -279,11 +361,17 @@ describe("unified setup", { timeout: 20000 }, () => {
   it("keeps reports private and decisions shareable under an existing blanket Mason ignore", async () => {
     await write(".gitignore", "# existing\r\n.mason/\r\n");
     await setupProject(root, { host: "codex" });
-    expect(await git(["check-ignore", ".mason/reports/test.json"], root)).toBe(".mason/reports/test.json");
+    expect(await git(["check-ignore", ".mason/reports/test.json"], root)).toBe(
+      ".mason/reports/test.json",
+    );
     const visible = await git(["check-ignore", "--verbose", ".mason/decisions/test.json"], root);
     expect(visible).toContain("!/.mason/decisions/**");
-    expect(await git(["check-ignore", "--verbose", ".mason/config.json"], root)).toContain("!/.mason/config.json");
-    expect(await git(["check-ignore", "--verbose", ".mason/snapshot.json"], root)).toContain("!/.mason/snapshot.json");
+    expect(await git(["check-ignore", "--verbose", ".mason/config.json"], root)).toContain(
+      "!/.mason/config.json",
+    );
+    expect(await git(["check-ignore", "--verbose", ".mason/snapshot.json"], root)).toContain(
+      "!/.mason/snapshot.json",
+    );
     expect((await setupProject(root, { host: "codex" })).changedFiles).toEqual([]);
   });
 
@@ -293,13 +381,19 @@ describe("unified setup", { timeout: 20000 }, () => {
     const setup = JSON.parse(await masonInit(root, { mode: "setup", host: "codex" }));
     expect(setup.status).toBe("configured");
     const lines: string[] = [];
-    expect(await runAutomationCli(["setup", "--dir", root, "--host", "codex", "--json"], "", { out: s => lines.push(s), err: s => lines.push(s) })).toBe(0);
+    expect(
+      await runAutomationCli(["setup", "--dir", root, "--host", "codex", "--json"], "", {
+        out: (s) => lines.push(s),
+        err: (s) => lines.push(s),
+      }),
+    ).toBe(0);
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0]).changedFiles).toEqual([]);
   });
 
   it("shows setup progress before configuration edits and keeps the final result on stdout", async () => {
-    const out: string[] = [], err: string[] = [];
+    const out: string[] = [],
+      err: string[] = [];
     const apply = setupFiles.applyEdit;
     vi.spyOn(setupFiles, "applyEdit").mockImplementation(async (dir, edit) => {
       expect(err.join("\n")).toContain("preserving original findings");
@@ -307,9 +401,12 @@ describe("unified setup", { timeout: 20000 }, () => {
       expect(out).toEqual([]);
       return apply(dir, edit);
     });
-    expect(await runAutomationCli(["setup", "--dir", root, "--host", "claude"], "", {
-      out: text => out.push(text), err: text => err.push(text),
-    })).toBe(0);
+    expect(
+      await runAutomationCli(["setup", "--dir", root, "--host", "claude"], "", {
+        out: (text) => out.push(text),
+        err: (text) => err.push(text),
+      }),
+    ).toBe(0);
     expect(out).toHaveLength(1);
     expect(out[0]).toContain("Mason configured for claude.");
     expect(out[0]).toContain("Activation: pending");
@@ -323,7 +420,9 @@ describe("unified setup", { timeout: 20000 }, () => {
     const result = await setupProject(root);
     expect(result.host).toBe("codex");
     expect(result.activation.hosts.codex.status).toBe("attention");
-    expect(parse(await fs.readFile(path.join(root, ".codex/config.toml"), "utf8")).features.hooks).toBe(false);
+    expect(
+      parse(await fs.readFile(path.join(root, ".codex/config.toml"), "utf8")).features.hooks,
+    ).toBe(false);
   });
 
   it("requires actual MCP and hook observations and isolates sessions and installation revisions", async () => {
@@ -332,7 +431,8 @@ describe("unified setup", { timeout: 20000 }, () => {
     await commitAll(root, "configure Mason");
     await getContext(root, "Read source", ["src/main.kt"]);
     expect((await setupStatus(root)).hosts.codex.contextCalls).toBe(0);
-    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse"]) await hook(event, "one");
+    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse"])
+      await hook(event, "one");
     for (const event of ["PostToolUse", "Stop"]) await hook(event, "two");
     expect((await setupStatus(root)).hosts.codex.status).toBe("pending");
     for (const event of ["PostToolUse", "Stop"]) await hook(event, "one");
@@ -342,12 +442,25 @@ describe("unified setup", { timeout: 20000 }, () => {
     const client = new Client({ name: "test", version: "1" });
     const [a, b] = InMemoryTransport.createLinkedPair();
     try {
-      await server.connect(a); await client.connect(b);
-      await client.callTool({ name: "get_context", arguments: { dir: root, task: "Explain the project", files: ["src/main.kt"] } });
-    } finally { await client.close(); await server.close(); }
+      await server.connect(a);
+      await client.connect(b);
+      await client.callTool({
+        name: "get_context",
+        arguments: { dir: root, task: "Explain the project", files: ["src/main.kt"] },
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
     expect((await setupStatus(root)).hosts.codex.status).toBe("active");
     const ws = await workspace(root);
-    const observed = await fs.readFile(path.join(root, observationPath(ws.directory, "codex", (await loadSetup(root))!.hosts.codex!.revision)), "utf8");
+    const observed = await fs.readFile(
+      path.join(
+        root,
+        observationPath(ws.directory, "codex", (await loadSetup(root))!.hosts.codex!.revision),
+      ),
+      "utf8",
+    );
     expect(observed).not.toContain("Explain the project");
     expect(observed).not.toContain("src/main.kt");
     await write(".codex/hooks.json", "{}");
@@ -361,8 +474,15 @@ describe("unified setup", { timeout: 20000 }, () => {
 
   it("detects a missing global command without treating earlier activation as healthy", async () => {
     await setupProject(root, { host: "codex" });
-    vi.mocked(launcher.installedCommand).mockResolvedValue({ available: false, version: null, message: "Restart the assistant to pick up PATH." });
-    expect((await setupStatus(root)).hosts.codex).toMatchObject({ status: "attention", runtime: "unavailable-on-path" });
+    vi.mocked(launcher.installedCommand).mockResolvedValue({
+      available: false,
+      version: null,
+      message: "Restart the assistant to pick up PATH.",
+    });
+    expect((await setupStatus(root)).hosts.codex).toMatchObject({
+      status: "attention",
+      runtime: "unavailable-on-path",
+    });
     const before = await git(["diff"], root);
     await expect(setupProject(root, { host: "codex" })).rejects.toThrow("PATH");
     expect(await git(["diff"], root)).toBe(before);
@@ -373,16 +493,30 @@ describe("unified setup", { timeout: 20000 }, () => {
     await activateEnvironment("codex");
     await commitAll(root, "configure Mason");
     await observeActivation(root, "context");
-    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]) await hook(event);
+    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"])
+      await hook(event);
     expect((await setupStatus(root)).hosts.codex.status).toBe("active");
-    const ws = await workspace(root), setup = (await loadSetup(root))!;
-    const oldPath = path.join(root, observationPath(ws.directory, "codex", setup.hosts.codex!.revision));
+    const ws = await workspace(root),
+      setup = (await loadSetup(root))!;
+    const oldPath = path.join(
+      root,
+      observationPath(ws.directory, "codex", setup.hosts.codex!.revision),
+    );
     const before = await fs.readFile(oldPath);
     vi.stubGlobal("PKG_VERSION", "next");
-    vi.mocked(launcher.installedCommand).mockResolvedValue({ available: true, version: "next", message: null });
-    expect((await setupStatus(root)).hosts.codex).toMatchObject({ status: "pending", contextCalls: 0, observedEvents: [] });
+    vi.mocked(launcher.installedCommand).mockResolvedValue({
+      available: true,
+      version: "next",
+      message: null,
+    });
+    expect((await setupStatus(root)).hosts.codex).toMatchObject({
+      status: "pending",
+      contextCalls: 0,
+      observedEvents: [],
+    });
     await observeActivation(root, "context");
-    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]) await hook(event);
+    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"])
+      await hook(event);
     expect((await setupStatus(root)).hosts.codex.status).toBe("active");
     expect(await fs.readFile(oldPath)).toEqual(before);
     expect(await loadSetup(root)).toEqual(setup);
@@ -398,7 +532,11 @@ describe("unified setup", { timeout: 20000 }, () => {
   it("keeps the marked block idempotent without changing surrounding CRLF bytes", () => {
     const before = "before\r\n<!-- mason:start -->\r\nold\r\n<!-- mason:end -->\r\nafter\r\n";
     const after = managedBlock(before, "<!-- mason:start -->", "<!-- mason:end -->", "new\nbody");
-    expect(after).toBe("before\r\n<!-- mason:start -->\r\nnew\r\nbody\r\n<!-- mason:end -->\r\nafter\r\n");
-    expect(managedBlock(after, "<!-- mason:start -->", "<!-- mason:end -->", "new\nbody")).toBe(after);
+    expect(after).toBe(
+      "before\r\n<!-- mason:start -->\r\nnew\r\nbody\r\n<!-- mason:end -->\r\nafter\r\n",
+    );
+    expect(managedBlock(after, "<!-- mason:start -->", "<!-- mason:end -->", "new\nbody")).toBe(
+      after,
+    );
   });
 });

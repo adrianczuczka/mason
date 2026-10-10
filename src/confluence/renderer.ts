@@ -6,10 +6,7 @@ import type { FeatureEntry, FlowEntry } from "../snapshot/snapshot.js";
 // hash in the local sync state instead (see sync.ts / diff.ts).
 
 function escape(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function infoPanel(text: string): string {
@@ -36,21 +33,15 @@ export interface RenderFeaturePageOptions {
   indexPageTitle: string;
 }
 
-export function renderFeaturePage(
-  options: RenderFeaturePageOptions
-): RenderedFeaturePage {
-  const overviewBody =
-    `<h2>What it does</h2>` + `<p>${escape(options.productDescription)}</p>`;
+export function renderFeaturePage(options: RenderFeaturePageOptions): RenderedFeaturePage {
+  const overviewBody = `<h2>What it does</h2>` + `<p>${escape(options.productDescription)}</p>`;
 
   // Only render "How it fits in" when there are flows — an empty section with a
   // "nothing here" placeholder reads as unfinished.
   const flowsBody = options.flowDescriptions.length
     ? `<h2>How it fits in</h2><ul>` +
       options.flowDescriptions
-        .map(
-          (f) =>
-            `<li><strong>${escape(f.name)}</strong> — ${escape(f.description)}</li>`
-        )
+        .map((f) => `<li><strong>${escape(f.name)}</strong> — ${escape(f.description)}</li>`)
         .join("") +
       `</ul>`
     : "";
@@ -64,7 +55,7 @@ export function renderFeaturePage(
   // Provenance note as a footer, not wedged between the content sections.
   const footer = infoPanel(
     `Generated from code by Mason. This page is overwritten on each sync — ` +
-      `edit the code, not the page.`
+      `edit the code, not the page.`,
   );
 
   const body = overviewBody + flowsBody + navBody + footer;
@@ -100,7 +91,7 @@ export function renderIndexPage(options: RenderIndexPageOptions): string {
     `</ul>`;
 
   const banner = infoPanel(
-    `Generated from code by Mason. Maintained automatically — edit the code, not this page.`
+    `Generated from code by Mason. Maintained automatically — edit the code, not this page.`,
   );
 
   return banner + list;
@@ -119,36 +110,34 @@ export function renderChangelogSection(section: DiffSection): string {
   const segments: string[] = [];
   if (section.addedFeatures.length) {
     segments.push(
-      `<p><strong>Added features:</strong> ${section.addedFeatures.map(escape).join(", ")}</p>`
+      `<p><strong>Added features:</strong> ${section.addedFeatures.map(escape).join(", ")}</p>`,
     );
   }
   if (section.removedFeatures.length) {
     segments.push(
-      `<p><strong>Removed features:</strong> ${section.removedFeatures.map(escape).join(", ")}</p>`
+      `<p><strong>Removed features:</strong> ${section.removedFeatures.map(escape).join(", ")}</p>`,
     );
   }
   if (section.changedFeatures.length) {
     segments.push(
-      `<p><strong>Updated features:</strong> ${section.changedFeatures.map(escape).join(", ")}</p>`
+      `<p><strong>Updated features:</strong> ${section.changedFeatures.map(escape).join(", ")}</p>`,
     );
   }
   if (section.addedFlows.length) {
     segments.push(
-      `<p><strong>Added flows:</strong> ${section.addedFlows.map(escape).join(", ")}</p>`
+      `<p><strong>Added flows:</strong> ${section.addedFlows.map(escape).join(", ")}</p>`,
     );
   }
   if (section.removedFlows.length) {
     segments.push(
-      `<p><strong>Removed flows:</strong> ${section.removedFlows.map(escape).join(", ")}</p>`
+      `<p><strong>Removed flows:</strong> ${section.removedFlows.map(escape).join(", ")}</p>`,
     );
   }
   if (segments.length === 0) {
     segments.push(`<p><em>No meaningful changes detected.</em></p>`);
   }
 
-  return (
-    `<h3>${escape(section.syncedAt)}</h3>` + segments.join("")
-  );
+  return `<h3>${escape(section.syncedAt)}</h3>` + segments.join("");
 }
 
 export function renderChangelogPage(sections: string[]): string {
@@ -164,7 +153,7 @@ export type FlowMap = Record<string, FlowEntry>;
 
 export function flowsForFeature(
   featureFiles: string[],
-  flows: FlowMap
+  flows: FlowMap,
 ): Array<{ name: string; description: string }> {
   const fileSet = new Set(featureFiles);
   const result: Array<{ name: string; description: string }> = [];

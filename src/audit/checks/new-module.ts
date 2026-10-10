@@ -47,10 +47,7 @@ function escapeRegExp(text: string): string {
  * flagged against CLAUDE.md.
  */
 function isMentioned(combinedDocs: string, name: string): boolean {
-  const re = new RegExp(
-    `(^|[^A-Za-z0-9_-])${escapeRegExp(name)}(/|[^A-Za-z0-9_-]|$)`,
-    "im"
-  );
+  const re = new RegExp(`(^|[^A-Za-z0-9_-])${escapeRegExp(name)}(/|[^A-Za-z0-9_-]|$)`, "im");
   return re.test(combinedDocs);
 }
 
@@ -88,61 +85,109 @@ export async function checkNewModules(ctx: CheckContext): Promise<CheckResult> {
 /** Nested documentation establishes a directory is documented without requiring
  * every package README to repeat its full repository path. */
 export function moduleDocumentation(docs: Array<{ path: string; content: string }>): string {
-  return docs.map(doc => doc.content + "\n" + (path.posix.dirname(doc.path) === "." ? "" : path.posix.dirname(doc.path) + "/")).join("\n");
+  return docs
+    .map(
+      (doc) =>
+        doc.content +
+        "\n" +
+        (path.posix.dirname(doc.path) === "." ? "" : path.posix.dirname(doc.path) + "/"),
+    )
+    .join("\n");
 }
 
 /** Shared dependency witness: cache exactly the module candidates the audit observes. */
 export function moduleCandidates(root: string, combinedDocs: string) {
-  return inspectionRead(root, "modules:" + combinedDocs, () => collectModuleCandidates(root, combinedDocs));
+  return inspectionRead(root, "modules:" + combinedDocs, () =>
+    collectModuleCandidates(root, combinedDocs),
+  );
 }
 
 async function collectModuleCandidates(root: string, combinedDocs: string) {
   const [config, sourcePaths] = await Promise.all([loadProjectConfig(root), gitSourcePaths(root)]);
   const ignore = [...SOURCE_IGNORE, ...(config.ignore ?? [])];
-  const sources = sourcePaths.filter(file => !file.split("/").some(part => part.startsWith(".")));
+  const sources = sourcePaths.filter(
+    (file) => !file.split("/").some((part) => part.startsWith(".")),
+  );
   const listSubdirs = async (parents: string[]): Promise<Map<string, string[]>> => {
     const byParent = new Map<string, string[]>();
     // Gather one level before asking Git about ignores, with bounded directory reads.
     for (let offset = 0; offset < parents.length; offset += 16) {
-      await Promise.all(parents.slice(offset, offset + 16).map(async dir => {
-        const entries = await fs.readdir(await auditInputPath(root, dir), { withFileTypes: true });
-        // An unrelated directory alias is not a source module. Selected links
-        // still pass through auditGlob's path and parent validation.
-        const dirs = entries.filter(entry => (entry.isDirectory() || entry.isSymbolicLink()
-          && sources.some(file => file.startsWith(path.posix.join(dir, entry.name) + "/")))
-          && !entry.name.startsWith(".") && !DIR_DENYLIST.has(entry.name))
-          .map(entry => path.posix.join(dir, entry.name));
-        byParent.set(dir, dirs);
-      }));
+      await Promise.all(
+        parents.slice(offset, offset + 16).map(async (dir) => {
+          const entries = await fs.readdir(await auditInputPath(root, dir), {
+            withFileTypes: true,
+          });
+          // An unrelated directory alias is not a source module. Selected links
+          // still pass through auditGlob's path and parent validation.
+          const dirs = entries
+            .filter(
+              (entry) =>
+                (entry.isDirectory() ||
+                  (entry.isSymbolicLink() &&
+                    sources.some((file) =>
+                      file.startsWith(path.posix.join(dir, entry.name) + "/"),
+                    ))) &&
+                !entry.name.startsWith(".") &&
+                !DIR_DENYLIST.has(entry.name),
+            )
+            .map((entry) => path.posix.join(dir, entry.name));
+          byParent.set(dir, dirs);
+        }),
+      );
     }
     const ignored = await gitIgnoredPaths(root, [...byParent.values()].flat());
     const result = new Map<string, string[]>();
     for (const dir of parents) {
       // An ignore rule does not remove already tracked source from the audit.
-      const visible = new Set(byParent.get(dir)!.filter(candidate => !ignored.has(candidate)
-        || sources.some(file => file.startsWith(candidate + "/"))));
-      result.set(dir, (await auditGlob(root, dir === "." ? "*" : `${fg.escapePath(dir)}/*`, {
-        ignore, onlyDirectories: true, label: "Module directory discovery", select: file => visible.has(file),
-      })).map(file => path.posix.basename(file)));
+      const visible = new Set(
+        byParent
+          .get(dir)!
+          .filter(
+            (candidate) =>
+              !ignored.has(candidate) || sources.some((file) => file.startsWith(candidate + "/")),
+          ),
+      );
+      result.set(
+        dir,
+        (
+          await auditGlob(root, dir === "." ? "*" : `${fg.escapePath(dir)}/*`, {
+            ignore,
+            onlyDirectories: true,
+            label: "Module directory discovery",
+            select: (file) => visible.has(file),
+          })
+        ).map((file) => path.posix.basename(file)),
+      );
     }
     return result;
   };
   const countSourceFiles = async (dir: string): Promise<number> => {
-    const files = sources.filter(file => file.startsWith(dir + "/"));
+    const files = sources.filter((file) => file.startsWith(dir + "/"));
     let count = 0;
     // Literal path batches avoid compiling one enormous glob pattern set in a
     // genuinely large source module. Apply exclusions before counting results.
     for (let offset = 0; offset < files.length; offset += 256) {
-      count += (await auditGlob(root, files.slice(offset, offset + 256).map(file => fg.escapePath(file)), {
-        ignore, followSymbolicLinks: false, label: `Source discovery in ${dir}`,
-      })).length;
-      if (count > 100000) throw new Error(`Source discovery in ${dir} exceeds 100,000 relevant files. Exclude generated source with .mason/config.json ignore patterns or narrow this audit's checks.`);
+      count += (
+        await auditGlob(
+          root,
+          files.slice(offset, offset + 256).map((file) => fg.escapePath(file)),
+          {
+            ignore,
+            followSymbolicLinks: false,
+            label: `Source discovery in ${dir}`,
+          },
+        )
+      ).length;
+      if (count > 100000)
+        throw new Error(
+          `Source discovery in ${dir} exceeds 100,000 relevant files. Exclude generated source with .mason/config.json ignore patterns or narrow this audit's checks.`,
+        );
     }
     return count;
   };
   const candidates: Array<{ dir: string; sourceFileCount: number }> = [];
   const topDirs = (await listSubdirs(["."])).get(".")!;
-  const nested = await listSubdirs(topDirs.filter(dir => isMentioned(combinedDocs, dir)));
+  const nested = await listSubdirs(topDirs.filter((dir) => isMentioned(combinedDocs, dir)));
   for (const topDir of topDirs) {
     const topMentioned = isMentioned(combinedDocs, topDir);
 

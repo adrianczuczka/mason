@@ -3,7 +3,8 @@ import path from "node:path";
 /** One canonical representation for stored paths and decision anchors. */
 export function normalizeRepoPath(value: string): string | null {
   const slash = value.replace(/\\/g, "/");
-  if (!slash || slash.includes("\0") || path.posix.isAbsolute(slash) || /^[A-Za-z]:/.test(slash)) return null;
+  if (!slash || slash.includes("\0") || path.posix.isAbsolute(slash) || /^[A-Za-z]:/.test(slash))
+    return null;
   if (slash.split("/").includes("..")) return null;
   const normalized = path.posix.normalize(slash).replace(/\/$/, "");
   return normalized === "." ? null : normalized;
@@ -25,12 +26,20 @@ export function anchorMatches(anchor: string, file: string): boolean {
 }
 
 export function matchingPaths(anchors: string[], files: Iterable<string>): string[] {
-  return [...new Set(files)].filter(file => anchors.some(anchor => anchorMatches(anchor, file)));
+  return [...new Set(files)].filter((file) =>
+    anchors.some((anchor) => anchorMatches(anchor, file)),
+  );
 }
 
 /** Match an inventory to every scope in one pass through its path components. */
-export function indexMatchingPaths(scopes: readonly (readonly string[])[], files: Iterable<string>): string[][] {
-  interface Node { children: Map<string, Node>; scopes: Set<number> }
+export function indexMatchingPaths(
+  scopes: readonly (readonly string[])[],
+  files: Iterable<string>,
+): string[][] {
+  interface Node {
+    children: Map<string, Node>;
+    scopes: Set<number>;
+  }
   const node = (): Node => ({ children: new Map(), scopes: new Set() });
   const root = node();
   const matches: string[][] = scopes.map(() => []);

@@ -9,7 +9,11 @@ import { analyzeImpact } from "../impact/impact.js";
 import type { CochangeEntry, ReferenceEntry } from "../impact/impact.js";
 import { scoreEntry, tokenSet } from "./lexical.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
-import { decisionKnowledge, effectiveDecision, DECISION_GUIDANCE } from "../decisions/provenance.js";
+import {
+  decisionKnowledge,
+  effectiveDecision,
+  DECISION_GUIDANCE,
+} from "../decisions/provenance.js";
 import { anchorMatches, sanitizeRepoPaths } from "../utils/paths.js";
 import { trustHint, type TrustState } from "./trust.js";
 import type { StoreDiagnostic } from "../utils/storage.js";
@@ -106,8 +110,12 @@ export interface UnmappedContextBundle extends Omit<ContextBundle, "exists" | "m
   freshness: { stale: null; recommendation: "no-map" | "repair-map"; staleMatches: string[] };
 }
 
-async function collectImpact(root: string, candidates: string[]): Promise<{
-  impact: ContextBundle["impact"]; relatedTests: string[];
+async function collectImpact(
+  root: string,
+  candidates: string[],
+): Promise<{
+  impact: ContextBundle["impact"];
+  relatedTests: string[];
 }> {
   const targets = new Set<string>();
   let sourceFiles: string[] | undefined;
@@ -126,11 +134,17 @@ async function collectImpact(root: string, candidates: string[]): Promise<{
   }
   if (!targets.size) return { impact: null, relatedTests: [] };
   const result = await analyzeImpact(root, [...targets]);
-  const referenceCandidatesOmitted = result.references.filter(r => r.evidence === "name-candidate").length;
+  const referenceCandidatesOmitted = result.references.filter(
+    (r) => r.evidence === "name-candidate",
+  ).length;
   return {
-    impact: { targets: result.targetFiles, cochange: result.cochange, references: result.references.filter(r => r.evidence !== "name-candidate").slice(0, 10),
-      ...(referenceCandidatesOmitted ? { referenceCandidatesOmitted } : {}) },
-    relatedTests: [...new Set(result.tests.map(t => t.file))],
+    impact: {
+      targets: result.targetFiles,
+      cochange: result.cochange,
+      references: result.references.filter((r) => r.evidence !== "name-candidate").slice(0, 10),
+      ...(referenceCandidatesOmitted ? { referenceCandidatesOmitted } : {}),
+    },
+    relatedTests: [...new Set(result.tests.map((t) => t.file))],
   };
 }
 
@@ -145,7 +159,7 @@ async function collectImpact(root: string, candidates: string[]): Promise<{
 export async function assembleContext(
   rootDir: string,
   task: string,
-  files?: string[]
+  files?: string[],
 ): Promise<ContextBundle | NoMatchBundle | UnmappedContextBundle> {
   const resolvedRoot = path.resolve(rootDir);
   const mapState = await inspectSnapshot(resolvedRoot);
@@ -158,22 +172,56 @@ export async function assembleContext(
 
   const anchorBoost = (entryFiles: string[]): number => {
     let boost = 0;
-    for (const f of entryFiles) if ([...anchorFiles].some(file => anchorMatches(f, file))) boost += 5;
+    for (const f of entryFiles)
+      if ([...anchorFiles].some((file) => anchorMatches(f, file))) boost += 5;
     return boost;
   };
 
   if (!snapshot) {
-    const decisions = matchDecisions(allDecisions, taskTokens, anchorBoost, new Set(), decisionDrift);
-    const { impact, relatedTests } = await collectImpact(resolvedRoot, [...anchorFiles, ...Object.values(decisions).flatMap(d => [...d.files, ...(d.pendingProposal?.files ?? [])])]);
+    const decisions = matchDecisions(
+      allDecisions,
+      taskTokens,
+      anchorBoost,
+      new Set(),
+      decisionDrift,
+    );
+    const { impact, relatedTests } = await collectImpact(resolvedRoot, [
+      ...anchorFiles,
+      ...Object.values(decisions).flatMap((d) => [...d.files, ...(d.pendingProposal?.files ?? [])]),
+    ]);
     const invalid = mapState.status === "invalid";
     return {
-      exists: false, map: { status: invalid ? "invalid" : "missing" }, task,
-      features: {}, flows: {}, decisions, impact, relatedTests,
+      exists: false,
+      map: { status: invalid ? "invalid" : "missing" },
+      task,
+      features: {},
+      flows: {},
+      decisions,
+      impact,
+      relatedTests,
       diagnostics: [...mapState.diagnostics, ...store.diagnostics],
-      freshness: { stale: null, recommendation: invalid ? "repair-map" : "no-map", staleMatches: [] },
-      hint: (invalid ? "The concept map is invalid; consult diagnostics and repair it before relying on map entries. " : "No concept map is present. Maps are optional; decisions and file impact work now. ") +
-        (Object.keys(decisions).length ? DECISION_GUIDANCE + " " + trustHint(Object.values(decisions).flatMap(d => [d.trust, ...(d.pendingProposal ? [d.pendingProposal.trust] : [])])) : "No saved decision matched. Inspect the source and use save_decision for a learned constraint or incident rationale. ") +
-        (store.diagnostics.length ? " Some decision records are invalid; consult diagnostics before assuming all constraints were retrieved." : ""),
+      freshness: {
+        stale: null,
+        recommendation: invalid ? "repair-map" : "no-map",
+        staleMatches: [],
+      },
+      hint:
+        (invalid
+          ? "The concept map is invalid; consult diagnostics and repair it before relying on map entries. "
+          : "No concept map is present. Maps are optional; decisions and file impact work now. ") +
+        (Object.keys(decisions).length
+          ? DECISION_GUIDANCE +
+            " " +
+            trustHint(
+              Object.values(decisions).flatMap((d) => [
+                d.trust,
+                ...(d.pendingProposal ? [d.pendingProposal.trust] : []),
+              ]),
+            )
+          : "No saved decision matched. Inspect the source and use save_decision for a learned constraint or incident rationale. ") +
+        (store.diagnostics.length
+          ? " Some decision records are invalid; consult diagnostics before assuming all constraints were retrieved."
+          : ""),
     };
   }
 
@@ -213,29 +261,49 @@ export async function assembleContext(
     taskTokens,
     anchorBoost,
     matchedEntryFiles,
-    decisionDrift
+    decisionDrift,
   );
 
   if (featureScores.length === 0 && flowScores.length === 0) {
     const bundle = noMatchBundle(snapshot, task, decisions);
-    Object.assign(bundle, await collectImpact(resolvedRoot, [...anchorFiles, ...Object.values(decisions).flatMap(d => [...d.files, ...(d.pendingProposal?.files ?? [])])]));
+    Object.assign(
+      bundle,
+      await collectImpact(resolvedRoot, [
+        ...anchorFiles,
+        ...Object.values(decisions).flatMap((d) => [
+          ...d.files,
+          ...(d.pendingProposal?.files ?? []),
+        ]),
+      ]),
+    );
     bundle.diagnostics = store.diagnostics;
     bundle.freshness = drift;
     bundle.trust = await readSnapshotTrustIndex(readTrust, snapshot, drift);
-    bundle.hint += " " + trustHint([
-      ...Object.values(bundle.trust.features),
-      ...Object.values(bundle.trust.flows),
-      ...Object.values(decisions).flatMap(d => [d.trust, ...(d.pendingProposal ? [d.pendingProposal.trust] : [])]),
-    ]);
+    bundle.hint +=
+      " " +
+      trustHint([
+        ...Object.values(bundle.trust.features),
+        ...Object.values(bundle.trust.flows),
+        ...Object.values(decisions).flatMap((d) => [
+          d.trust,
+          ...(d.pendingProposal ? [d.pendingProposal.trust] : []),
+        ]),
+      ]);
     if (Object.keys(decisions).length) bundle.hint += " " + DECISION_GUIDANCE;
-    if (store.diagnostics.length) bundle.hint += " Some decision records are invalid; consult diagnostics.";
+    if (store.diagnostics.length)
+      bundle.hint += " Some decision records are invalid; consult diagnostics.";
     return bundle;
   }
 
   const features: Record<string, MatchedFeature> = {};
   const staleMatches: string[] = [];
   for (const { name, feat, score } of featureScores) {
-    const trust = await readTrust("feature", name, feat, drift?.featureFreshness?.[name] ?? "unknown");
+    const trust = await readTrust(
+      "feature",
+      name,
+      feat,
+      drift?.featureFreshness?.[name] ?? "unknown",
+    );
     const stale = trust.freshness !== "current";
     if (stale) staleMatches.push(name);
     features[name] = {
@@ -266,15 +334,12 @@ export async function assembleContext(
   const { impact, relatedTests: impactTests } = await collectImpact(resolvedRoot, [
     ...anchorFiles,
     ...featureScores.flatMap((e) => e.feat.files),
-    ...flowScores.flatMap(e => e.flow.chain),
-    ...Object.values(decisions).flatMap(d => [...d.files, ...(d.pendingProposal?.files ?? [])]),
+    ...flowScores.flatMap((e) => e.flow.chain),
+    ...Object.values(decisions).flatMap((d) => [...d.files, ...(d.pendingProposal?.files ?? [])]),
   ]);
 
   const relatedTests = [
-    ...new Set([
-      ...featureScores.flatMap((e) => e.feat.tests ?? []),
-      ...impactTests,
-    ]),
+    ...new Set([...featureScores.flatMap((e) => e.feat.tests ?? []), ...impactTests]),
   ];
 
   const stale = drift?.stale ?? false;
@@ -293,7 +358,19 @@ export async function assembleContext(
       recommendation: drift?.recommendation ?? "up-to-date",
       staleMatches,
     },
-    hint: (Object.keys(decisions).length ? DECISION_GUIDANCE + " " : "") + trustHint([...Object.values(features).map(e => e.trust), ...Object.values(flows).map(e => e.trust), ...Object.values(decisions).flatMap(d => [d.trust, ...(d.pendingProposal ? [d.pendingProposal.trust] : [])])]) + (store.diagnostics.length ? " Some decision records are invalid; consult diagnostics before assuming all constraints were retrieved." : ""),
+    hint:
+      (Object.keys(decisions).length ? DECISION_GUIDANCE + " " : "") +
+      trustHint([
+        ...Object.values(features).map((e) => e.trust),
+        ...Object.values(flows).map((e) => e.trust),
+        ...Object.values(decisions).flatMap((d) => [
+          d.trust,
+          ...(d.pendingProposal ? [d.pendingProposal.trust] : []),
+        ]),
+      ]) +
+      (store.diagnostics.length
+        ? " Some decision records are invalid; consult diagnostics before assuming all constraints were retrieved."
+        : ""),
   };
 }
 
@@ -308,14 +385,21 @@ function matchDecisions(
   taskTokens: Set<string>,
   anchorBoost: (files: string[]) => number,
   matchedEntryFiles: Set<string>,
-  decisionDrift: DecisionDriftReport
+  decisionDrift: DecisionDriftReport,
 ): Record<string, MatchedDecision> {
   const scored = allDecisions
     .filter((d) => d.status === "active")
     .map((d) => {
       const scoreRevision = (revision: DecisionRecord) =>
-        scoreEntry(taskTokens, { name: revision.title, description: revision.body, files: revision.files }) + anchorBoost(revision.files) +
-        (revision.files.some(f => [...matchedEntryFiles].some(file => anchorMatches(f, file))) ? DECISION_FEATURE_OVERLAP_BOOST : 0);
+        scoreEntry(taskTokens, {
+          name: revision.title,
+          description: revision.body,
+          files: revision.files,
+        }) +
+        anchorBoost(revision.files) +
+        (revision.files.some((f) => [...matchedEntryFiles].some((file) => anchorMatches(f, file)))
+          ? DECISION_FEATURE_OVERLAP_BOOST
+          : 0);
       const score = Math.max(scoreRevision(effectiveDecision(d)), scoreRevision(d));
       return { d, score };
     })
@@ -326,7 +410,11 @@ function matchDecisions(
   const result: Record<string, MatchedDecision> = {};
   for (const { d, score } of scored) {
     result[d.id] = {
-      ...decisionKnowledge(d, decisionDrift.freshness?.[d.id] ?? "unknown", decisionDrift.pendingProposals?.[d.id]?.freshness ?? "unknown"),
+      ...decisionKnowledge(
+        d,
+        decisionDrift.freshness?.[d.id] ?? "unknown",
+        decisionDrift.pendingProposals?.[d.id]?.freshness ?? "unknown",
+      ),
       score,
       stale: decisionDrift.freshness?.[d.id] !== "current",
     };
@@ -337,7 +425,7 @@ function matchDecisions(
 function noMatchBundle(
   snapshot: Snapshot,
   task: string,
-  decisions: Record<string, MatchedDecision>
+  decisions: Record<string, MatchedDecision>,
 ): NoMatchBundle {
   const availableFeatures: Record<string, string> = {};
   for (const [name, feat] of Object.entries(snapshot.features)) {

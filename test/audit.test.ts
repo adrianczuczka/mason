@@ -25,9 +25,7 @@ async function write(relPath: string, content: string): Promise<void> {
 
 function issuesOf(report: AuditReport | null, type?: string) {
   expect(report).not.toBeNull();
-  return type
-    ? report!.issues.filter((i) => i.type === type)
-    : report!.issues;
+  return type ? report!.issues.filter((i) => i.type === type) : report!.issues;
 }
 
 describe("computeAudit: basics", () => {
@@ -124,10 +122,7 @@ describe("computeAudit: deleted-reference", () => {
 
   it("does not flag relative import examples in fenced code", async () => {
     await write("src/a.ts", "export const a = 1;\n");
-    await write(
-      "CLAUDE.md",
-      '# Doc\n\n```ts\nimport { a } from "./foo.js";\n```\n'
-    );
+    await write("CLAUDE.md", '# Doc\n\n```ts\nimport { a } from "./foo.js";\n```\n');
     await commitAll(tmpDir, "init");
 
     expect(issuesOf(await computeAudit(tmpDir, CHECKS))).toEqual([]);
@@ -154,9 +149,7 @@ describe("computeAudit: deleted-reference", () => {
     await commitAll(tmpDir, "chore: drop both");
 
     const issues = issuesOf(await computeAudit(tmpDir, CHECKS));
-    const byDoc = Object.fromEntries(
-      issues.map((i) => [i.anchor.doc, i.anchor.excerpt])
-    );
+    const byDoc = Object.fromEntries(issues.map((i) => [i.anchor.doc, i.anchor.excerpt]));
     expect(byDoc).toEqual({
       "CLAUDE.md": "src/gone-c.ts",
       "AGENTS.md": "src/gone-a.ts",
@@ -228,10 +221,7 @@ describe("computeAudit: stale-count", () => {
   const CHECKS = { checks: ["stale-count" as const] };
 
   it("flags an npm workspace count mismatch as certain", async () => {
-    await write(
-      "package.json",
-      JSON.stringify({ name: "root", workspaces: ["packages/*"] })
-    );
+    await write("package.json", JSON.stringify({ name: "root", workspaces: ["packages/*"] }));
     await write("packages/a/package.json", '{"name":"a"}');
     await write("packages/b/package.json", '{"name":"b"}');
     await write("CLAUDE.md", "This monorepo has 5 packages.\n");
@@ -247,10 +237,7 @@ describe("computeAudit: stale-count", () => {
   });
 
   it("stays quiet when the count is right", async () => {
-    await write(
-      "package.json",
-      JSON.stringify({ name: "root", workspaces: ["packages/*"] })
-    );
+    await write("package.json", JSON.stringify({ name: "root", workspaces: ["packages/*"] }));
     await write("packages/a/package.json", '{"name":"a"}');
     await write("packages/b/package.json", '{"name":"b"}');
     await write("CLAUDE.md", "This monorepo has 2 packages.\n");
@@ -260,10 +247,7 @@ describe("computeAudit: stale-count", () => {
   });
 
   it("counts multi-arg gradle includes correctly", async () => {
-    await write(
-      "settings.gradle.kts",
-      'include(":app", ":core")\ninclude(":data")\n'
-    );
+    await write("settings.gradle.kts", 'include(":app", ":core")\ninclude(":data")\n');
     await write("CLAUDE.md", "The build has 2 modules.\n");
     await commitAll(tmpDir, "init");
 
@@ -303,7 +287,7 @@ describe("computeAudit: dead-command", () => {
   it("flags a script missing from every manifest", async () => {
     await write(
       "package.json",
-      JSON.stringify({ name: "x", scripts: { build: "tsup", test: "vitest" } })
+      JSON.stringify({ name: "x", scripts: { build: "tsup", test: "vitest" } }),
     );
     await write("CLAUDE.md", "Run `npm run lint` before pushing.\n");
     await commitAll(tmpDir, "init");
@@ -321,7 +305,7 @@ describe("computeAudit: dead-command", () => {
     await write("package.json", JSON.stringify({ name: "root", scripts: {} }));
     await write(
       "packages/web/package.json",
-      JSON.stringify({ name: "web", scripts: { e2e: "playwright" } })
+      JSON.stringify({ name: "web", scripts: { e2e: "playwright" } }),
     );
     await write("CLAUDE.md", "In packages/web run `npm run e2e`.\n");
     await commitAll(tmpDir, "init");
@@ -336,7 +320,11 @@ describe("computeAudit: dead-command", () => {
     const report = await computeAudit(tmpDir, CHECKS);
     expect(report!.issues).toEqual([]);
     expect(report!.skippedChecks).toEqual([
-      { check: "dead-command", doc: "CLAUDE.md", reason: "No package.json for the command's scope (.)." },
+      {
+        check: "dead-command",
+        doc: "CLAUDE.md",
+        reason: "No package.json for the command's scope (.).",
+      },
     ]);
   });
 });
@@ -359,9 +347,7 @@ describe("computeAudit: deps-changed (advisory)", () => {
     if (advisory.evidence.kind === "doc-behind-manifests") {
       expect(advisory.evidence.totalCommits).toBe(1);
       expect(advisory.evidence.manifestCommits[0].subject).toBe("feat: add zod");
-      expect(advisory.evidence.manifestCommits[0].files).toEqual([
-        "package.json",
-      ]);
+      expect(advisory.evidence.manifestCommits[0].files).toEqual(["package.json"]);
     }
   });
 
@@ -428,7 +414,7 @@ describe("computeAudit: decision-anchor-drift (advisory)", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
         refreshedHash: firstHash,
         status: "active",
-      })
+      }),
     );
     await write("src/auth.ts", "export const auth = 2;\n");
     await commitAll(tmpDir, "feat: change auth");

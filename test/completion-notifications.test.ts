@@ -1,12 +1,27 @@
 import { expect, it } from "vitest";
 import type { RepairFinding } from "../src/audit/repair.js";
-import { completionFindings, completionSummary, createNotificationState, notificationStateSchema } from "../src/automation/notifications.js";
+import {
+  completionFindings,
+  completionSummary,
+  createNotificationState,
+  notificationStateSchema,
+} from "../src/automation/notifications.js";
 
 function finding(id: string): RepairFinding {
-  const source = { type: "deleted-reference" as const, confidence: "certain" as const,
-    message: `Missing src/${id}.ts`, anchor: { doc: "README.md", line: 1, excerpt: null },
-    evidence: { kind: "missing-path" as const, claimed: `src/${id}.ts`, renamedTo: null,
-      deletedInCommit: null, everTracked: true, parentDirExists: true } };
+  const source = {
+    type: "deleted-reference" as const,
+    confidence: "certain" as const,
+    message: `Missing src/${id}.ts`,
+    anchor: { doc: "README.md", line: 1, excerpt: null },
+    evidence: {
+      kind: "missing-path" as const,
+      claimed: `src/${id}.ts`,
+      renamedTo: null,
+      deletedInCommit: null,
+      everTracked: true,
+      parentDirExists: true,
+    },
+  };
   return { id, original: source, current: source, status: "unresolved", reason: "Still missing" };
 }
 
@@ -19,7 +34,7 @@ it("delivers overflow at later completions without losing it across a restart", 
   expect(Object.keys(state.delivered)).toHaveLength(4);
   state = notificationStateSchema.parse(JSON.parse(JSON.stringify(state)));
   const next = completionFindings(state, findings);
-  expect(next.map(f => f.id)).toEqual(["file4", "file5", "file6"]);
+  expect(next.map((f) => f.id)).toEqual(["file4", "file5", "file6"]);
   expect(completionSummary(next, "report.json")).toContain("src/file6.ts");
   expect(completionFindings(state, findings)).toEqual([]);
 });

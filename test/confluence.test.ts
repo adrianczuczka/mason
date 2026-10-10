@@ -5,7 +5,6 @@ import os from "node:os";
 import {
   renderFeaturePage,
   renderIndexPage,
-  renderChangelogPage,
   renderChangelogSection,
 } from "../src/confluence/renderer.js";
 import {
@@ -18,17 +17,10 @@ import {
   type SyncState,
 } from "../src/confluence/diff.js";
 import { exportToConfluence } from "../src/confluence/sync.js";
-import {
-  rewriteForProduct,
-  type RewriteResult,
-} from "../src/confluence/rewrite.js";
+import { rewriteForProduct, type RewriteResult } from "../src/confluence/rewrite.js";
 import { createConfluenceClient } from "../src/confluence/client.js";
 import { normalizeAtlassianBaseUrl } from "../src/confluence/url.js";
-import {
-  masonSetConfluence,
-  exportToConfluenceTool,
-  masonCompleteInit,
-} from "../src/mcp/tools.js";
+import { masonSetConfluence, exportToConfluenceTool, masonCompleteInit } from "../src/mcp/tools.js";
 import type { Snapshot } from "../src/snapshot/snapshot.js";
 import type { MasonConfig } from "../src/llm/config.js";
 import type {
@@ -146,9 +138,7 @@ describe("Confluence renderer", () => {
 
     const note = "Generated from code by Mason";
     // The note appears after both content sections (it's a footer).
-    expect(rendered.body.indexOf(note)).toBeGreaterThan(
-      rendered.body.indexOf("How it fits in")
-    );
+    expect(rendered.body.indexOf(note)).toBeGreaterThan(rendered.body.indexOf("How it fits in"));
     // No raw snapshot hash leaks into reader-facing text.
     expect(rendered.body).not.toContain("snapshot ");
   });
@@ -176,9 +166,7 @@ describe("Confluence renderer", () => {
     expect(rendered.body).not.toContain('href=""');
     expect(rendered.body).not.toContain("data-mason-index-link");
     // Replaced by a native page link resolved by title.
-    expect(rendered.body).toContain(
-      '<ri:page ri:content-title="Mason — System Map"/>'
-    );
+    expect(rendered.body).toContain('<ri:page ri:content-title="Mason — System Map"/>');
     expect(rendered.body).toContain("Back to Mason — System Map");
   });
 
@@ -200,7 +188,7 @@ describe("Confluence diff", () => {
         Checkout: { description: "x", files: ["a.ts"] },
         Auth: { description: "y", files: ["b.ts"] },
       },
-      {}
+      {},
     );
     const diff = computeDiff(null, snap, "2026-05-27T10:00:00Z");
     expect(diff.addedFeatures.sort()).toEqual(["Auth", "Checkout"]);
@@ -228,7 +216,7 @@ describe("Confluence diff", () => {
         Checkout: { description: "new desc", files: ["a.ts"] },
         Search: { description: "z", files: ["c.ts"] },
       },
-      {}
+      {},
     );
     const diff = computeDiff(prev, next, "2026-05-27T10:00:00Z");
     expect(diff.addedFeatures).toEqual(["Search"]);
@@ -248,10 +236,7 @@ describe("Confluence diff", () => {
       changelogSections: [],
       rewriteCache: { features: {}, flows: {} },
     };
-    const next = snapshot(
-      { Checkout: { description: "x", files: ["a.ts"] } },
-      {}
-    );
+    const next = snapshot({ Checkout: { description: "x", files: ["a.ts"] } }, {});
     const diff = computeDiff(prev, next, "2026-05-27T10:00:00Z");
     expect(isMeaningfulDiff(diff)).toBe(false);
   });
@@ -283,23 +268,15 @@ describe("Confluence sync (end-to-end with fake client)", () => {
 
   // Identity rewrite: keep original descriptions, skip LLM entirely.
   const identityRewrite = async (snap: Snapshot): Promise<RewriteResult> => ({
-    features: Object.fromEntries(
-      Object.entries(snap.features).map(([k, v]) => [k, v.description])
-    ),
-    flows: Object.fromEntries(
-      Object.entries(snap.flows).map(([k, v]) => [k, v.description])
-    ),
+    features: Object.fromEntries(Object.entries(snap.features).map(([k, v]) => [k, v.description])),
+    flows: Object.fromEntries(Object.entries(snap.flows).map(([k, v]) => [k, v.description])),
     cache: { features: {}, flows: {} },
   });
 
   async function writeSnapshot(snap: Snapshot): Promise<void> {
     const dir = path.join(tmp, ".mason");
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(
-      path.join(dir, "snapshot.json"),
-      JSON.stringify(snap, null, 2),
-      "utf-8"
-    );
+    await fs.writeFile(path.join(dir, "snapshot.json"), JSON.stringify(snap, null, 2), "utf-8");
   }
 
   it("creates index, feature, and changelog pages on first sync", async () => {
@@ -320,8 +297,8 @@ describe("Confluence sync (end-to-end with fake client)", () => {
             description: "User pays for their cart",
             chain: ["src/checkout.ts"],
           },
-        }
-      )
+        },
+      ),
     );
 
     const fake = buildFakeClient();
@@ -329,13 +306,10 @@ describe("Confluence sync (end-to-end with fake client)", () => {
       tmp,
       baseConfig,
       {},
-      { client: fake.client, rewrite: identityRewrite }
+      { client: fake.client, rewrite: identityRewrite },
     );
 
-    expect(summary.created.sort()).toEqual([
-      "Feature: Auth",
-      "Feature: Checkout",
-    ]);
+    expect(summary.created.sort()).toEqual(["Feature: Auth", "Feature: Checkout"]);
     expect(summary.hadChanges).toBe(true);
     expect(fake.pages.has("Mason — System Map")).toBe(true);
     expect(fake.pages.has("Mason — Changelog")).toBe(true);
@@ -361,8 +335,8 @@ describe("Confluence sync (end-to-end with fake client)", () => {
             type: "infrastructure",
           },
         },
-        {}
-      )
+        {},
+      ),
     );
 
     const fake = buildFakeClient();
@@ -370,7 +344,7 @@ describe("Confluence sync (end-to-end with fake client)", () => {
       tmp,
       baseConfig,
       {},
-      { client: fake.client, rewrite: identityRewrite }
+      { client: fake.client, rewrite: identityRewrite },
     );
 
     // Capability gets a page; infrastructure does not.
@@ -393,8 +367,8 @@ describe("Confluence sync (end-to-end with fake client)", () => {
     await writeSnapshot(
       snapshot(
         { Legacy: { description: "Old entry, no type field", files: ["src/legacy.ts"] } },
-        {}
-      )
+        {},
+      ),
     );
 
     const fake = buildFakeClient();
@@ -402,7 +376,7 @@ describe("Confluence sync (end-to-end with fake client)", () => {
       tmp,
       baseConfig,
       {},
-      { client: fake.client, rewrite: identityRewrite }
+      { client: fake.client, rewrite: identityRewrite },
     );
 
     expect(summary.created).toEqual(["Feature: Legacy"]);
@@ -418,18 +392,22 @@ describe("Confluence sync (end-to-end with fake client)", () => {
             files: ["src/checkout.ts"],
           },
         },
-        {}
-      )
+        {},
+      ),
     );
 
     const fake = buildFakeClient();
-    await exportToConfluence(tmp, baseConfig, {}, { client: fake.client, rewrite: identityRewrite });
+    await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite },
+    );
 
     // Simulate a manual edit on the page body. Mason owns the page, so this is
     // expected to be overwritten on the next sync (no preservation).
     const checkout = fake.pages.get("Feature: Checkout")!;
-    checkout.body =
-      `<p>PM note: must integrate with billing by EOQ.</p>\n` + checkout.body;
+    checkout.body = `<p>PM note: must integrate with billing by EOQ.</p>\n` + checkout.body;
 
     // Update snapshot (description change → triggers a full overwrite)
     await writeSnapshot(
@@ -440,11 +418,16 @@ describe("Confluence sync (end-to-end with fake client)", () => {
             files: ["src/checkout.ts"],
           },
         },
-        {}
-      )
+        {},
+      ),
     );
 
-    await exportToConfluence(tmp, baseConfig, {}, { client: fake.client, rewrite: identityRewrite });
+    await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite },
+    );
 
     const afterSync = fake.pages.get("Feature: Checkout")!;
     // The body is exactly Mason's fresh render — the manual edit is gone, and so
@@ -462,12 +445,17 @@ describe("Confluence sync (end-to-end with fake client)", () => {
         {
           Checkout: { description: "x", files: ["src/checkout.ts"] },
         },
-        {}
-      )
+        {},
+      ),
     );
 
     const fake = buildFakeClient();
-    await exportToConfluence(tmp, baseConfig, {}, { client: fake.client, rewrite: identityRewrite });
+    await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite },
+    );
     const firstChangelogBody = fake.pages.get("Mason — Changelog")!.body;
 
     // Add a new feature
@@ -477,15 +465,15 @@ describe("Confluence sync (end-to-end with fake client)", () => {
           Checkout: { description: "x", files: ["src/checkout.ts"] },
           Auth: { description: "new", files: ["src/auth.ts"] },
         },
-        {}
-      )
+        {},
+      ),
     );
 
     const summary = await exportToConfluence(
       tmp,
       baseConfig,
       {},
-      { client: fake.client, rewrite: identityRewrite }
+      { client: fake.client, rewrite: identityRewrite },
     );
     expect(summary.hadChanges).toBe(true);
 
@@ -500,17 +488,22 @@ describe("Confluence sync (end-to-end with fake client)", () => {
         {
           Checkout: { description: "x", files: ["src/checkout.ts"] },
         },
-        {}
-      )
+        {},
+      ),
     );
 
     const fake = buildFakeClient();
-    await exportToConfluence(tmp, baseConfig, {}, { client: fake.client, rewrite: identityRewrite });
+    await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite },
+    );
     const summary = await exportToConfluence(
       tmp,
       baseConfig,
       {},
-      { client: fake.client, rewrite: identityRewrite }
+      { client: fake.client, rewrite: identityRewrite },
     );
 
     expect(summary.created).toEqual([]);
@@ -526,19 +519,24 @@ describe("Confluence sync (end-to-end with fake client)", () => {
         },
         {
           "Place order": { description: "User pays", chain: ["src/checkout.ts"] },
-        }
-      )
+        },
+      ),
     );
 
     const fake = buildFakeClient();
-    await exportToConfluence(tmp, baseConfig, {}, { client: fake.client, rewrite: identityRewrite });
+    await exportToConfluence(
+      tmp,
+      baseConfig,
+      {},
+      { client: fake.client, rewrite: identityRewrite },
+    );
     const before = { create: fake.calls.create, update: fake.calls.update };
 
     const summary = await exportToConfluence(
       tmp,
       baseConfig,
       {},
-      { client: fake.client, rewrite: identityRewrite }
+      { client: fake.client, rewrite: identityRewrite },
     );
 
     // Every page is byte-identical → no create/update calls hit the API.
@@ -551,7 +549,7 @@ describe("Confluence sync (end-to-end with fake client)", () => {
 
   it("treats a legacy v1 sync state as fresh, then converges to no writes", async () => {
     await writeSnapshot(
-      snapshot({ Checkout: { description: "x", files: ["src/checkout.ts"] } }, {})
+      snapshot({ Checkout: { description: "x", files: ["src/checkout.ts"] } }, {}),
     );
     // Seed a pre-existing v1 sync state from an older Mason version.
     await fs.writeFile(
@@ -563,7 +561,7 @@ describe("Confluence sync (end-to-end with fake client)", () => {
         lastSnapshot: { features: {}, flows: {} },
         changelogSections: [],
       }),
-      "utf-8"
+      "utf-8",
     );
 
     const fake = buildFakeClient();
@@ -571,7 +569,7 @@ describe("Confluence sync (end-to-end with fake client)", () => {
       tmp,
       baseConfig,
       {},
-      { client: fake.client, rewrite: identityRewrite }
+      { client: fake.client, rewrite: identityRewrite },
     );
     // v1 is unreadable → treated as null → first run is "fresh".
     expect(first.hadChanges).toBe(true);
@@ -581,7 +579,7 @@ describe("Confluence sync (end-to-end with fake client)", () => {
       tmp,
       baseConfig,
       {},
-      { client: fake.client, rewrite: identityRewrite }
+      { client: fake.client, rewrite: identityRewrite },
     );
     expect(second.created).toEqual([]);
     expect(second.updated).toEqual([]);
@@ -594,10 +592,7 @@ describe("Confluence rewrite (incremental cache)", () => {
   const cfg: MasonConfig = { provider: "claude" };
 
   it("reuses cached prose without calling the LLM when the source is unchanged", async () => {
-    const snap = snapshot(
-      { Checkout: { description: "eng desc", files: ["a.ts"] } },
-      {}
-    );
+    const snap = snapshot({ Checkout: { description: "eng desc", files: ["a.ts"] } }, {});
     const previousCache = {
       features: {
         Checkout: {
@@ -615,12 +610,8 @@ describe("Confluence rewrite (incremental cache)", () => {
     });
 
     expect(llm).toHaveBeenCalledTimes(0);
-    expect(result.features.Checkout).toBe(
-      "Shoppers can pay for what's in their cart."
-    );
-    expect(result.cache.features.Checkout.sourceHash).toBe(
-      hashDescription("eng desc")
-    );
+    expect(result.features.Checkout).toBe("Shoppers can pay for what's in their cart.");
+    expect(result.cache.features.Checkout.sourceHash).toBe(hashDescription("eng desc"));
   });
 
   it("only sends new or changed entries to the LLM", async () => {
@@ -630,7 +621,7 @@ describe("Confluence rewrite (incremental cache)", () => {
         Checkout: { description: "checkout NEW", files: ["c.ts"] },
         Search: { description: "search eng", files: ["s.ts"] },
       },
-      {}
+      {},
     );
     const previousCache = {
       features: {
@@ -666,10 +657,7 @@ describe("Confluence rewrite (incremental cache)", () => {
   });
 
   it("falls back to engineering prose (marked fallback) when no LLM is available, and re-attempts later", async () => {
-    const snap = snapshot(
-      { Checkout: { description: "eng only", files: ["c.ts"] } },
-      {}
-    );
+    const snap = snapshot({ Checkout: { description: "eng only", files: ["c.ts"] } }, {});
     const noLlm = vi.fn(async () => ""); // simulates no API/CLI configured
 
     const result = await rewriteForProduct(snap, cfg, { llm: noLlm as never });
@@ -678,7 +666,7 @@ describe("Confluence rewrite (incremental cache)", () => {
 
     // A later run with a working LLM must re-attempt the fallback entry.
     const workingLlm = vi.fn(async () =>
-      JSON.stringify({ features: { Checkout: "Buy stuff easily." }, flows: {} })
+      JSON.stringify({ features: { Checkout: "Buy stuff easily." }, flows: {} }),
     );
     const result2 = await rewriteForProduct(snap, cfg, {
       previousCache: result.cache,
@@ -703,7 +691,7 @@ describe("Confluence REST client (fetch wiring)", () => {
           version: { number: 1 },
           body: { storage: { value: "<p>x</p>" } },
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
+        { status: 200, headers: { "Content-Type": "application/json" } },
       );
     }) as unknown as typeof fetch;
 
@@ -714,7 +702,7 @@ describe("Confluence REST client (fetch wiring)", () => {
         apiToken: "tok",
         spaceKey: "DOCS",
       },
-      fetchFn
+      fetchFn,
     );
 
     await client.createPage({
@@ -727,7 +715,7 @@ describe("Confluence REST client (fetch wiring)", () => {
     expect(calls[0].url).toBe("https://example.atlassian.net/wiki/api/v2/pages");
     const headers = calls[0].init.headers as Record<string, string>;
     expect(headers.Authorization).toBe(
-      "Basic " + Buffer.from("user@example.com:tok").toString("base64")
+      "Basic " + Buffer.from("user@example.com:tok").toString("base64"),
     );
     expect(headers["Content-Type"]).toBe("application/json");
     const body = JSON.parse(String(calls[0].init.body));
@@ -747,7 +735,7 @@ describe("Confluence REST client (fetch wiring)", () => {
           version: { number: 3 },
           body: { storage: { value: "<p>new</p>" } },
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
+        { status: 200, headers: { "Content-Type": "application/json" } },
       );
     }) as unknown as typeof fetch;
 
@@ -758,7 +746,7 @@ describe("Confluence REST client (fetch wiring)", () => {
         apiToken: "tok",
         spaceKey: "DOCS",
       },
-      fetchFn
+      fetchFn,
     );
 
     await client.updatePage({
@@ -770,9 +758,7 @@ describe("Confluence REST client (fetch wiring)", () => {
 
     const body = JSON.parse(String(calls[0].init.body));
     expect(body.version.number).toBe(3);
-    expect(calls[0].url).toBe(
-      "https://example.atlassian.net/wiki/api/v2/pages/page-1"
-    );
+    expect(calls[0].url).toBe("https://example.atlassian.net/wiki/api/v2/pages/page-1");
     expect(calls[0].init.method).toBe("PUT");
   });
 
@@ -787,9 +773,7 @@ describe("Confluence REST client (fetch wiring)", () => {
           changelog: "c",
           features: { Checkout: "id-1" },
         },
-        lastSnapshot: snapshotMinimal(
-          snapshot({ Checkout: { description: "x", files: [] } }, {})
-        ),
+        lastSnapshot: snapshotMinimal(snapshot({ Checkout: { description: "x", files: [] } }, {})),
         changelogSections: ["<h3>first</h3>"],
         rewriteCache: {
           features: { Checkout: { sourceHash: "h1", product: "x" } },
@@ -809,14 +793,12 @@ describe("Confluence URL helper + client", () => {
   describe("normalizeAtlassianBaseUrl", () => {
     it("accepts a full https URL unchanged (trims trailing slash)", () => {
       expect(normalizeAtlassianBaseUrl("https://acme.atlassian.net/")).toBe(
-        "https://acme.atlassian.net"
+        "https://acme.atlassian.net",
       );
     });
 
     it("upgrades a bare hostname to https", () => {
-      expect(normalizeAtlassianBaseUrl("acme.atlassian.net")).toBe(
-        "https://acme.atlassian.net"
-      );
+      expect(normalizeAtlassianBaseUrl("acme.atlassian.net")).toBe("https://acme.atlassian.net");
     });
 
     it("expands a bare subdomain into atlassian.net", () => {
@@ -829,7 +811,7 @@ describe("Confluence URL helper + client", () => {
 
     it("preserves http for self-hosted Confluence", () => {
       expect(normalizeAtlassianBaseUrl("http://wiki.internal:8090")).toBe(
-        "http://wiki.internal:8090"
+        "http://wiki.internal:8090",
       );
     });
 
@@ -867,7 +849,7 @@ describe("Confluence URL helper + client", () => {
           apiToken: "tok",
           spaceKey: "",
         },
-        fetchFn
+        fetchFn,
       );
 
       const spaces = await client.listSpaces();
@@ -892,7 +874,7 @@ describe("Confluence URL helper + client", () => {
               { id: "p2", title: "Product" },
             ],
           }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
+          { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }) as unknown as typeof fetch;
 
@@ -903,7 +885,7 @@ describe("Confluence URL helper + client", () => {
           apiToken: "tok",
           spaceKey: "",
         },
-        fetchFn
+        fetchFn,
       );
 
       const pages = await client.listRootPages("space-1");
@@ -912,7 +894,7 @@ describe("Confluence URL helper + client", () => {
         { id: "p2", title: "Product" },
       ]);
       expect(fetched[0]).toBe(
-        "https://example.atlassian.net/wiki/api/v2/spaces/space-1/pages?depth=root&limit=50"
+        "https://example.atlassian.net/wiki/api/v2/spaces/space-1/pages?depth=root&limit=50",
       );
     });
   });
@@ -944,16 +926,17 @@ describe("Confluence MCP tools", () => {
 
   describe("masonSetConfluence", () => {
     it("normalizes a bare subdomain and lists spaces on first call", async () => {
-      stubFetch(() =>
-        new Response(
-          JSON.stringify({
-            results: [
-              { id: "s1", key: "DOCS", name: "Documentation" },
-              { id: "s2", key: "ENG", name: "Engineering" },
-            ],
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
+      stubFetch(
+        () =>
+          new Response(
+            JSON.stringify({
+              results: [
+                { id: "s1", key: "DOCS", name: "Documentation" },
+                { id: "s2", key: "ENG", name: "Engineering" },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
       );
 
       const raw = await masonSetConfluence({
@@ -972,13 +955,14 @@ describe("Confluence MCP tools", () => {
     });
 
     it("persists credentials on second call when spaceKey matches", async () => {
-      stubFetch(() =>
-        new Response(
-          JSON.stringify({
-            results: [{ id: "s1", key: "DOCS", name: "Documentation" }],
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
+      stubFetch(
+        () =>
+          new Response(
+            JSON.stringify({
+              results: [{ id: "s1", key: "DOCS", name: "Documentation" }],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
       );
 
       const raw = await masonSetConfluence({
@@ -1005,13 +989,14 @@ describe("Confluence MCP tools", () => {
     });
 
     it("rejects an unknown spaceKey with a helpful error", async () => {
-      stubFetch(() =>
-        new Response(
-          JSON.stringify({
-            results: [{ id: "s1", key: "DOCS", name: "Documentation" }],
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
+      stubFetch(
+        () =>
+          new Response(
+            JSON.stringify({
+              results: [{ id: "s1", key: "DOCS", name: "Documentation" }],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
       );
 
       const raw = await masonSetConfluence({
@@ -1033,7 +1018,7 @@ describe("Confluence MCP tools", () => {
           new Response("Unauthorized", {
             status: 401,
             statusText: "Unauthorized",
-          })
+          }),
       );
 
       const raw = await masonSetConfluence({
@@ -1049,18 +1034,18 @@ describe("Confluence MCP tools", () => {
 
     it("rejects obviously bad input early", async () => {
       const bad1 = JSON.parse(
-        await masonSetConfluence({ baseUrl: "", email: "u@e.com", apiToken: "tok" })
+        await masonSetConfluence({ baseUrl: "", email: "u@e.com", apiToken: "tok" }),
       );
       expect(bad1.status).toBe("error");
 
       const bad2 = JSON.parse(
-        await masonSetConfluence({ baseUrl: "acme", email: "no-at-sign", apiToken: "tok" })
+        await masonSetConfluence({ baseUrl: "acme", email: "no-at-sign", apiToken: "tok" }),
       );
       expect(bad2.status).toBe("error");
       expect(bad2.error).toMatch(/Email/);
 
       const bad3 = JSON.parse(
-        await masonSetConfluence({ baseUrl: "acme", email: "u@e.com", apiToken: "   " })
+        await masonSetConfluence({ baseUrl: "acme", email: "u@e.com", apiToken: "   " }),
       );
       expect(bad3.status).toBe("error");
       expect(bad3.error).toMatch(/API token/);

@@ -7,17 +7,30 @@ async function git(root: string, args: string[]) {
 
 /** A deliberately narrow recognizer, not a Gradle evaluator. Unknown syntax stays advisory. */
 function withoutAndroidReleaseValues(text: string): string | null {
-  if (/\/\*|"""|'''/.test(text) || !/id\s*\(?\s*["']com\.android\.(application|library)["']/.test(text)) return null;
+  if (
+    /\/\*|"""|'''/.test(text) ||
+    !/id\s*\(?\s*["']com\.android\.(application|library)["']/.test(text)
+  )
+    return null;
   const scopes: string[] = [];
   const normalized: string[] = [];
   let assignments = 0;
   for (const line of text.split("\n")) {
     // Remove ordinary quoted strings and line comments solely for brace tracking.
-    const code = line.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\/.*$/g, token => token.startsWith("//") ? "" : '""');
-    const assignment = line.match(/^(\s*)(versionName|versionCode)(\s*(?:=\s*|\s+))("[A-Za-z0-9._+-]+"|'[A-Za-z0-9._+-]+'|\d+)(\s*)$/);
-    if (assignment && scopes.join("/") === "android/defaultConfig" &&
-      (assignment[2] === "versionCode" ? /^\d+$/.test(assignment[4]) : /^["']/.test(assignment[4]))) {
-      normalized.push(assignment[1] + assignment[2] + assignment[3] + "<release-value>" + assignment[5]);
+    const code = line.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\/.*$/g, (token) =>
+      token.startsWith("//") ? "" : '""',
+    );
+    const assignment = line.match(
+      /^(\s*)(versionName|versionCode)(\s*(?:=\s*|\s+))("[A-Za-z0-9._+-]+"|'[A-Za-z0-9._+-]+'|\d+)(\s*)$/,
+    );
+    if (
+      assignment &&
+      scopes.join("/") === "android/defaultConfig" &&
+      (assignment[2] === "versionCode" ? /^\d+$/.test(assignment[4]) : /^["']/.test(assignment[4]))
+    ) {
+      normalized.push(
+        assignment[1] + assignment[2] + assignment[3] + "<release-value>" + assignment[5],
+      );
       assignments++;
     } else {
       // References can feed dependency coordinates or other executable configuration.
@@ -35,20 +48,43 @@ function withoutAndroidReleaseValues(text: string): string | null {
 }
 
 /** Only omit single-parent commits whose every touched manifest is proven release metadata. */
-export async function releaseMetadataOnly(root: string, commit: RangeCommits["commits"][number]): Promise<boolean> {
-  if (!commit.files.length || !commit.files.every(file => /(^|\/)build\.gradle(?:\.kts)?$/.test(file))) return false;
+export async function releaseMetadataOnly(
+  root: string,
+  commit: RangeCommits["commits"][number],
+): Promise<boolean> {
+  if (
+    !commit.files.length ||
+    !commit.files.every((file) => /(^|\/)build\.gradle(?:\.kts)?$/.test(file))
+  )
+    return false;
   try {
-    const parents = (await git(root, ["rev-list", "--parents", "-n", "1", commit.hash])).trim().split(/\s+/);
+    const parents = (await git(root, ["rev-list", "--parents", "-n", "1", commit.hash]))
+      .trim()
+      .split(/\s+/);
     if (parents.length !== 2) return false;
     for (const file of commit.files) {
-      const raw = await git(root, ["diff", "--raw", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", parents[1], commit.hash, "--", file]);
+      const raw = await git(root, [
+        "diff",
+        "--raw",
+        "-z",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        parents[1],
+        commit.hash,
+        "--",
+        file,
+      ]);
       if (!/^:(100644|100755) \1 [a-f0-9]+ [a-f0-9]+ M\0/.test(raw)) return false;
       const [before, after] = await Promise.all([
-        git(root, ["show", parents[1] + ":" + file]), git(root, ["show", commit.hash + ":" + file]),
+        git(root, ["show", parents[1] + ":" + file]),
+        git(root, ["show", commit.hash + ":" + file]),
       ]);
       const previous = withoutAndroidReleaseValues(before);
       if (previous === null || previous !== withoutAndroidReleaseValues(after)) return false;
     }
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }

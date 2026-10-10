@@ -1,3 +1,4 @@
+import { hasErrorCode } from "../utils/validation.js";
 import { captureAnchorScopes } from "../decisions/anchors.js";
 import { loadDecisionStore, readDecisionInputs } from "../decisions/decisions.js";
 import { decisionAnchors, latestDecisionInspection } from "../decisions/provenance.js";
@@ -25,18 +26,31 @@ import { advisoryReviewInventory } from "../audit/advisory-review.js";
 
 declare const PKG_VERSION: string;
 const engineVersion = typeof PKG_VERSION === "string" ? PKG_VERSION : "development";
-export const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export const hash = (value: unknown): string =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export async function git(root: string, ...args: string[]): Promise<string> {
-  return profilePhase("automation.git", async () => (await execGit(args, { cwd: root, maxBuffer: 16 * 1024 * 1024, timeout: 10000 })).stdout);
+  return profilePhase(
+    "automation.git",
+    async () =>
+      (await execGit(args, { cwd: root, maxBuffer: 16 * 1024 * 1024, timeout: 10000 })).stdout,
+  );
 }
 
 export async function workspace(dir: string) {
   const root = await fs.realpath((await git(dir, "rev-parse", "--show-toplevel")).trim());
   const [gitDir, branch] = await Promise.all([
-    git(root, "rev-parse", "--absolute-git-dir").then(value => fs.realpath(value.trim())),
-    git(root, "symbolic-ref", "--quiet", "HEAD").then(value => value.trim(), () => "detached"),
+    git(root, "rev-parse", "--absolute-git-dir").then((value) => fs.realpath(value.trim())),
+    git(root, "symbolic-ref", "--quiet", "HEAD").then(
+      (value) => value.trim(),
+      () => "detached",
+    ),
   ]);
-  return { root, gitDir, branch, directory: ".mason/reports/automation/" + hash([root, gitDir, branch]).slice(0, 24) };
+  return {
+    root,
+    gitDir,
+    branch,
+    directory: ".mason/reports/automation/" + hash([root, gitDir, branch]).slice(0, 24),
+  };
 }
 
 const content = readAuditInput;
@@ -61,14 +75,27 @@ async function collectInputs(root: string): Promise<Inputs> {
   }
   const [headText, docStatus, shallowPath, replacements] = await Promise.all([
     git(root, "rev-parse", "HEAD"),
-    docPaths.length ? git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...docPaths.map(p => `:(literal)${p}`)) : "",
+    docPaths.length
+      ? git(
+          root,
+          "status",
+          "--porcelain=v1",
+          "-z",
+          "--untracked-files=all",
+          "--",
+          ...docPaths.map((p) => `:(literal)${p}`),
+        )
+      : "",
     git(root, "rev-parse", "--git-path", "shallow"),
     git(root, "for-each-ref", "--format=%(refname) %(objectname)", "refs/replace"),
   ]);
   const head = headText.trim();
   let shallow: string | null = null;
-  try { shallow = await fs.readFile(path.resolve(root, shallowPath.trim()), "utf8"); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  try {
+    shallow = await fs.readFile(path.resolve(root, shallowPath.trim()), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   const docs: Record<string, string | null> = {};
   const docContents: Array<[string, string | null]> = [];
   const parsedDocs = [];
@@ -89,38 +116,74 @@ async function collectInputs(root: string): Promise<Inputs> {
       if (scope?.candidates.some(gitMetadataPath)) continue;
       for (const candidate of scope?.candidates ?? []) {
         if (optionalMasonPath(candidate)) continue;
-        const [filePresent, parentPresent] = await Promise.all([exists(candidate), exists(path.posix.dirname(candidate))]);
+        const [filePresent, parentPresent] = await Promise.all([
+          exists(candidate),
+          exists(path.posix.dirname(candidate)),
+        ]);
         claims.push([candidate, filePresent, parentPresent]);
       }
     }
   }
-  const combinedDocs = moduleDocumentation(parsedDocs.filter(doc => allowed.get("new-module")!.has(doc.path)));
-  const countClaims = parsedDocs.filter(doc => allowed.get("stale-count")!.has(doc.path)).flatMap(doc => doc.claims.counts.map(claim => ({ doc: doc.path, claim })));
+  const combinedDocs = moduleDocumentation(
+    parsedDocs.filter((doc) => allowed.get("new-module")!.has(doc.path)),
+  );
+  const countClaims = parsedDocs
+    .filter((doc) => allowed.get("stale-count")!.has(doc.path))
+    .flatMap((doc) => doc.claims.counts.map((claim) => ({ doc: doc.path, claim })));
   const decisionDirectory = await storePath(root, ".mason/decisions");
-  const decisionPresence = await fs.lstat(decisionDirectory).then(stat => stat.isDirectory() ? "directory" : "file", error => {
-    if (error.code === "ENOENT") return "absent";
-    throw error;
-  });
+  const decisionPresence = await fs.lstat(decisionDirectory).then(
+    (stat) => (stat.isDirectory() ? "directory" : "file"),
+    (error: unknown) => {
+      if (hasErrorCode(error, "ENOENT")) return "absent";
+      throw error;
+    },
+  );
   const [modules, counts, commands, decisionInputs] = await Promise.all([
     combinedDocs ? moduleCandidates(root, combinedDocs) : [],
     Promise.all(countClaims.map(({ doc, claim }) => resolveDocCountSource(root, doc, claim))),
-    commandInputs(root, parsedDocs.filter(doc => allowed.get("dead-command")!.has(doc.path))),
+    commandInputs(
+      root,
+      parsedDocs.filter((doc) => allowed.get("dead-command")!.has(doc.path)),
+    ),
     readDecisionInputs(root),
   ]);
-  if (decisionInputs.diagnostics.length) throw new Error("Cannot read decision inputs: " + decisionInputs.diagnostics.map(d => `${d.path}: ${d.message}`).join("; "));
+  if (decisionInputs.diagnostics.length)
+    throw new Error(
+      "Cannot read decision inputs: " +
+        decisionInputs.diagnostics.map((d) => `${d.path}: ${d.message}`).join("; "),
+    );
   const decisions = decisionInputs.inputs;
   // Decision freshness observes tracked and local anchor changes; other checks
   // do not need a repository-wide status or index scan.
-  const [status, index] = decisions.length ? await Promise.all([
-    git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".", ":(exclude).mason/reports"),
-    git(root, "ls-files", "--stage", "-z", "--", ".", ":(exclude).mason/reports"),
-  ]) : ["", ""];
+  const [status, index] = decisions.length
+    ? await Promise.all([
+        git(
+          root,
+          "status",
+          "--porcelain=v1",
+          "-z",
+          "--untracked-files=all",
+          "--",
+          ".",
+          ":(exclude).mason/reports",
+        ),
+        git(root, "ls-files", "--stage", "-z", "--", ".", ":(exclude).mason/reports"),
+      ])
+    : ["", ""];
   const records = decisions.length ? (await loadDecisionStore(root)).records : [];
-  const scopes = new Map(records.filter(record => record.status === "active" && record.version === 2
-    && (record.capture || latestDecisionInspection(record))).map(record => {
-      const anchors = decisionAnchors(record).sort();
-      return [JSON.stringify(anchors), anchors] as const;
-    }));
+  const scopes = new Map(
+    records
+      .filter(
+        (record) =>
+          record.status === "active" &&
+          record.version === 2 &&
+          (record.capture || latestDecisionInspection(record)),
+      )
+      .map((record) => {
+        const anchors = decisionAnchors(record).sort();
+        return [JSON.stringify(anchors), anchors] as const;
+      }),
+  );
   // Dirty path/status alone cannot detect another edit to the same file.
   // Preserve each scope's bound: a large union must not hide smaller complete captures.
   const captures = await captureAnchorScopes(root, [...scopes.values()]);
@@ -132,37 +195,58 @@ async function collectInputs(root: string): Promise<Inputs> {
     "stale-count": hash([common, counts]),
     "dead-command": hash([common, commands]),
     "deps-changed": hash([common, docStatus]),
-    "decision-anchor-drift": hash([common, decisionPresence, decisions, status, index, anchorContent]),
+    "decision-anchor-drift": hash([
+      common,
+      decisionPresence,
+      decisions,
+      status,
+      index,
+      anchorContent,
+    ]),
   };
   return { fingerprint: hash([keys, await advisoryReviewInventory(root)]), head, docs, keys };
 }
 
-const cacheSchema = z.object({ version: z.literal(1), entries: z.record(z.object({ key: z.string(), result: checkResultSchema })), digest: z.string() });
+const cacheSchema = z.object({
+  version: z.literal(1),
+  entries: z.record(z.object({ key: z.string(), result: checkResultSchema })),
+  digest: z.string(),
+});
 export function checkCache(raw: unknown, inputs: Inputs) {
   let entries: Record<string, { key: string; result: CheckResult }> = {};
   let diagnostic: string | null = null;
   if (raw !== null) {
     const parsed = cacheSchema.safeParse(raw);
-    if (parsed.success && parsed.data.digest === hash(parsed.data.entries)) entries = parsed.data.entries as Record<string, { key: string; result: CheckResult }>;
+    if (parsed.success && parsed.data.digest === hash(parsed.data.entries))
+      entries = parsed.data.entries as Record<string, { key: string; result: CheckResult }>;
     else diagnostic = "Discarded an invalid automation cache; checks are being recomputed.";
   }
-  const ran = new Set<CheckName>(), reused = new Set<CheckName>();
-  const options: AuditOptions = { runCheck: async (name, ctx) => {
-    if (entries[name]?.key === inputs.keys[name]) {
-      reused.add(name);
-      return structuredClone(entries[name].result);
-    }
-    const result = await profilePhase("check." + name, () => CHECKS[name](ctx));
-    ran.add(name);
-    // An unavailable check must be retried even if the file inputs match.
-    if (!result.skipped.length) entries[name] = { key: inputs.keys[name], result };
-    else delete entries[name];
-    return result;
-  } };
-  return { options, ran, reused, diagnostic,
-    has: (name: CheckName) => entries[name]?.key === inputs.keys[name] && !entries[name].result.skipped.length,
+  const ran = new Set<CheckName>(),
+    reused = new Set<CheckName>();
+  const options: AuditOptions = {
+    runCheck: async (name, ctx) => {
+      if (entries[name]?.key === inputs.keys[name]) {
+        reused.add(name);
+        return structuredClone(entries[name].result);
+      }
+      const result = await profilePhase("check." + name, () => CHECKS[name](ctx));
+      ran.add(name);
+      // An unavailable check must be retried even if the file inputs match.
+      if (!result.skipped.length) entries[name] = { key: inputs.keys[name], result };
+      else delete entries[name];
+      return result;
+    },
+  };
+  return {
+    options,
+    ran,
+    reused,
+    diagnostic,
+    has: (name: CheckName) =>
+      entries[name]?.key === inputs.keys[name] && !entries[name].result.skipped.length,
     serialize: () => {
-    const canonical = cacheSchema.shape.entries.parse(entries);
-    return { version: 1, entries: canonical, digest: hash(canonical) };
-  } };
+      const canonical = cacheSchema.shape.entries.parse(entries);
+      return { version: 1, entries: canonical, digest: hash(canonical) };
+    },
+  };
 }

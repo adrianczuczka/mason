@@ -44,7 +44,7 @@ const FRESH_REPORT: DriftReport = {
 describe("formatDriftSummary", () => {
   it("prints a one-liner when up to date", () => {
     expect(formatDriftSummary(FRESH_REPORT)).toBe(
-      "Concept map is up to date against committed source (HEAD abc1234)."
+      "Concept map is up to date against committed source (HEAD abc1234).",
     );
   });
 
@@ -100,7 +100,7 @@ describe("runDriftCli", () => {
         gitHash,
         features: { core: { description: "core", files: ["src/a.ts"] } },
         flows: {},
-      })
+      }),
     );
   }
 
@@ -179,10 +179,7 @@ describe("runDriftCli", () => {
 
   it("rejects combining --json with --refresh-prompt", async () => {
     const { io, err } = captureIo();
-    const code = await runDriftCli(
-      ["--dir", tmpDir, "--json", "--refresh-prompt"],
-      io
-    );
+    const code = await runDriftCli(["--dir", tmpDir, "--json", "--refresh-prompt"], io);
     expect(code).toBe(2);
     expect(err.join("\n")).toMatch(/mutually exclusive/);
   });
@@ -208,7 +205,7 @@ describe("runDriftCli", () => {
           gitHash: "abc",
           features: {},
           flows: {},
-        })
+        }),
       );
 
       const { io, err } = captureIo();

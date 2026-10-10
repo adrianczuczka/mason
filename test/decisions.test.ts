@@ -87,7 +87,7 @@ describe("decisions", () => {
       await fs.writeFile(path.join(dir, "broken.json"), "{not json");
       await fs.writeFile(
         path.join(dir, "future.json"),
-        JSON.stringify({ version: 99, id: "future", title: "t", body: "b" })
+        JSON.stringify({ version: 99, id: "future", title: "t", body: "b" }),
       );
 
       const loaded = await loadDecisions(tmpDir);
@@ -97,9 +97,9 @@ describe("decisions", () => {
 
   describe("decisionIdFor", () => {
     it("slugs the title", () => {
-      expect(
-        decisionIdFor("Auth token refresh must NOT auto-retry!", "body", new Set())
-      ).toBe("auth-token-refresh-must-not-auto-retry");
+      expect(decisionIdFor("Auth token refresh must NOT auto-retry!", "body", new Set())).toBe(
+        "auth-token-refresh-must-not-auto-retry",
+      );
     });
 
     it("appends a content suffix on collision", () => {
@@ -111,17 +111,23 @@ describe("decisions", () => {
       const title = "Binding requirement is cacheable only; the device limit is account scoped";
       const expected = "binding-requirement-is-cacheable-only-the-device-limit-is";
       expect(decisionIdFor(title, "body", new Set())).toBe(expected);
-      expect(decisionIdFor(title, "other body", new Set([expected]))).toMatch(new RegExp(`^${expected}-[0-9a-f]{6}$`));
+      expect(decisionIdFor(title, "other body", new Set([expected]))).toMatch(
+        new RegExp(`^${expected}-[0-9a-f]{6}$`),
+      );
     });
 
-    it.each([59, 60])("retains a complete %i-character word at the cutoff", length => {
-      expect(decisionIdFor(`${"a".repeat(length)} suffix`, "body", new Set())).toBe("a".repeat(length));
+    it.each([59, 60])("retains a complete %i-character word at the cutoff", (length) => {
+      expect(decisionIdFor(`${"a".repeat(length)} suffix`, "body", new Set())).toBe(
+        "a".repeat(length),
+      );
     });
 
     it("bounds a single long word and handles titles with no slug characters", () => {
       expect(decisionIdFor("a".repeat(80), "body", new Set())).toBe("a".repeat(60));
       expect(decisionIdFor("約束", "body", new Set())).toBe("decision");
-      expect(decisionIdFor("約束", "body", new Set(["decision"]))).toMatch(/^decision-[0-9a-f]{6}$/);
+      expect(decisionIdFor("約束", "body", new Set(["decision"]))).toMatch(
+        /^decision-[0-9a-f]{6}$/,
+      );
     });
   });
 
@@ -197,7 +203,7 @@ describe("decisions", () => {
       const [before] = await loadDecisions(tmpDir);
 
       await fs.writeFile(path.join(tmpDir, "src", "api.ts"), "export const api = 2;\n");
-      const newHead = await commitAll(tmpDir, "change api");
+      await commitAll(tmpDir, "change api");
 
       const result = await upsertDecision(tmpDir, {
         id: before.id,
@@ -220,7 +226,7 @@ describe("decisions", () => {
       });
       const [before] = await loadDecisions(tmpDir);
       await fs.writeFile(path.join(tmpDir, "src", "api.ts"), "export const api = 3;\n");
-      const newHead = await commitAll(tmpDir, "change api again");
+      await commitAll(tmpDir, "change api again");
 
       const result = await upsertDecision(tmpDir, {
         id: before.id,
@@ -258,46 +264,81 @@ describe("decisions", () => {
     it.each([
       { field: "title", length: 81, max: 80 },
       { field: "body", length: 2501, max: 2500 },
-    ])("rejects an oversized $field with its actual count and no writes", async ({ field, length, max }) => {
-      const result = await upsertDecision(tmpDir, {
-        title: "Too long",
-        body: "A useful constraint.",
-        category: "decision",
-        [field]: `  ${"x".repeat(length)}  `,
-      });
-      expect(result.status).toBe("error");
-      if (result.status !== "error") throw new Error("unreachable");
-      expect(result.error).toContain(`${field} has ${length} characters; maximum is ${max} (1 over)`);
-      await expect(fs.access(path.join(tmpDir, ".mason"))).rejects.toThrow();
-    });
+    ])(
+      "rejects an oversized $field with its actual count and no writes",
+      async ({ field, length, max }) => {
+        const result = await upsertDecision(tmpDir, {
+          title: "Too long",
+          body: "A useful constraint.",
+          category: "decision",
+          [field]: `  ${"x".repeat(length)}  `,
+        });
+        expect(result.status).toBe("error");
+        if (result.status !== "error") throw new Error("unreachable");
+        expect(result.error).toContain(
+          `${field} has ${length} characters; maximum is ${max} (1 over)`,
+        );
+        await expect(fs.access(path.join(tmpDir, ".mason"))).rejects.toThrow();
+      },
+    );
 
     it("warns on long creates, revisions and unchanged saves without losing content or history", async () => {
-      const input = { title: "Auth retry exceptions", body: "x".repeat(2000), category: "gotcha" as const };
+      const input = {
+        title: "Auth retry exceptions",
+        body: "x".repeat(2000),
+        category: "gotcha" as const,
+      };
       const created = await upsertDecision(tmpDir, input);
-      expect(created).toMatchObject({ status: "created", warnings: [expect.stringContaining("2000")] });
+      expect(created).toMatchObject({
+        status: "created",
+        warnings: [expect.stringContaining("2000")],
+      });
       if (created.status !== "created") throw new Error("unreachable");
       const updatedInput = { ...input, id: created.id, body: "y".repeat(2500) };
       const updated = await upsertDecision(tmpDir, updatedInput);
-      expect(updated).toMatchObject({ status: "updated", warnings: [expect.stringContaining("2500")] });
+      expect(updated).toMatchObject({
+        status: "updated",
+        warnings: [expect.stringContaining("2500")],
+      });
       const file = path.join(tmpDir, ".mason/decisions", `${created.id}.json`);
       const before = await fs.readFile(file, "utf8");
-      expect(await upsertDecision(tmpDir, updatedInput)).toMatchObject({ status: "unchanged", warnings: [expect.stringContaining("2500")] });
+      expect(await upsertDecision(tmpDir, updatedInput)).toMatchObject({
+        status: "unchanged",
+        warnings: [expect.stringContaining("2500")],
+      });
       expect(await fs.readFile(file, "utf8")).toBe(before);
       const saved = JSON.parse(before);
       expect(saved.body).toBe(updatedInput.body);
-      expect(saved.history.map((event: { content: { body: string } }) => event.content.body)).toEqual([input.body, updatedInput.body]);
-      expect(await upsertDecision(tmpDir, { ...updatedInput, body: "z".repeat(1500) })).toMatchObject({ status: "updated", warnings: [] });
+      expect(
+        saved.history.map((event: { content: { body: string } }) => event.content.body),
+      ).toEqual([input.body, updatedInput.body]);
+      expect(
+        await upsertDecision(tmpDir, { ...updatedInput, body: "z".repeat(1500) }),
+      ).toMatchObject({ status: "updated", warnings: [] });
     });
 
     it("keeps a previously truncated id when reading and revising its title", async () => {
       const id = "binding-requirement-is-cacheable-only-the-device-limit-is-ac";
-      await saveDecisionRecord(tmpDir, record({ id, title: "Binding requirement is cacheable only; the device limit is account scoped" }));
+      await saveDecisionRecord(
+        tmpDir,
+        record({
+          id,
+          title: "Binding requirement is cacheable only; the device limit is account scoped",
+        }),
+      );
       const file = path.join(tmpDir, ".mason/decisions", `${id}.json`);
       const before = await fs.readFile(file, "utf8");
       expect((await loadDecisions(tmpDir))[0].id).toBe(id);
       expect(await fs.readFile(file, "utf8")).toBe(before);
-      expect(await upsertDecision(tmpDir, { id, title: "Binding cache scope", body: "Retain account scope.", category: "decision" })).toMatchObject({ status: "updated", id });
-      expect((await loadDecisions(tmpDir)).map(r => r.id)).toEqual([id]);
+      expect(
+        await upsertDecision(tmpDir, {
+          id,
+          title: "Binding cache scope",
+          body: "Retain account scope.",
+          category: "decision",
+        }),
+      ).toMatchObject({ status: "updated", id });
+      expect((await loadDecisions(tmpDir)).map((r) => r.id)).toEqual([id]);
     });
 
     it("warns with pruneCandidates over the soft cap, never auto-evicts", async ({ signal }) => {
@@ -306,14 +347,18 @@ describe("decisions", () => {
         const directory = path.join(repo, ".mason/decisions");
         await fs.mkdir(directory, { recursive: true });
         const existing = [
-          ...Array.from({ length: MAX_ACTIVE_DECISIONS }, (_, i) => record({ id: `d-${i}`, title: `Decision ${i}`, body: `Body ${i}` })),
+          ...Array.from({ length: MAX_ACTIVE_DECISIONS }, (_, i) =>
+            record({ id: `d-${i}`, title: `Decision ${i}`, body: `Body ${i}` }),
+          ),
           record({ id: "old-superseded", status: "superseded" }),
         ];
         // These are starting fixtures, not save operations under test. Avoid
         // 151 atomic replacements and fsyncs before exercising the soft cap.
         for (const entry of existing) {
           signal.throwIfAborted();
-          await fs.writeFile(path.join(directory, `${entry.id}.json`), JSON.stringify(entry), { signal });
+          await fs.writeFile(path.join(directory, `${entry.id}.json`), JSON.stringify(entry), {
+            signal,
+          });
         }
         signal.throwIfAborted();
         const result = await upsertDecision(repo, {
@@ -327,7 +372,9 @@ describe("decisions", () => {
         expect(result.warnings.join(" ")).toMatch(/soft cap/);
         expect(result.pruneCandidates).toContain("old-superseded");
         const saved = await loadDecisions(repo);
-        expect(saved.map(entry => entry.id).sort()).toEqual([...existing.map(entry => entry.id), result.id].sort());
+        expect(saved.map((entry) => entry.id).sort()).toEqual(
+          [...existing.map((entry) => entry.id), result.id].sort(),
+        );
       })();
       await pendingCapTest;
     }, 15000);
@@ -338,19 +385,44 @@ describe("decisions", () => {
     const server = createMcpServer();
     const client = new Client({ name: "decision-limits-test", version: "1" });
     const [a, b] = InMemoryTransport.createLinkedPair();
-    const text = (result: Awaited<ReturnType<typeof client.callTool>>) => (result.content as { text: string }[])[0].text;
+    const text = (result: Awaited<ReturnType<typeof client.callTool>>) =>
+      (result.content as { text: string }[])[0].text;
     try {
-      await server.connect(a); await client.connect(b);
-      const tool = (await client.listTools()).tools.find(t => t.name === "save_decision")!;
-      const manifest = JSON.parse(await fs.readFile(new URL("../manifest.json", import.meta.url), "utf8"));
-      const declared = manifest.tools.find((t: { name: string }) => t.name === "save_decision").inputSchema.properties;
-      for (const [field, max] of [["title", 80], ["body", 2500]] as const) {
-        expect(tool.inputSchema.properties![field]).toMatchObject({ type: "string", minLength: 1, maxLength: max });
+      await server.connect(a);
+      await client.connect(b);
+      const tool = (await client.listTools()).tools.find((t) => t.name === "save_decision")!;
+      const manifest = JSON.parse(
+        await fs.readFile(new URL("../manifest.json", import.meta.url), "utf8"),
+      );
+      const declared = manifest.tools.find((t: { name: string }) => t.name === "save_decision")
+        .inputSchema.properties;
+      for (const [field, max] of [
+        ["title", 80],
+        ["body", 2500],
+      ] as const) {
+        expect(tool.inputSchema.properties![field]).toMatchObject({
+          type: "string",
+          minLength: 1,
+          maxLength: max,
+        });
         expect(declared[field]).toMatchObject(tool.inputSchema.properties![field]);
       }
-      const input = { dir: tmpDir, title: "Auth retry rationale", body: "Valid body", category: "gotcha", files: ["src/auth.ts"], force: true };
-      for (const [field, length] of [["title", 81], ["body", 2501]] as const) {
-        const rejected = await client.callTool({ name: "save_decision", arguments: { ...input, [field]: `  ${"x".repeat(length)}  ` } });
+      const input = {
+        dir: tmpDir,
+        title: "Auth retry rationale",
+        body: "Valid body",
+        category: "gotcha",
+        files: ["src/auth.ts"],
+        force: true,
+      };
+      for (const [field, length] of [
+        ["title", 81],
+        ["body", 2501],
+      ] as const) {
+        const rejected = await client.callTool({
+          name: "save_decision",
+          arguments: { ...input, [field]: `  ${"x".repeat(length)}  ` },
+        });
         expect(rejected.isError).toBe(true);
         expect(text(rejected)).toContain(`${field} has ${length} characters`);
         expect(text(rejected)).toContain("(1 over)");
@@ -359,19 +431,40 @@ describe("decisions", () => {
       for (const length of [1500, 1501, 2500]) {
         const exception = " Never retry without the key.";
         const body = "x".repeat(length - exception.length) + exception;
-        const result = await client.callTool({ name: "save_decision", arguments: { ...input, title: `Auth ${length}`.padEnd(80, "!"), body: `  ${body}  ` } });
+        const result = await client.callTool({
+          name: "save_decision",
+          arguments: { ...input, title: `Auth ${length}`.padEnd(80, "!"), body: `  ${body}  ` },
+        });
         expect(result.isError).not.toBe(true);
         const saved = JSON.parse(text(result));
         expect(saved.status).toBe("created");
         expect(saved.warnings).toHaveLength(length > 1500 ? 1 : 0);
         if (length > 1500) expect(saved.warnings[0]).toContain("include it in full");
-        const context = JSON.parse(text(await client.callTool({ name: "get_context", arguments: { dir: tmpDir, task: "Auth retries", files: ["src/auth.ts"] } })));
+        const context = JSON.parse(
+          text(
+            await client.callTool({
+              name: "get_context",
+              arguments: { dir: tmpDir, task: "Auth retries", files: ["src/auth.ts"] },
+            }),
+          ),
+        );
         expect(context.decisions[saved.id].body).toBe(body);
         expect(context.decisions[saved.id].approval).toBe("proposed");
-        const hook = await runHook(JSON.stringify({ session_id: `length-${length}`, cwd: tmpDir, tool_name: "Read", tool_input: { file_path: path.join(tmpDir, "src/auth.ts") } }), { stateDir: tmpDir });
+        const hook = await runHook(
+          JSON.stringify({
+            session_id: `length-${length}`,
+            cwd: tmpDir,
+            tool_name: "Read",
+            tool_input: { file_path: path.join(tmpDir, "src/auth.ts") },
+          }),
+          { stateDir: tmpDir },
+        );
         expect(JSON.parse(hook!).hookSpecificOutput.additionalContext).toContain(body);
       }
-    } finally { await client.close(); await server.close(); }
+    } finally {
+      await client.close();
+      await server.close();
+    }
   }, 15000);
 
   describe("computeDecisionDrift", () => {
@@ -379,11 +472,11 @@ describe("decisions", () => {
       const head = await git(["rev-parse", "HEAD"], tmpDir);
       await saveDecisionRecord(
         tmpDir,
-        record({ id: "auth-note", files: ["src/auth.ts"], refreshedHash: head })
+        record({ id: "auth-note", files: ["src/auth.ts"], refreshedHash: head }),
       );
       await saveDecisionRecord(
         tmpDir,
-        record({ id: "api-note", files: ["src/api.ts"], refreshedHash: head })
+        record({ id: "api-note", files: ["src/api.ts"], refreshedHash: head }),
       );
 
       await fs.writeFile(path.join(tmpDir, "src", "auth.ts"), "export const auth = 2;\n");
@@ -398,7 +491,7 @@ describe("decisions", () => {
       const head = await git(["rev-parse", "HEAD"], tmpDir);
       await saveDecisionRecord(
         tmpDir,
-        record({ id: "auth-note", files: ["src/auth.ts"], refreshedHash: head })
+        record({ id: "auth-note", files: ["src/auth.ts"], refreshedHash: head }),
       );
       await git(["mv", "src/auth.ts", "src/authn.ts"], tmpDir);
       await commitAll(tmpDir, "rename auth");
@@ -410,7 +503,7 @@ describe("decisions", () => {
     it("anchorless decisions never go stale", async () => {
       await saveDecisionRecord(
         tmpDir,
-        record({ id: "prose-only", files: [], refreshedHash: "0".repeat(40) })
+        record({ id: "prose-only", files: [], refreshedHash: "0".repeat(40) }),
       );
       await fs.writeFile(path.join(tmpDir, "src", "auth.ts"), "export const auth = 9;\n");
       await commitAll(tmpDir, "change");
@@ -427,7 +520,7 @@ describe("decisions", () => {
           id: "orphaned",
           files: ["src/auth.ts"],
           refreshedHash: "deadbeef".repeat(5),
-        })
+        }),
       );
       const report = await computeDecisionDrift(tmpDir);
       expect(report.historyAvailable).toBe(false);
@@ -454,7 +547,7 @@ describe("decisions", () => {
             },
           },
           flows: {},
-        })
+        }),
       );
       return head;
     }
@@ -470,7 +563,7 @@ describe("decisions", () => {
           category: "gotcha",
           files: ["src/auth.ts"],
           refreshedHash: head,
-        })
+        }),
       );
       await saveDecisionRecord(
         tmpDir,
@@ -480,13 +573,10 @@ describe("decisions", () => {
           body: "Superseded rule.",
           status: "superseded",
           refreshedHash: head,
-        })
+        }),
       );
 
-      const bundle = (await assembleContext(
-        tmpDir,
-        "fix the authentication bug"
-      )) as ContextBundle;
+      const bundle = (await assembleContext(tmpDir, "fix the authentication bug")) as ContextBundle;
 
       expect(Object.keys(bundle.decisions)).toEqual(["auth-retry-gotcha"]);
       expect(bundle.decisions["auth-retry-gotcha"].body).toMatch(/refresh storms/);
@@ -504,17 +594,14 @@ describe("decisions", () => {
           category: "gotcha",
           files: ["src/auth.ts"],
           refreshedHash: head,
-        })
+        }),
       );
       await fs.writeFile(path.join(tmpDir, "src", "auth.ts"), "export const auth = 5;\n");
       await commitAll(tmpDir, "change auth");
 
       // Task shares no tokens with the decision, but the decision anchors to
       // the matched feature's file.
-      const bundle = (await assembleContext(
-        tmpDir,
-        "fix the authentication bug"
-      )) as ContextBundle;
+      const bundle = (await assembleContext(tmpDir, "fix the authentication bug")) as ContextBundle;
 
       expect(Object.keys(bundle.decisions)).toContain("session-quirk");
       expect(bundle.decisions["session-quirk"].stale).toBe(true);
@@ -531,12 +618,12 @@ describe("decisions", () => {
           body: "Pager history says weekend incidents cluster after Friday deploys.",
           category: "convention",
           refreshedHash: head,
-        })
+        }),
       );
 
       const bundle = (await assembleContext(
         tmpDir,
-        "when can I run the deployment"
+        "when can I run the deployment",
       )) as NoMatchBundle;
 
       expect(bundle.features).toEqual({});
@@ -547,7 +634,7 @@ describe("decisions", () => {
       const head = await seedSnapshot();
       await fs.writeFile(
         path.join(tmpDir, ".mason", "project.json"),
-        JSON.stringify({ version: 1, initializedAt: new Date().toISOString() })
+        JSON.stringify({ version: 1, initializedAt: new Date().toISOString() }),
       );
 
       const before = JSON.parse(await getSnapshot(tmpDir));
@@ -562,12 +649,12 @@ describe("decisions", () => {
           category: "gotcha",
           files: ["src/auth.ts"],
           refreshedHash: head,
-        })
+        }),
       );
 
       const after = JSON.parse(await getSnapshot(tmpDir));
       expect(after.decisions["auth-retry-gotcha"].title).toBe(
-        "Authentication retries are forbidden"
+        "Authentication retries are forbidden",
       );
       expect(after.decisions["auth-retry-gotcha"].body).toBeUndefined();
     });
@@ -576,7 +663,7 @@ describe("decisions", () => {
       const head = await seedSnapshot();
       await saveDecisionRecord(
         tmpDir,
-        record({ id: "auth-note", files: ["src/auth.ts"], refreshedHash: head })
+        record({ id: "auth-note", files: ["src/auth.ts"], refreshedHash: head }),
       );
       await fs.writeFile(path.join(tmpDir, "src", "auth.ts"), "export const auth = 7;\n");
       await commitAll(tmpDir, "change auth");

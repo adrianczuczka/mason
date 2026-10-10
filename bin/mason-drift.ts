@@ -5,5 +5,5 @@ runDriftCli(process.argv.slice(2)).then(
   (err) => {
     process.stderr.write(`mason-drift error: ${err}\n`);
     process.exit(2);
-  }
+  },
 );

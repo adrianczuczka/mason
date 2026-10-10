@@ -3,7 +3,11 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { getChangesWithStatus, touchedPaths } from "../drift/drift.js";
-import { decisionProvenance, decisionKnowledge, effectiveDecision } from "../decisions/provenance.js";
+import {
+  decisionProvenance,
+  decisionKnowledge,
+  effectiveDecision,
+} from "../decisions/provenance.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
 import { matchingPaths } from "../utils/paths.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
@@ -28,7 +32,9 @@ export interface TouchedDecision extends Partial<ReturnType<typeof decisionProve
   anchors: string[];
   freshness?: Freshness;
   touchedFiles: string[];
-  pendingProposal?: NonNullable<ReturnType<typeof decisionKnowledge>["pendingProposal"]> & { touchedFiles: string[] };
+  pendingProposal?: NonNullable<ReturnType<typeof decisionKnowledge>["pendingProposal"]> & {
+    touchedFiles: string[];
+  };
 }
 
 export interface ReviewReport {
@@ -52,7 +58,7 @@ export interface ReviewReport {
 async function resolveMergeBase(
   resolvedRoot: string,
   base: string,
-  head: string
+  head: string,
 ): Promise<string | null> {
   try {
     const { stdout } = await exec("git", ["merge-base", base, head], {
@@ -79,10 +85,7 @@ export async function defaultBase(resolvedRoot: string): Promise<string | null> 
   return null;
 }
 
-function anchorsTouched(
-  record: DecisionRecord,
-  changedFiles: string[]
-): string[] {
+function anchorsTouched(record: DecisionRecord, changedFiles: string[]): string[] {
   return matchingPaths(record.files, changedFiles);
 }
 
@@ -95,7 +98,7 @@ function anchorsTouched(
 export async function computeReview(
   rootDir: string,
   base: string,
-  options: { evidence?: string[] } = {}
+  options: { evidence?: string[] } = {},
 ): Promise<ReviewReport | null> {
   const resolvedRoot = path.resolve(rootDir);
   const head = await getCurrentGitHash(resolvedRoot);
@@ -123,15 +126,26 @@ export async function computeReview(
   report.diagnostics = store.diagnostics;
   const decisionDrift = await computeDecisionDrift(resolvedRoot, store.records);
   if (options.evidence !== undefined) {
-    report.evidence = await collectReviewEvidence(resolvedRoot, options.evidence, changedFiles, store.records, decisionDrift.freshness, head);
+    report.evidence = await collectReviewEvidence(
+      resolvedRoot,
+      options.evidence,
+      changedFiles,
+      store.records,
+      decisionDrift.freshness,
+      head,
+    );
     if (store.diagnostics.length) {
-      report.evidence.diagnostics.push("Invalid decision records make knowledge associations incomplete; consult review diagnostics.");
+      report.evidence.diagnostics.push(
+        "Invalid decision records make knowledge associations incomplete; consult review diagnostics.",
+      );
       if (report.evidence.status === "passed") report.evidence.status = "incomplete";
     }
   }
   const finalize = async () => {
-    if (report.evidence && await getCurrentGitHash(resolvedRoot) !== head) {
-      report.evidence.diagnostics.push("HEAD changed during the review; rerun to obtain consistent change and knowledge associations.");
+    if (report.evidence && (await getCurrentGitHash(resolvedRoot)) !== head) {
+      report.evidence.diagnostics.push(
+        "HEAD changed during the review; rerun to obtain consistent change and knowledge associations.",
+      );
       for (const check of report.evidence.checks) check.freshness = "unknown";
       report.evidence.summary.stale = 0;
       report.evidence.summary.unknown = report.evidence.checks.length;
@@ -158,7 +172,7 @@ export async function computeReview(
         return false;
       }
     },
-    changedFiles
+    changedFiles,
   );
   if (partners === null) {
     report.historyAvailable = false;
@@ -173,10 +187,16 @@ export async function computeReview(
     const touched = anchorsTouched(effective, changedFiles);
     const proposalTouched = effective !== record ? anchorsTouched(record, changedFiles) : [];
     if (touched.length > 0 || proposalTouched.length > 0) {
-      const { pendingProposal, ...knowledge } = decisionKnowledge(record, decisionDrift.freshness?.[record.id] ?? "unknown", decisionDrift.pendingProposals?.[record.id]?.freshness ?? "unknown");
+      const { pendingProposal, ...knowledge } = decisionKnowledge(
+        record,
+        decisionDrift.freshness?.[record.id] ?? "unknown",
+        decisionDrift.pendingProposals?.[record.id]?.freshness ?? "unknown",
+      );
       report.touchedDecisions.push({
         ...knowledge,
-        ...(pendingProposal ? { pendingProposal: { ...pendingProposal, touchedFiles: proposalTouched } } : {}),
+        ...(pendingProposal
+          ? { pendingProposal: { ...pendingProposal, touchedFiles: proposalTouched } }
+          : {}),
         id: record.id,
         anchors: effective.files,
         freshness: decisionDrift.freshness?.[record.id] ?? "unknown",

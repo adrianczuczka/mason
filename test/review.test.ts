@@ -104,7 +104,7 @@ describe("computeReview", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
         refreshedHash: "unknown",
         status: "active",
-      })
+      }),
     );
     await commitAll(tmpDir, "init");
     await branchAndChange({ "src/lonely.ts": "export const l = 2;\n" });
@@ -129,10 +129,10 @@ describe("runReviewCli", () => {
     await branchAndChange({ "src/a.ts": "export const a = 99;\n" });
 
     const out: string[] = [];
-    const code = await runReviewCli(
-      ["--dir", tmpDir, "--base", "main"],
-      { out: (l) => out.push(l), err: () => {} }
-    );
+    const code = await runReviewCli(["--dir", tmpDir, "--base", "main"], {
+      out: (l) => out.push(l),
+      err: () => {},
+    });
     expect(code).toBe(1);
     expect(out.join("\n")).toContain("src/b.ts");
     expect(out.join("\n")).toContain("missing-partner");
@@ -144,10 +144,10 @@ describe("runReviewCli", () => {
     await branchAndChange({ "src/lonely.ts": "export const l = 2;\n" });
 
     const out: string[] = [];
-    const code = await runReviewCli(
-      ["--dir", tmpDir, "--base", "main", "--json"],
-      { out: (l) => out.push(l), err: () => {} }
-    );
+    const code = await runReviewCli(["--dir", tmpDir, "--base", "main", "--json"], {
+      out: (l) => out.push(l),
+      err: () => {},
+    });
     expect(code).toBe(0);
     const report = JSON.parse(out.join("\n"));
     expect(report.version).toBe(1);
@@ -168,10 +168,10 @@ describe("runReviewCli", () => {
     await write("src/a.ts", "export const a = 1;\n");
     await commitAll(tmpDir, "init");
     const err: string[] = [];
-    const code = await runReviewCli(
-      ["--dir", tmpDir, "--base", "no-such-ref"],
-      { out: () => {}, err: (l) => err.push(l) }
-    );
+    const code = await runReviewCli(["--dir", tmpDir, "--base", "no-such-ref"], {
+      out: () => {},
+      err: (l) => err.push(l),
+    });
     expect(code).toBe(2);
     expect(err.join("\n")).toContain("merge base");
   });

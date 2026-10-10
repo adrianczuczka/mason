@@ -19,11 +19,17 @@ export async function buildTestMap(dir: string): Promise<TestMapResult> {
 
   // Find all test files
   const testPatterns = [
-    "**/*.test.*", "**/*.spec.*",
-    "**/*Test.kt", "**/*Test.java", "**/*Tests.kt", "**/*Tests.java",
-    "**/test_*.py", "**/*_test.py",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/*Test.kt",
+    "**/*Test.java",
+    "**/*Tests.kt",
+    "**/*Tests.java",
+    "**/test_*.py",
+    "**/*_test.py",
     "**/*_test.go",
-    "**/*Tests.swift", "**/*Test.swift",
+    "**/*Tests.swift",
+    "**/*Test.swift",
     "**/*_test.rs",
   ];
   const testFiles = await access.list(testPatterns);

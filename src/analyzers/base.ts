@@ -1,20 +1,12 @@
 import fs from "node:fs/promises";
 import fg from "fast-glob";
-import type {
-  AnalyzerContext,
-  AnalyzerResult,
-  Finding,
-  FindingCategory,
-} from "../types.js";
+import type { AnalyzerContext, AnalyzerResult, Finding, FindingCategory } from "../types.js";
 
 export abstract class BaseAnalyzer {
   abstract name: string;
   abstract analyze(context: AnalyzerContext): Promise<AnalyzerResult>;
 
-  protected async findFiles(
-    patterns: string[],
-    root: string
-  ): Promise<string[]> {
+  protected async findFiles(patterns: string[], root: string): Promise<string[]> {
     return fg(patterns, {
       cwd: root,
       ignore: ["**/node_modules/**", "**/dist/**", "**/.git/**"],
@@ -46,7 +38,7 @@ export abstract class BaseAnalyzer {
   protected createResult(
     findings: Finding[],
     gaps: AnalyzerResult["gaps"],
-    startTime: number
+    startTime: number,
   ): AnalyzerResult {
     return {
       analyzer: this.name,

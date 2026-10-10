@@ -30,7 +30,9 @@ describe("sampler", () => {
       const files = await sampleFiles(fixturePath("node-react"));
       const r = reasons(files);
       expect(r.some((reason) => reason.includes("store"))).toBe(true);
-      expect(r.some((reason) => reason.includes("service") || reason.includes("client"))).toBe(true);
+      expect(r.some((reason) => reason.includes("service") || reason.includes("client"))).toBe(
+        true,
+      );
     });
 
     it("selects test examples", async () => {
@@ -53,9 +55,7 @@ describe("sampler", () => {
   describe("kotlin-multiplatform fixture", () => {
     it("selects gradle config files", async () => {
       const files = await sampleFiles(fixturePath("kotlin-multiplatform"));
-      const configPaths = files
-        .filter((f) => f.reason === "config file")
-        .map((f) => f.path);
+      const configPaths = files.filter((f) => f.reason === "config file").map((f) => f.path);
       expect(configPaths).toContain("build.gradle.kts");
       expect(configPaths).toContain("settings.gradle.kts");
       expect(configPaths).toContain("gradle/libs.versions.toml");
@@ -63,9 +63,7 @@ describe("sampler", () => {
 
     it("selects module build files", async () => {
       const files = await sampleFiles(fixturePath("kotlin-multiplatform"));
-      const moduleBuildFiles = files.filter((f) =>
-        f.reason.includes("module build file")
-      );
+      const moduleBuildFiles = files.filter((f) => f.reason.includes("module build file"));
       expect(moduleBuildFiles.length).toBeGreaterThanOrEqual(1);
       // Should be subdirectory build files, not root
       for (const f of moduleBuildFiles) {
@@ -110,9 +108,7 @@ describe("sampler", () => {
   describe("python-django fixture", () => {
     it("selects python config files", async () => {
       const files = await sampleFiles(fixturePath("python-django"));
-      const configPaths = files
-        .filter((f) => f.reason === "config file")
-        .map((f) => f.path);
+      const configPaths = files.filter((f) => f.reason === "config file").map((f) => f.path);
       expect(configPaths).toContain("pyproject.toml");
     });
 
@@ -140,9 +136,7 @@ describe("sampler", () => {
   describe("go-api fixture", () => {
     it("selects go config files", async () => {
       const files = await sampleFiles(fixturePath("go-api"));
-      const configPaths = files
-        .filter((f) => f.reason === "config file")
-        .map((f) => f.path);
+      const configPaths = files.filter((f) => f.reason === "config file").map((f) => f.path);
       expect(configPaths).toContain("go.mod");
     });
 
@@ -155,7 +149,9 @@ describe("sampler", () => {
     it("selects handler, service, repository", async () => {
       const files = await sampleFiles(fixturePath("go-api"));
       const r = reasons(files);
-      expect(r.some((reason) => reason.includes("handler") || reason.includes("controller"))).toBe(true);
+      expect(r.some((reason) => reason.includes("handler") || reason.includes("controller"))).toBe(
+        true,
+      );
       expect(r.some((reason) => reason.includes("service"))).toBe(true);
       expect(r.some((reason) => reason.includes("repository"))).toBe(true);
     });
@@ -171,17 +167,13 @@ describe("sampler", () => {
   describe("rust-workspace fixture", () => {
     it("selects Cargo.toml", async () => {
       const files = await sampleFiles(fixturePath("rust-workspace"));
-      const configPaths = files
-        .filter((f) => f.reason === "config file")
-        .map((f) => f.path);
+      const configPaths = files.filter((f) => f.reason === "config file").map((f) => f.path);
       expect(configPaths).toContain("Cargo.toml");
     });
 
     it("selects module build files (sub Cargo.toml)", async () => {
       const files = await sampleFiles(fixturePath("rust-workspace"));
-      const moduleBuildFiles = files.filter((f) =>
-        f.reason.includes("module build file")
-      );
+      const moduleBuildFiles = files.filter((f) => f.reason.includes("module build file"));
       expect(moduleBuildFiles.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -189,9 +181,7 @@ describe("sampler", () => {
       const files = await sampleFiles(fixturePath("rust-workspace"));
       const p = paths(files);
       // Should include lib.rs or main.rs as entry points
-      expect(
-        p.some((path) => path.includes("main.rs") || path.includes("lib.rs"))
-      ).toBe(true);
+      expect(p.some((path) => path.includes("main.rs") || path.includes("lib.rs"))).toBe(true);
     });
   });
 

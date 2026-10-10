@@ -4,16 +4,26 @@ export type Progress = {
   stop: (success?: boolean) => void;
 };
 
-export function createProgress(options: {
-  write?: (text: string) => void;
-  interactive?: boolean;
-  columns?: () => number;
-} = {}): Progress {
-  const write = options.write ?? (text => { process.stderr.write(text); });
-  const interactive = options.interactive ?? (!!process.stderr.isTTY && process.env.TERM !== "dumb" && !process.env.CI);
+export function createProgress(
+  options: {
+    write?: (text: string) => void;
+    interactive?: boolean;
+    columns?: () => number;
+  } = {},
+): Progress {
+  const write =
+    options.write ??
+    ((text) => {
+      process.stderr.write(text);
+    });
+  const interactive =
+    options.interactive ??
+    (!!process.stderr.isTTY && process.env.TERM !== "dumb" && !process.env.CI);
   const columns = options.columns ?? (() => process.stderr.columns || 80);
   const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-  let message = "", started = 0, frame = 0;
+  let message = "",
+    started = 0,
+    frame = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
   const elapsed = () => {
     const seconds = Math.floor((Date.now() - started) / 1000);
@@ -28,17 +38,26 @@ export function createProgress(options: {
   const stop = (success = true) => {
     if (timer) clearInterval(timer);
     timer = undefined;
-    if (message && interactive) { render(success ? "✓" : "✗"); write("\n"); }
+    if (message && interactive) {
+      render(success ? "✓" : "✗");
+      write("\n");
+    }
     message = "";
   };
   return {
     step(next) {
       stop();
       message = next.replace(/[\x00-\x1f\x7f-\x9f]/g, " ");
-      started = Date.now(); frame = 0;
-      if (!interactive) { write(`Mason: ${message}…\n`); return; }
+      started = Date.now();
+      frame = 0;
+      if (!interactive) {
+        write(`Mason: ${message}…\n`);
+        return;
+      }
       render(frames[frame]);
-      timer = setInterval(() => { render(frames[++frame % frames.length]); }, 100);
+      timer = setInterval(() => {
+        render(frames[++frame % frames.length]);
+      }, 100);
       timer.unref();
     },
     stop,

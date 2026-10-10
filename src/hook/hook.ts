@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { isStringArray } from "../utils/validation.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -24,6 +26,15 @@ export interface HookStdin {
   tool_name?: string;
   tool_input?: { file_path?: string };
 }
+
+const hookStdinSchema = z.object({
+  session_id: z.string().optional(),
+  agent_id: z.string().optional(),
+  cwd: z.string().optional(),
+  hook_event_name: z.string().optional(),
+  tool_name: z.string().optional(),
+  tool_input: z.object({ file_path: z.string().optional() }).optional(),
+});
 
 export interface HookEnv {
   /** Override for tests; defaults to os.tmpdir(). */
@@ -57,7 +68,7 @@ async function findMasonRoot(startDir: string): Promise<string | null> {
 }
 
 function anchorsCover(record: DecisionRecord, relPath: string): boolean {
-  return decisionAnchors(record).some(anchor => anchorMatches(anchor, relPath));
+  return decisionAnchors(record).some((anchor) => anchorMatches(anchor, relPath));
 }
 
 function exactAnchor(record: DecisionRecord, relPath: string): boolean {
@@ -71,8 +82,8 @@ function stateKey(input: HookStdin): string {
 
 async function loadInjected(stateFile: string): Promise<Set<string>> {
   try {
-    const parsed = JSON.parse(await fs.readFile(stateFile, "utf-8"));
-    return new Set(Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : []);
+    const parsed: unknown = JSON.parse(await fs.readFile(stateFile, "utf-8"));
+    return new Set(isStringArray(parsed) ? parsed : []);
   } catch {
     return new Set();
   }
@@ -81,24 +92,52 @@ async function loadInjected(stateFile: string): Promise<Set<string>> {
 function formatContext(
   relPath: string,
   records: DecisionRecord[],
-  drift: DecisionDriftReport
+  drift: DecisionDriftReport,
 ): string {
   const lines: string[] = [];
   lines.push(
-    `Mason: decision knowledge relevant to ${relPath} or updated since this session saw it. This replaces earlier guidance for the same decision id. ${DECISION_GUIDANCE} Retired or superseded records are no longer active. Use Mason tools to record decision changes and source inspections; do not edit the JSON in .mason/decisions/ directly.`
+    `Mason: decision knowledge relevant to ${relPath} or updated since this session saw it. This replaces earlier guidance for the same decision id. ${DECISION_GUIDANCE} Retired or superseded records are no longer active. Use Mason tools to record decision changes and source inspections; do not edit the JSON in .mason/decisions/ directly.`,
   );
-  const append = (id: string, knowledge: ReturnType<typeof decisionKnowledge>, label: string, freshness: Freshness) => {
-    const stale = freshness === "current" ? "" : freshness === "changed"
-      ? " [recorded against changed files – verify against current code before relying on it]"
-      : " [freshness unknown – verify against current code before relying on it]";
+  const append = (
+    id: string,
+    knowledge: ReturnType<typeof decisionKnowledge>,
+    label: string,
+    freshness: Freshness,
+  ) => {
+    const stale =
+      freshness === "current"
+        ? ""
+        : freshness === "changed"
+          ? " [recorded against changed files – verify against current code before relying on it]"
+          : " [freshness unknown – verify against current code before relying on it]";
     lines.push(
-      `- [${label}] [${knowledge.category}] ${knowledge.title}: ${knowledge.body} (id: ${id}; revision: ${knowledge.revision}; anchors: ${knowledge.files.join(", ")}; owner: ${knowledge.owner ?? "unknown"}; sources: ${knowledge.sources.slice(0, 2).map(s => s.reference).join(", ") || "unrecorded"})${stale}`
+      `- [${label}] [${knowledge.category}] ${knowledge.title}: ${knowledge.body} (id: ${id}; revision: ${knowledge.revision}; anchors: ${knowledge.files.join(", ")}; owner: ${knowledge.owner ?? "unknown"}; sources: ${
+        knowledge.sources
+          .slice(0, 2)
+          .map((s) => s.reference)
+          .join(", ") || "unrecorded"
+      })${stale}`,
     );
   };
   for (const record of records) {
-    const knowledge = decisionKnowledge(record, drift.freshness?.[record.id] ?? "unknown", drift.pendingProposals?.[record.id]?.freshness ?? "unknown");
-    append(record.id, knowledge, record.status === "active" ? knowledge.approval : record.status, knowledge.trust.freshness);
-    if (knowledge.pendingProposal) append(record.id, knowledge.pendingProposal, "proposed", knowledge.pendingProposal.trust.freshness);
+    const knowledge = decisionKnowledge(
+      record,
+      drift.freshness?.[record.id] ?? "unknown",
+      drift.pendingProposals?.[record.id]?.freshness ?? "unknown",
+    );
+    append(
+      record.id,
+      knowledge,
+      record.status === "active" ? knowledge.approval : record.status,
+      knowledge.trust.freshness,
+    );
+    if (knowledge.pendingProposal)
+      append(
+        record.id,
+        knowledge.pendingProposal,
+        "proposed",
+        knowledge.pendingProposal.trust.freshness,
+      );
   }
   return lines.join("\n");
 }
@@ -111,13 +150,10 @@ function formatContext(
  * "stay silent" (no store, no match, already injected, malformed input —
  * a hook must never disrupt the session).
  */
-export async function runHook(
-  stdinText: string,
-  env: HookEnv = {}
-): Promise<string | null> {
+export async function runHook(stdinText: string, env: HookEnv = {}): Promise<string | null> {
   let input: HookStdin;
   try {
-    input = JSON.parse(stdinText);
+    input = hookStdinSchema.parse(JSON.parse(stdinText));
   } catch {
     return null;
   }
@@ -138,24 +174,31 @@ export async function runHook(
   const { records } = await loadDecisionStore(root);
 
   const stateDir = env.stateDir ?? os.tmpdir();
-  const stateFile = path.join(stateDir, `mason-hook-${createHash("sha256").update(root).digest("hex").slice(0, 12)}-${stateKey(input)}.json`);
+  const stateFile = path.join(
+    stateDir,
+    `mason-hook-${createHash("sha256").update(root).digest("hex").slice(0, 12)}-${stateKey(input)}.json`,
+  );
   const injected = await loadInjected(stateFile);
-  const recordKey = (record: DecisionRecord) => `${record.id}:${createHash("sha256").update(JSON.stringify(record)).digest("hex")}`;
-  const previouslyInjected = (record: DecisionRecord) => [...injected].some(key => key === record.id || key.startsWith(`${record.id}:`));
+  const recordKey = (record: DecisionRecord) =>
+    `${record.id}:${createHash("sha256").update(JSON.stringify(record)).digest("hex")}`;
+  const previouslyInjected = (record: DecisionRecord) =>
+    [...injected].some((key) => key === record.id || key.startsWith(`${record.id}:`));
   // Re-inject revised/accepted records and withdraw previously injected records
   // that were retired during this session. Untouched archived records stay dark.
   // Also update previously seen records after their anchors move. Otherwise an
   // acceptance or retirement could leave obsolete guidance in the session.
-  const fresh = records.filter(r => !injected.has(recordKey(r)) &&
-    (previouslyInjected(r) || (r.status === "active" && anchorsCover(r, relPath))));
+  const fresh = records.filter(
+    (r) =>
+      !injected.has(recordKey(r)) &&
+      (previouslyInjected(r) || (r.status === "active" && anchorsCover(r, relPath))),
+  );
   if (fresh.length === 0) return null;
 
   // Exact-file anchors outrank directory-prefix ones; newest knowledge wins ties.
   fresh.sort((a, b) => {
     const withdrawn = Number(b.status !== "active") - Number(a.status !== "active");
     if (withdrawn) return withdrawn;
-    const exactDiff =
-      Number(exactAnchor(b, relPath)) - Number(exactAnchor(a, relPath));
+    const exactDiff = Number(exactAnchor(b, relPath)) - Number(exactAnchor(a, relPath));
     if (exactDiff !== 0) return exactDiff;
     return b.updatedAt.localeCompare(a.updatedAt);
   });

@@ -17,7 +17,10 @@ async function write(file: string, content: string) {
 async function seed() {
   await write("src/old.ts", "export const old = true;");
   await write("src/kept.ts", "export const kept = true;");
-  await write("CLAUDE.md", "Source: `src/old.ts`. The src directory. Dependencies include vitest 1.\n");
+  await write(
+    "CLAUDE.md",
+    "Source: `src/old.ts`. The src directory. Dependencies include vitest 1.\n",
+  );
   await write("package.json", '{"dependencies":{"vitest":"1"},"scripts":{"test":"vitest"}}');
   await commitAll(root, "initial");
   await fs.rm(path.join(root, "src/old.ts"));
@@ -25,12 +28,19 @@ async function seed() {
 }
 async function seedAdvisory() {
   await seed();
-  await write("package.json", '{"dependencies":{"vitest":"2"},"scripts":{"test":"vitest","build":"tsc"}}');
+  await write(
+    "package.json",
+    '{"dependencies":{"vitest":"2"},"scripts":{"test":"vitest","build":"tsc"}}',
+  );
   await commitAll(root, "change manifest");
 }
 async function cli(args: string[]) {
-  const out: string[] = [], err: string[] = [];
-  const code = await runAuditCli(["--dir", root, ...args], { out: s => out.push(s), err: s => err.push(s) });
+  const out: string[] = [],
+    err: string[] = [];
+  const code = await runAuditCli(["--dir", root, ...args], {
+    out: (s) => out.push(s),
+    err: (s) => err.push(s),
+  });
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 beforeEach(async () => {
@@ -87,14 +97,15 @@ describe("audit repair", () => {
   it("retains dependency evidence through dirty-doc suppression and a later doc commit", async () => {
     await seedAdvisory();
     const prepared = await prepareRepair(root);
-    const original = prepared.report.advisories.find(a => a.type === "deps-changed");
+    const original = prepared.report.advisories.find((a) => a.type === "deps-changed");
     expect(original).toBeDefined();
     await write("CLAUDE.md", "Source: `src/kept.ts`. The src directory.\n");
     const dirty = await verifyRepair(root, prepared.baselinePath);
     expect(dirty.counts.resolved).toBe(1);
     expect(dirty.status).toBe("incomplete");
-    expect(dirty.findings.find(f => f.original.type === "deps-changed")).toMatchObject({
-      status: "unverified", original,
+    expect(dirty.findings.find((f) => f.original.type === "deps-changed")).toMatchObject({
+      status: "unverified",
+      original,
     });
     expect(dirty.currentAudit?.advisories).toHaveLength(0);
     expect(dirty.currentAudit?.suppressedAdvisories).toEqual([original]);
@@ -102,8 +113,9 @@ describe("audit repair", () => {
     const committed = await verifyRepair(root, prepared.baselinePath);
     expect(committed.currentAudit?.advisories).toHaveLength(0);
     expect(committed.status).toBe("incomplete");
-    expect(committed.findings.find(f => f.original.type === "deps-changed")).toMatchObject({
-      status: "review-required", original,
+    expect(committed.findings.find((f) => f.original.type === "deps-changed")).toMatchObject({
+      status: "review-required",
+      original,
     });
   });
 
@@ -116,13 +128,15 @@ describe("audit repair", () => {
     expect(prepared.report.advisories).toHaveLength(0);
     expect(prepared.report.suppressedAdvisories).toHaveLength(1);
     const result = await verifyRepair(root, prepared.baselinePath);
-    expect(result.findings.find(f => f.original.type === "deps-changed")?.status).toBe("unverified");
+    expect(result.findings.find((f) => f.original.type === "deps-changed")?.status).toBe(
+      "unverified",
+    );
     const summary = await cli([]);
     expect(summary.out).toContain("[suppressed; unresolved] deps-changed");
     expect(summary.code).toBe(1);
   });
 
-  it.each(["CLAUDE.md", ".git"])("never verifies removed evidence: %s", async file => {
+  it.each(["CLAUDE.md", ".git"])("never verifies removed evidence: %s", async (file) => {
     await seed();
     const prepared = await prepareRepair(root, ["deleted-reference"]);
     await write("AGENTS.md", "Project instructions.\n");
@@ -183,9 +197,15 @@ describe("audit repair", () => {
     const prepared = await prepareRepair(root, ["deleted-reference"]);
     const file = path.join(root, prepared.baselinePath);
     const saved = JSON.parse(await fs.readFile(file, "utf8"));
-    await write("changed.json", JSON.stringify({ ...saved, createdAt: "2000-01-01T00:00:00.000Z" }));
+    await write(
+      "changed.json",
+      JSON.stringify({ ...saved, createdAt: "2000-01-01T00:00:00.000Z" }),
+    );
     await expect(verifyRepair(root, "changed.json")).rejects.toThrow("modified");
-    await write("invalid.json", JSON.stringify({ ...saved, report: { ...saved.report, checksRun: undefined } }));
+    await write(
+      "invalid.json",
+      JSON.stringify({ ...saved, report: { ...saved.report, checksRun: undefined } }),
+    );
     await expect(verifyRepair(root, "invalid.json")).rejects.toThrow();
     await expect(verifyRepair(root, "../outside.json")).rejects.toThrow("Invalid store path");
     await fs.symlink(file, path.join(root, "linked.json"));
@@ -200,14 +220,16 @@ describe("audit repair", () => {
     try {
       await fs.copyFile(path.join(root, prepared.baselinePath), path.join(other, "baseline.json"));
       await expect(verifyRepair(other, "baseline.json")).rejects.toThrow("different repository");
-    } finally { await fs.rm(other, { recursive: true, force: true }); }
+    } finally {
+      await fs.rm(other, { recursive: true, force: true });
+    }
   });
 
-  it.each(["commit", "doc"])("rejects an audit racing with a %s change", async change => {
+  it.each(["commit", "doc"])("rejects an audit racing with a %s change", async (change) => {
     await seed();
     const prepared = await prepareRepair(root, ["deleted-reference"]);
     const check = CHECKS["deleted-reference"];
-    vi.spyOn(CHECKS, "deleted-reference").mockImplementation(async ctx => {
+    vi.spyOn(CHECKS, "deleted-reference").mockImplementation(async (ctx) => {
       const result = await check(ctx);
       if (change === "commit") await git(["commit", "--allow-empty", "-m", "concurrent"], root);
       else await fs.appendFile(path.join(root, "CLAUDE.md"), "\nconcurrent edit");
@@ -217,12 +239,17 @@ describe("audit repair", () => {
     expect(result.status).toBe("incomplete");
     expect(result.findings[0].status).toBe("unverified");
     expect(result.diagnostics.join(" ")).toContain("changed during the audit");
-    await expect(prepareRepair(root, ["deleted-reference"])).rejects.toThrow("changed during the audit");
+    await expect(prepareRepair(root, ["deleted-reference"])).rejects.toThrow(
+      "changed during the audit",
+    );
   });
 
   it("keeps all findings when onboarding summaries truncate", async () => {
     await seed();
-    await write("CLAUDE.md", Array.from({ length: 25 }, (_, i) => "Path: `src/missing" + i + ".ts`.").join("\n"));
+    await write(
+      "CLAUDE.md",
+      Array.from({ length: 25 }, (_, i) => "Path: `src/missing" + i + ".ts`.").join("\n"),
+    );
     const init = JSON.parse(await masonInit(root, { base: "HEAD" }));
     expect(init.audit.truncated).toBe(true);
     expect(init.audit.advisories).toHaveLength(20);
@@ -236,15 +263,31 @@ describe("audit repair", () => {
     expect(preparedCli.code).toBe(1);
     const prepared = JSON.parse(preparedCli.out);
     expect((await cli(["--verify-repair", prepared.baselinePath])).code).toBe(1);
-    const preparedMcp = JSON.parse(await masonRepair(root, { action: "prepare", checks: ["deleted-reference"] }));
+    const preparedMcp = JSON.parse(
+      await masonRepair(root, { action: "prepare", checks: ["deleted-reference"] }),
+    );
     expect(preparedMcp.workOrder).toContain(preparedMcp.baselinePath);
     expect(preparedMcp.workOrder).toContain("setup-only");
     await write("CLAUDE.md", "Source: `src/kept.ts`.\n");
     expect((await cli(["--verify-repair", prepared.baselinePath])).code).toBe(0);
-    expect(JSON.parse(await masonRepair(root, { action: "verify", baselinePath: preparedMcp.baselinePath })).status).toBe("verified");
+    expect(
+      JSON.parse(
+        await masonRepair(root, { action: "verify", baselinePath: preparedMcp.baselinePath }),
+      ).status,
+    ).toBe("verified");
     expect(JSON.parse(await masonRepair(root, { action: "verify" })).status).toBe("unavailable");
-    expect(JSON.parse(await masonRepair(root, { action: "verify", baselinePath: preparedMcp.baselinePath, checks: ["new-module"] })).status).toBe("unavailable");
-    expect((await cli(["--verify-repair", prepared.baselinePath, "--checks", "new-module"])).code).toBe(2);
+    expect(
+      JSON.parse(
+        await masonRepair(root, {
+          action: "verify",
+          baselinePath: preparedMcp.baselinePath,
+          checks: ["new-module"],
+        }),
+      ).status,
+    ).toBe("unavailable");
+    expect(
+      (await cli(["--verify-repair", prepared.baselinePath, "--checks", "new-module"])).code,
+    ).toBe(2);
     expect((await cli(["--verify-repair"])).code).toBe(2);
     expect((await cli(["--checks", ","])).code).toBe(2);
   });

@@ -1,11 +1,6 @@
 import MarkdownIt from "markdown-it";
 import { commandClaims } from "./commands.js";
-import type {
-  CommandClaim,
-  CountClaim,
-  DocClaims,
-  PathClaim,
-} from "./types.js";
+import type { CommandClaim, CountClaim, DocClaims, PathClaim } from "./types.js";
 import { extractTreeClaims } from "./tree.js";
 
 /**
@@ -149,15 +144,24 @@ export function extractClaims(content: string): DocClaims {
 
   // A real Markdown parser distinguishes reference links, images and escaped
   // destinations from code examples. Ignore markers preserve source line offsets.
-  const parsed = markdown.parse(lines.map((line, i) => ignored[i] ? "" : line).join("\n"), {});
+  const parsed = markdown.parse(lines.map((line, i) => (ignored[i] ? "" : line)).join("\n"), {});
   for (const token of parsed) {
     if (token.type !== "inline" || !token.map) continue;
     let line = token.map[0] + 1;
     for (const child of token.children ?? []) {
-      const target = child.type === "link_open" ? child.attrGet("href") : child.type === "image" ? child.attrGet("src") : null;
-      if (target && !/^(?:[a-z][a-z0-9+.-]*:|[\/#~])/i.test(target)) {
+      const target =
+        child.type === "link_open"
+          ? child.attrGet("href")
+          : child.type === "image"
+            ? child.attrGet("src")
+            : null;
+      if (target && !/^(?:[a-z][a-z0-9+.-]*:|[/#~])/i.test(target)) {
         let pathname: string | null = null;
-        try { pathname = decodeURIComponent(target.split(/[?#]/)[0]); } catch { /* Unsupported URL encoding. */ }
+        try {
+          pathname = decodeURIComponent(target.split(/[?#]/)[0]);
+        } catch {
+          /* Unsupported URL encoding. */
+        }
         if (pathname && !/[$*?{}<>\\\x00-\x1f]/.test(pathname)) {
           addPath({ path: pathname, line, excerpt: target, relativeTo: "document" });
         }
@@ -246,9 +250,11 @@ export function extractClaims(content: string): DocClaims {
       });
     }
     for (const match of line.matchAll(/`([^`]+)`/g)) {
-      for (const claim of commandClaims(match[1], lineNo, undefined, true).claims) addCommand(claim);
+      for (const claim of commandClaims(match[1], lineNo, undefined, true).claims)
+        addCommand(claim);
     }
-    for (const claim of commandClaims(line.replace(/`[^`]+`/g, ""), lineNo).claims) addCommand(claim);
+    for (const claim of commandClaims(line.replace(/`[^`]+`/g, ""), lineNo).claims)
+      addCommand(claim);
   }
 
   // An unclosed fence still gets its block processed — trees at the end of a
