@@ -347,6 +347,17 @@ describe("staging and activation", () => {
   });
 });
 
+const testSignature = {
+  mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
+  messageSignature: {
+    messageDigest: { algorithm: "SHA2_256", digest: Buffer.from("digest").toString("base64") },
+    signature: Buffer.from("test").toString("base64"),
+  },
+  verificationMaterial: {
+    certificate: { rawBytes: Buffer.from("certificate").toString("base64") },
+  },
+};
+
 describe("signed release verification", () => {
   it("verifies the exact manifest bytes against the tag's publishing identity", async () => {
     const manifest = JSON.stringify(await services().fetchRelease());
@@ -354,12 +365,12 @@ describe("signed release verification", () => {
       .fn()
       .mockResolvedValueOnce(releaseList())
       .mockResolvedValueOnce(new Response(manifest))
-      .mockResolvedValueOnce(new Response('{"messageSignature":{"signature":"test"}}'));
+      .mockResolvedValueOnce(new Response(JSON.stringify(testSignature)));
     vi.stubGlobal("fetch", fetcher);
     await fetchVerifiedRelease(home, now);
     const { verify } = await import("sigstore");
     expect(verify).toHaveBeenCalledWith(
-      { messageSignature: { signature: "test" } },
+      testSignature,
       Buffer.from(manifest),
       expect.objectContaining({
         certificateIdentityURI:
@@ -372,6 +383,25 @@ describe("signed release verification", () => {
     expect(fetcher.mock.calls[1][0]).toContain("/download/v1.1.0/update.json");
     expect(fetcher.mock.calls[2][0]).toContain("/download/v1.1.0/update.sigstore.json");
   });
+  it.each([
+    null,
+    [],
+    { messageSignature: 42 },
+    { messageSignature: {} },
+    { ...testSignature, verificationMaterial: {} },
+  ])("rejects malformed signature bundles %j before verification", async (signature) => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(releaseList())
+        .mockResolvedValueOnce(new Response(JSON.stringify(await services().fetchRelease())))
+        .mockResolvedValueOnce(new Response(JSON.stringify(signature))),
+    );
+    await expect(fetchVerifiedRelease(home, now)).rejects.toThrow();
+    const { verify } = await import("sigstore");
+    expect(verify).not.toHaveBeenCalled();
+  });
   it("never falls back to unsigned checksums after verification fails", async () => {
     const { verify } = await import("sigstore");
     vi.mocked(verify).mockRejectedValueOnce(new Error("untrusted identity"));
@@ -381,7 +411,7 @@ describe("signed release verification", () => {
         .fn()
         .mockResolvedValueOnce(releaseList())
         .mockResolvedValueOnce(new Response(JSON.stringify(await services().fetchRelease())))
-        .mockResolvedValueOnce(new Response('{"messageSignature":{"signature":"test"}}')),
+        .mockResolvedValueOnce(new Response(JSON.stringify(testSignature))),
     );
     const install = vi.fn();
     await runAutomaticUpdate(

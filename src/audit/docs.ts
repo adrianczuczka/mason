@@ -64,7 +64,7 @@ async function dirtyDocs(resolvedRoot: string, files: string[]): Promise<Set<str
 
 /** Readme/instruction discovery shares the exact inventory used by automation. */
 export async function discoverDocPaths(root: string): Promise<string[]> {
-  let candidates: string[] = [];
+  let candidates: string[];
   try {
     candidates = await auditGitPaths(root, "documents");
   } catch (error) {

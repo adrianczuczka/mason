@@ -1,3 +1,4 @@
+import { isRecord } from "../utils/validation.js";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { inspectionGit } from "./inspection.js";
@@ -25,7 +26,8 @@ function declarations(file: string, source: string): Map<string, string> {
   const result = new Map<string, string>();
   if (!source) return result;
   if (path.posix.basename(file) === "package.json") {
-    const json = JSON.parse(source);
+    const json: unknown = JSON.parse(source);
+    if (!isRecord(json)) throw new Error("Invalid package manifest");
     for (const section of [
       "dependencies",
       "devDependencies",
@@ -33,29 +35,46 @@ function declarations(file: string, source: string): Map<string, string> {
       "optionalDependencies",
       "engines",
     ]) {
-      for (const [name, value] of Object.entries(json[section] ?? {})) {
+      const entries = json[section];
+      if (entries === undefined) continue;
+      if (!isRecord(entries) || !Object.values(entries).every((value) => typeof value === "string"))
+        throw new Error("Invalid dependency declarations: " + section);
+      for (const [name, value] of Object.entries(entries)) {
         if (typeof value === "string")
           result.set(name, [...(result.has(name) ? [result.get(name)] : []), value].join("; "));
       }
     }
   } else if (file.endsWith("libs.versions.toml")) {
-    const catalog = parseToml(source) as Record<string, any>;
-    for (const section of ["libraries", "plugins"])
-      for (const [alias, entry] of Object.entries(catalog[section] ?? {}) as [string, any][]) {
+    const catalog = parseToml(source);
+    const versions = catalog.versions;
+    for (const section of ["libraries", "plugins"]) {
+      const entries = catalog[section];
+      if (entries === undefined) continue;
+      if (!isRecord(entries)) throw new Error("Invalid version catalog: " + section);
+      for (const entry of Object.values(entries)) {
         if (typeof entry === "string") {
           const parts = entry.split(":");
           if (parts.length >= 3) result.set(parts.slice(0, -1).join(":"), parts.at(-1)!);
-        } else if (entry && typeof entry === "object") {
+        } else if (isRecord(entry)) {
           const name =
-            entry.module ?? (entry.group && entry.name ? `${entry.group}:${entry.name}` : entry.id);
+            entry.module ??
+            (typeof entry.group === "string" && typeof entry.name === "string"
+              ? `${entry.group}:${entry.name}`
+              : entry.id);
           const version =
             typeof entry.version === "string"
               ? entry.version
-              : catalog.versions?.[entry.version?.ref];
+              : isRecord(entry.version) &&
+                  typeof entry.version.ref === "string" &&
+                  isRecord(versions)
+                ? versions[entry.version.ref]
+                : undefined;
           if (typeof name === "string")
             result.set(name, typeof version === "string" ? version : "unspecified");
-        }
+          else throw new Error("Invalid version catalog entry");
+        } else throw new Error("Invalid version catalog entry");
       }
+    }
   } else if (/build\.gradle(?:\.kts)?$/.test(file)) {
     for (const match of source.matchAll(/["']([\w.-]+:[\w.-]+):([^"'\s]+)["']/g))
       result.set(match[1], match[2]);

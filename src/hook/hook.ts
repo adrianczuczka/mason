@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { isStringArray } from "../utils/validation.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -24,6 +26,15 @@ export interface HookStdin {
   tool_name?: string;
   tool_input?: { file_path?: string };
 }
+
+const hookStdinSchema = z.object({
+  session_id: z.string().optional(),
+  agent_id: z.string().optional(),
+  cwd: z.string().optional(),
+  hook_event_name: z.string().optional(),
+  tool_name: z.string().optional(),
+  tool_input: z.object({ file_path: z.string().optional() }).optional(),
+});
 
 export interface HookEnv {
   /** Override for tests; defaults to os.tmpdir(). */
@@ -71,8 +82,8 @@ function stateKey(input: HookStdin): string {
 
 async function loadInjected(stateFile: string): Promise<Set<string>> {
   try {
-    const parsed = JSON.parse(await fs.readFile(stateFile, "utf-8"));
-    return new Set(Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : []);
+    const parsed: unknown = JSON.parse(await fs.readFile(stateFile, "utf-8"));
+    return new Set(isStringArray(parsed) ? parsed : []);
   } catch {
     return new Set();
   }
@@ -142,7 +153,7 @@ function formatContext(
 export async function runHook(stdinText: string, env: HookEnv = {}): Promise<string | null> {
   let input: HookStdin;
   try {
-    input = JSON.parse(stdinText);
+    input = hookStdinSchema.parse(JSON.parse(stdinText));
   } catch {
     return null;
   }

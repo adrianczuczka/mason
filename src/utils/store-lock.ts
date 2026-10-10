@@ -1,29 +1,27 @@
+import { z } from "zod";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { storePath } from "./storage.js";
 
+const lockOwnerSchema = z.object({ host: z.string(), pid: z.number().int().positive() });
+
 async function lockDiagnostic(file: string): Promise<string> {
   let reason: string;
   try {
-    const owner = JSON.parse(await fs.readFile(file, "utf8"));
-    if (
-      !owner ||
-      typeof owner.host !== "string" ||
-      !Number.isInteger(owner.pid) ||
-      owner.pid <= 0
-    ) {
+    const owner = lockOwnerSchema.safeParse(JSON.parse(await fs.readFile(file, "utf8")));
+    if (!owner.success) {
       reason = "Lock owner data is incomplete or malformed.";
-    } else if (owner.host !== os.hostname()) {
+    } else if (owner.data.host !== os.hostname()) {
       reason = "The lock belongs to another host; its process cannot be checked locally.";
     } else {
       try {
-        process.kill(owner.pid, 0);
-        reason = `Local owner PID ${owner.pid} is still running.`;
+        process.kill(owner.data.pid, 0);
+        reason = `Local owner PID ${owner.data.pid} is still running.`;
       } catch (error) {
         reason =
           (error as NodeJS.ErrnoException).code === "ESRCH"
-            ? `Local owner PID ${owner.pid} has exited, but lock recovery has not completed.`
-            : `Local owner PID ${owner.pid} could not be checked.`;
+            ? `Local owner PID ${owner.data.pid} has exited, but lock recovery has not completed.`
+            : `Local owner PID ${owner.data.pid} could not be checked.`;
       }
     }
   } catch (error) {
@@ -71,7 +69,7 @@ export async function withStoreLock<T>(
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       // Do not steal malformed, remote, or live locks on a time-based guess.
       try {
-        const owner = JSON.parse(await fs.readFile(file, "utf8"));
+        const owner = lockOwnerSchema.parse(JSON.parse(await fs.readFile(file, "utf8")));
         if (owner.host === os.hostname() && Number.isInteger(owner.pid) && owner.pid > 0) {
           try {
             process.kill(owner.pid, 0);
@@ -82,7 +80,7 @@ export async function withStoreLock<T>(
               let guard;
               try {
                 guard = await fs.open(reclaim, "wx", 0o600);
-                const current = JSON.parse(await fs.readFile(file, "utf8"));
+                const current = lockOwnerSchema.parse(JSON.parse(await fs.readFile(file, "utf8")));
                 if (current.pid === owner.pid && current.host === owner.host) await fs.unlink(file);
               } finally {
                 if (guard) {
@@ -103,6 +101,7 @@ export async function withStoreLock<T>(
             file +
             ". " +
             (await lockDiagnostic(file)),
+          { cause: error },
         );
       await new Promise((resolve) => setTimeout(resolve, 40));
     }

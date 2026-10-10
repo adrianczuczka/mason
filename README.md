@@ -86,3 +86,17 @@ Earlier read-only decision-retrieval evaluations scored **9.0/10 with Mason vs 7
 - [Audits, repair verification, and CI evidence](docs/checks.md)
 - [Decisions, tools, and optional architecture maps](docs/reference.md)
 - [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md) · [MIT license](LICENSE)
+
+## Development
+
+For development, use Node 20 (20.19+), Node 22 (22.13+), or Node 24+.
+After `npm ci`, run `npm run format` to format TypeScript sources, tests, and tooling configs.
+CI checks formatting with `npm run format:check` and runs `npm run lint`,
+`npm run typecheck`, and the test suite. Run `npm test` locally to check behavior.
+
+ESLint uses the recommended TypeScript rules plus type-aware checks for unhandled
+promises, misused async callbacks, and invalid awaits. Prettier handles formatting.
+Test fixtures and generated outputs are excluded from formatting and linting.
+Production sources also reject explicit `any` and unsafe assignments, property
+access, calls, arguments, and returns. External data is validated before use.
+Test doubles keep the more permissive rules.

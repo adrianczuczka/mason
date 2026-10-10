@@ -1,3 +1,4 @@
+import { isRecord } from "../utils/validation.js";
 import { callLLM } from "../llm/providers.js";
 import type { MasonConfig } from "../llm/config.js";
 import type { FeatureEntry, FlowEntry, Snapshot } from "../snapshot/snapshot.js";
@@ -34,26 +35,32 @@ function buildPrompt(input: RewriteInput): string {
   return `Rewrite the descriptions below for a product audience. Return ONLY a JSON object of the form {"features": {"name": "rewritten description", ...}, "flows": {...}}.\n\n${JSON.stringify(input, null, 2)}`;
 }
 
+function rewriteRecords(value: unknown): Rewritten {
+  const strings = (input: unknown): Record<string, string> =>
+    isRecord(input)
+      ? Object.fromEntries(
+          Object.entries(input).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string",
+          ),
+        )
+      : {};
+  return isRecord(value)
+    ? { features: strings(value.features), flows: strings(value.flows) }
+    : { features: {}, flows: {} };
+}
+
 function parseRewriteResponse(raw: string): Rewritten {
   let cleaned = raw.trim();
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
   }
   try {
-    const parsed = JSON.parse(cleaned);
-    return {
-      features: parsed.features ?? {},
-      flows: parsed.flows ?? {},
-    };
+    return rewriteRecords(JSON.parse(cleaned));
   } catch {
     const match = raw.match(/\{[\s\S]*\}/);
     if (match) {
       try {
-        const parsed = JSON.parse(match[0]);
-        return {
-          features: parsed.features ?? {},
-          flows: parsed.flows ?? {},
-        };
+        return rewriteRecords(JSON.parse(match[0]));
       } catch {
         return { features: {}, flows: {} };
       }

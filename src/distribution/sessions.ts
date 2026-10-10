@@ -1,3 +1,4 @@
+import { hasErrorCode } from "../utils/validation.js";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
@@ -9,8 +10,8 @@ const leaseSchema = z.object({ pid: z.number().int().positive(), host: z.string(
 /** Called under the installation lock; uncertain ownership defers activation. */
 export async function hasRunningMcp(home: string): Promise<boolean> {
   const directory = await storePath(home, "sessions");
-  const files = await fs.readdir(directory).catch((error) => {
-    if (error.code === "ENOENT") return [];
+  const files = await fs.readdir(directory).catch((error: unknown) => {
+    if (hasErrorCode(error, "ENOENT")) return [];
     throw error;
   });
   for (const name of files) {

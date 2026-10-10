@@ -1,3 +1,4 @@
+import { isRecord, isStringArray } from "./validation.js";
 import { execGit } from "./git-read.js";
 import fs from "node:fs/promises";
 import { constants } from "node:fs";
@@ -114,24 +115,22 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
     const raw = await readBoundedFile(configPath, 64 * 1024);
     if (raw === null)
       throw new Error("Project configuration is not a regular file or exceeds 64 KiB");
-    const value = JSON.parse(raw);
-    if (!value || typeof value !== "object" || Array.isArray(value))
-      throw new Error("Expected a configuration object");
+    const value: unknown = JSON.parse(raw);
+    if (!isRecord(value)) throw new Error("Expected a configuration object");
     const config: ProjectConfig = {};
     for (const key of ["patterns", "alwaysInclude", "ignore"] as const) {
       if (value[key] === undefined) continue;
-      if (!Array.isArray(value[key]) || !value[key].every((s: unknown) => typeof s === "string")) {
+      if (!isStringArray(value[key])) {
         throw new Error(`Configuration ${key} must be an array of strings`);
       }
       config[key] = value[key];
     }
     if (value.audit !== undefined) {
       const audit = value.audit;
-      if (!audit || typeof audit !== "object" || Array.isArray(audit))
-        throw new Error("Configuration audit must be an object");
+      if (!isRecord(audit)) throw new Error("Configuration audit must be an object");
       const patterns = (raw: unknown): string[] => {
         if (
-          !Array.isArray(raw) ||
+          !isStringArray(raw) ||
           raw.length > 100 ||
           !raw.every(
             (s) =>
@@ -150,7 +149,7 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
       config.audit = {};
       if (audit.include !== undefined) config.audit.include = patterns(audit.include);
       if (audit.exclude !== undefined) {
-        if (!audit.exclude || typeof audit.exclude !== "object" || Array.isArray(audit.exclude))
+        if (!isRecord(audit.exclude))
           throw new Error("audit.exclude must map check names to patterns");
         const { ALL_CHECKS } = await import("../audit/types.js");
         config.audit.exclude = {};
@@ -166,6 +165,7 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw new Error(
       `Cannot apply project file policy: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
 }

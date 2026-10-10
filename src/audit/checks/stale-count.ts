@@ -1,3 +1,4 @@
+import { isRecord, isStringArray } from "../../utils/validation.js";
 import path from "node:path";
 import { documentScope } from "../docs.js";
 import { auditGlob, readAuditInput } from "../inputs.js";
@@ -35,12 +36,12 @@ async function countNpmWorkspaces(root: string): Promise<CountSource | null> {
   if (pkgRaw !== null) {
     let globs: string[] = [];
     try {
-      const pkg = JSON.parse(pkgRaw);
-      globs = Array.isArray(pkg.workspaces)
-        ? pkg.workspaces
-        : Array.isArray(pkg.workspaces?.packages)
-          ? pkg.workspaces.packages
-          : [];
+      const pkg: unknown = JSON.parse(pkgRaw);
+      if (!isRecord(pkg)) return null;
+      const workspaces = isRecord(pkg.workspaces) ? pkg.workspaces.packages : pkg.workspaces;
+      // A malformed declaration cannot establish a workspace count.
+      if (workspaces !== undefined && !isStringArray(workspaces)) return null;
+      globs = workspaces ?? [];
     } catch {
       // Malformed package.json — nothing provable here.
     }

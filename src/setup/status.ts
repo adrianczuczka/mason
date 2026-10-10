@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { hash, workspace } from "../automation/evidence.js";
-import { events, type Host } from "../automation/store.js";
+import { events } from "../automation/store.js";
 import { automationStatus } from "../automation/runtime.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
 import { hookConfig } from "../automation/adapters.js";

@@ -203,7 +203,7 @@ describe("decisions", () => {
       const [before] = await loadDecisions(tmpDir);
 
       await fs.writeFile(path.join(tmpDir, "src", "api.ts"), "export const api = 2;\n");
-      const newHead = await commitAll(tmpDir, "change api");
+      await commitAll(tmpDir, "change api");
 
       const result = await upsertDecision(tmpDir, {
         id: before.id,
@@ -226,7 +226,7 @@ describe("decisions", () => {
       });
       const [before] = await loadDecisions(tmpDir);
       await fs.writeFile(path.join(tmpDir, "src", "api.ts"), "export const api = 3;\n");
-      const newHead = await commitAll(tmpDir, "change api again");
+      await commitAll(tmpDir, "change api again");
 
       const result = await upsertDecision(tmpDir, {
         id: before.id,

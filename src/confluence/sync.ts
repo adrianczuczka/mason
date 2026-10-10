@@ -1,5 +1,5 @@
 import { loadSnapshot } from "../snapshot/snapshot.js";
-import type { MasonConfig, ConfluenceConfig } from "../llm/config.js";
+import type { MasonConfig } from "../llm/config.js";
 import { createConfluenceClient, type ConfluenceClient } from "./client.js";
 import {
   renderFeaturePage,

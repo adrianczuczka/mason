@@ -1,3 +1,4 @@
+import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -42,6 +43,29 @@ export interface SyncState {
   pageHashes?: Record<string, string>;
 }
 
+const descriptionsSchema = z.record(z.object({ description: z.string() }));
+const cacheSchema = z.object({
+  features: z.record(
+    z.object({ sourceHash: z.string(), product: z.string(), fallback: z.boolean().optional() }),
+  ),
+  flows: z.record(
+    z.object({ sourceHash: z.string(), product: z.string(), fallback: z.boolean().optional() }),
+  ),
+});
+const syncStateSchema = z.object({
+  version: z.literal(2),
+  syncedAt: z.string(),
+  pageIds: z.object({
+    index: z.string().optional(),
+    changelog: z.string().optional(),
+    features: z.record(z.string()),
+  }),
+  lastSnapshot: z.object({ features: descriptionsSchema, flows: descriptionsSchema }),
+  changelogSections: z.array(z.string()),
+  rewriteCache: cacheSchema,
+  pageHashes: z.record(z.string()).optional(),
+});
+
 /** Stable content hash of a source description, for cache invalidation. */
 export function hashDescription(description: string): string {
   return createHash("sha256").update(description, "utf8").digest("hex");
@@ -58,11 +82,10 @@ function syncStatePath(rootDir: string): string {
 export async function loadSyncState(rootDir: string): Promise<SyncState | null> {
   try {
     const raw = await fs.readFile(syncStatePath(rootDir), "utf-8");
-    const parsed = JSON.parse(raw);
+    const parsed = syncStateSchema.safeParse(JSON.parse(raw));
     // Only v2 state is usable. Older state (v1) is treated as absent: the next
     // export re-finds pages by title and rebuilds the rewrite cache from scratch.
-    if (parsed.version !== 2) return null;
-    return parsed;
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

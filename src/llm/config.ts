@@ -1,3 +1,4 @@
+import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -24,6 +25,22 @@ export interface MasonConfig {
   confluence?: ConfluenceConfig;
 }
 
+const masonConfigSchema = z.object({
+  provider: z.enum(["claude", "gemini", "openai", "ollama"]),
+  apiKey: z.string().optional(),
+  model: z.string().optional(),
+  ollamaHost: z.string().optional(),
+  confluence: z
+    .object({
+      baseUrl: z.string(),
+      email: z.string(),
+      apiToken: z.string(),
+      spaceKey: z.string(),
+      parentPageId: z.string().optional(),
+    })
+    .optional(),
+});
+
 function configDir(): string {
   return path.join(os.homedir(), ".mason");
 }
@@ -42,7 +59,7 @@ const DEFAULT_MODELS: Record<Provider, string> = {
 export async function loadConfig(): Promise<MasonConfig | null> {
   try {
     const raw = await fs.readFile(configFile(), "utf-8");
-    return JSON.parse(raw);
+    return masonConfigSchema.parse(JSON.parse(raw));
   } catch {
     return null;
   }

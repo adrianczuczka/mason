@@ -1,3 +1,4 @@
+import { isRecord } from "../utils/validation.js";
 import fs from "node:fs/promises";
 import { z } from "zod";
 import { workspace, hash } from "./evidence.js";
@@ -290,23 +291,18 @@ export function retrievedDecisions(
 ): string[] | undefined {
   if (!/(?:^|__)mason__get_context$/.test(tool ?? "")) return undefined;
   try {
-    let value = typeof response === "string" ? JSON.parse(response) : response;
-    if (value?.isError) return undefined;
+    let value: unknown = typeof response === "string" ? JSON.parse(response) : response;
+    if (!isRecord(value)) return undefined;
+    if (value.isError) return undefined;
     if (Array.isArray(value?.content)) {
-      const text = value.content.find(
-        (item: { type?: string; text?: string }) =>
-          item?.type === "text" && typeof item.text === "string",
-      )?.text;
-      if (!text) return undefined;
+      const block: unknown = value.content.find(
+        (item: unknown) => isRecord(item) && item.type === "text" && typeof item.text === "string",
+      );
+      if (!isRecord(block) || typeof block.text !== "string" || !block.text) return undefined;
+      const text = block.text;
       value = JSON.parse(text);
     }
-    if (
-      !value ||
-      typeof value.decisions !== "object" ||
-      !value.decisions ||
-      Array.isArray(value.decisions)
-    )
-      return undefined;
+    if (!isRecord(value) || !isRecord(value.decisions)) return undefined;
     return Object.keys(value.decisions)
       .filter((id) => /^[a-zA-Z0-9_-]{1,200}$/.test(id))
       .slice(0, 200);

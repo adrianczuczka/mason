@@ -155,7 +155,7 @@ export function extractClaims(content: string): DocClaims {
           : child.type === "image"
             ? child.attrGet("src")
             : null;
-      if (target && !/^(?:[a-z][a-z0-9+.-]*:|[\/#~])/i.test(target)) {
+      if (target && !/^(?:[a-z][a-z0-9+.-]*:|[/#~])/i.test(target)) {
         let pathname: string | null = null;
         try {
           pathname = decodeURIComponent(target.split(/[?#]/)[0]);

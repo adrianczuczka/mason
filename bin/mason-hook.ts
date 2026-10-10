@@ -4,7 +4,9 @@ async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return "";
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
-    chunks.push(Buffer.from(chunk));
+    const value: unknown = chunk;
+    if (typeof value === "string" || value instanceof Uint8Array) chunks.push(Buffer.from(value));
+    else throw new Error("Unsupported stdin chunk.");
   }
   return Buffer.concat(chunks).toString("utf-8");
 }

@@ -50,7 +50,7 @@ const MANIFEST_PATHSPECS = [
 export function manifestPathspecs(doc: string): string[] {
   const scope = documentScope(doc);
   if (scope === ".") return MANIFEST_PATHSPECS;
-  const escaped = scope.replace(/[\\*?\[\]]/g, "\\$&");
+  const escaped = scope.replace(/[\\*?[\]]/g, "\\$&");
   return MANIFEST_PATHSPECS.map((spec) =>
     spec.startsWith(":(glob)")
       ? ":(glob)" + escaped + "/" + spec.slice(":(glob)".length)

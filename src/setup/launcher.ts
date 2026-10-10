@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
@@ -27,10 +28,12 @@ export async function installedCommand() {
       maxBuffer: 8192,
       windowsHide: true,
     });
-    const result = JSON.parse(stdout);
+    const result = z
+      .object({ protocol: z.literal(1), version: z.string() })
+      .parse(JSON.parse(stdout));
     if (result.protocol !== 1 || typeof result.version !== "string")
       throw new Error("Unsupported Mason integration protocol.");
-    return { available: true, version: result.version as string, message: null };
+    return { available: true, version: result.version, message: null };
   } catch {
     return {
       available: false,

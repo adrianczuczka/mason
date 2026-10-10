@@ -234,7 +234,7 @@ export async function computeDrift(rootDir: string): Promise<DriftReport | null>
     },
   };
   const counts = await Promise.all(
-    [...hashes].map((hash) => (hash === headHash ? 0 : countCommitsBehind(root, hash))),
+    [...hashes].map(async (hash) => (hash === headHash ? 0 : countCommitsBehind(root, hash))),
   );
   const knownCounts = counts.filter((n): n is number => n !== null);
   report.commitsBehind = knownCounts.length ? Math.max(...knownCounts) : null;

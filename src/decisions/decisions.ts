@@ -36,7 +36,7 @@ const boundedText = (field: string, max: number, hint: string) =>
     .string({
       errorMap: (issue, ctx) => ({
         message:
-          issue.code === "too_big"
+          issue.code === "too_big" && typeof ctx.data === "string"
             ? `${field} has ${ctx.data.length} characters; maximum is ${max} (${ctx.data.length - max} over). ${hint}`
             : ctx.defaultError,
       }),

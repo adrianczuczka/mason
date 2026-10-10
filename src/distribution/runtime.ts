@@ -1,3 +1,4 @@
+import { hasErrorCode } from "../utils/validation.js";
 import fs from "node:fs/promises";
 import { unlinkSync } from "node:fs";
 import os from "node:os";
@@ -73,8 +74,8 @@ export async function pruneUnusedVersions(home: string) {
     const record = await readInstallation(home);
     const keep = new Set([record.current, record.previous?.id, record.pending?.id]);
     const directory = await storePath(home, "runtimes");
-    const leases = await fs.readdir(directory).catch((error) => {
-      if (error.code === "ENOENT") return [];
+    const leases = await fs.readdir(directory).catch((error: unknown) => {
+      if (hasErrorCode(error, "ENOENT")) return [];
       throw error;
     });
     for (const name of leases) {

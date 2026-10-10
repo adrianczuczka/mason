@@ -1,3 +1,4 @@
+import { hasErrorCode } from "../utils/validation.js";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -96,8 +97,8 @@ export async function configurePath(
         if (
           await fs.lstat(file).then(
             () => true,
-            (error) => {
-              if (error.code === "ENOENT") return false;
+            (error: unknown) => {
+              if (hasErrorCode(error, "ENOENT")) return false;
               throw error;
             },
           )
@@ -111,13 +112,13 @@ export async function configurePath(
     for (const profile of profiles) {
       // Preserve symlinked dotfiles by updating their target. A dangling link is
       // an error, not permission to replace the link with an unrelated file.
-      const stat = await fs.lstat(profile).catch((error) => {
-        if (error.code === "ENOENT") return null;
+      const stat = await fs.lstat(profile).catch((error: unknown) => {
+        if (hasErrorCode(error, "ENOENT")) return null;
         throw error;
       });
       const file = stat?.isSymbolicLink() ? await fs.realpath(profile) : path.resolve(profile);
-      const original = await fs.readFile(file).catch((error) => {
-        if (error.code === "ENOENT" && !stat) return null;
+      const original = await fs.readFile(file).catch((error: unknown) => {
+        if (hasErrorCode(error, "ENOENT") && !stat) return null;
         throw error;
       });
       if (original && !Buffer.from(original.toString("utf8")).equals(original))
@@ -181,8 +182,8 @@ export async function removePath(changes: PathChange[]): Promise<string[]> {
         await windowsPath("remove", change.entry, current, change.created);
         continue;
       }
-      const stat = await fs.lstat(change.file).catch((error) => {
-        if (error.code === "ENOENT") return null;
+      const stat = await fs.lstat(change.file).catch((error: unknown) => {
+        if (hasErrorCode(error, "ENOENT")) return null;
         throw error;
       });
       if (!stat) continue;
@@ -302,5 +303,7 @@ try {
     ],
     { windowsHide: true, timeout: 15000, maxBuffer: 1024 * 1024 },
   );
-  return JSON.parse(stdout.replace(/^\uFEFF/, "").trim());
+  return z
+    .object({ value: z.string().nullable(), kind: z.string().nullable() })
+    .parse(JSON.parse(stdout.replace(/^\uFEFF/, "").trim()));
 }

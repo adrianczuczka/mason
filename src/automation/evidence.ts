@@ -1,3 +1,4 @@
+import { hasErrorCode } from "../utils/validation.js";
 import { captureAnchorScopes } from "../decisions/anchors.js";
 import { loadDecisionStore, readDecisionInputs } from "../decisions/decisions.js";
 import { decisionAnchors, latestDecisionInspection } from "../decisions/provenance.js";
@@ -132,8 +133,8 @@ async function collectInputs(root: string): Promise<Inputs> {
   const decisionDirectory = await storePath(root, ".mason/decisions");
   const decisionPresence = await fs.lstat(decisionDirectory).then(
     (stat) => (stat.isDirectory() ? "directory" : "file"),
-    (error) => {
-      if (error.code === "ENOENT") return "absent";
+    (error: unknown) => {
+      if (hasErrorCode(error, "ENOENT")) return "absent";
       throw error;
     },
   );

@@ -17,7 +17,6 @@ import * as setupFiles from "../src/setup/files.js";
 import { runAutomationHook } from "../src/automation/adapters.js";
 import { automate } from "../src/automation/runtime.js";
 import { workspace } from "../src/automation/evidence.js";
-import { recordExecution } from "../src/automation/execution.js";
 import { runAutomationCli, isHookCommand } from "../src/automation/cli.js";
 import { masonInit, getContext } from "../src/mcp/tools.js";
 import { createMcpServer } from "../src/mcp/server.js";

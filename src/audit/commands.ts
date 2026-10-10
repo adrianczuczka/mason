@@ -8,7 +8,7 @@ const COMMAND = new RegExp(
 );
 const literal = (value: string) => {
   const unquoted = value.replace(/^(["'])(.*)\1$/, "$2");
-  return /[$`*?\[\]{}~\\\x00-\x1f]/.test(unquoted) || path.posix.isAbsolute(unquoted)
+  return /[$`*?[\]{}~\\\x00-\x1f]/.test(unquoted) || path.posix.isAbsolute(unquoted)
     ? null
     : unquoted;
 };

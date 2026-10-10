@@ -1,3 +1,4 @@
+import { isRecord } from "../../utils/validation.js";
 import path from "node:path";
 import { auditGlob, readAuditInput } from "../inputs.js";
 import { documentScope } from "../docs.js";
@@ -9,12 +10,10 @@ import { emptyResult } from "./index.js";
 const AVAILABLE_SCRIPTS_CAP = 30;
 function scriptsOf(raw: string): string[] | null {
   try {
-    const pkg = JSON.parse(raw);
-    if (!pkg || typeof pkg !== "object" || Array.isArray(pkg)) return null;
+    const pkg: unknown = JSON.parse(raw);
+    if (!isRecord(pkg)) return null;
     if (pkg.scripts === undefined) return [];
-    return pkg.scripts &&
-      typeof pkg.scripts === "object" &&
-      !Array.isArray(pkg.scripts) &&
+    return isRecord(pkg.scripts) &&
       Object.values(pkg.scripts).every((value) => typeof value === "string")
       ? Object.keys(pkg.scripts)
       : null;

@@ -5,7 +5,6 @@ import os from "node:os";
 import {
   renderFeaturePage,
   renderIndexPage,
-  renderChangelogPage,
   renderChangelogSection,
 } from "../src/confluence/renderer.js";
 import {

@@ -1,3 +1,4 @@
+import { isRecord } from "../utils/validation.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -53,8 +54,12 @@ async function boundedDownload(url: string): Promise<Buffer> {
   let size = 0;
   try {
     for (;;) {
-      const { value, done } = await reader.read();
+      const chunk: unknown = await reader.read();
+      if (!isRecord(chunk) || typeof chunk.done !== "boolean")
+        throw new Error("Invalid update metadata stream.");
+      const { value, done } = chunk;
       if (done) break;
+      if (!(value instanceof Uint8Array)) throw new Error("Invalid update metadata stream.");
       size += value.length;
       if (size > 1024 * 1024) throw new Error("Update metadata is too large.");
       chunks.push(value);
@@ -98,17 +103,23 @@ export async function fetchVerifiedRelease(home: string, now = Date.now()) {
   const manifest = updateManifestSchema.parse(JSON.parse(bytes.toString("utf8")));
   if (manifest.version !== selected)
     throw new Error("Signed manifest does not match the selected release.");
-  const signature = JSON.parse(
+  const signature: unknown = JSON.parse(
     (
       await boundedDownload(`${releaseBase}/download/v${manifest.version}/update.sigstore.json`)
     ).toString("utf8"),
   );
   // DSSE verifies its embedded payload, ignoring an external artifact argument.
   // Accept only detached message signatures that bind these exact manifest bytes.
-  if (!signature?.messageSignature || signature.dsseEnvelope)
+  if (
+    !isRecord(signature) ||
+    !isRecord(signature.messageSignature) ||
+    signature.dsseEnvelope !== undefined
+  )
     throw new Error("Update metadata requires a detached message signature.");
+  const { bundleFromJSON, bundleToJSON } = await import("@sigstore/bundle");
+  const bundle = bundleToJSON(bundleFromJSON(signature));
   const { verify } = await import("sigstore");
-  await verify(signature, bytes, {
+  await verify(bundle, bytes, {
     certificateIdentityURI: `https://github.com/adrianczuczka/mason/.github/workflows/publish.yml@refs/tags/v${manifest.version}`,
     certificateIssuer: "https://token.actions.githubusercontent.com",
     tufCachePath: await storePath(home, "sigstore-cache"),

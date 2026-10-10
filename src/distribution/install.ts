@@ -1,3 +1,4 @@
+import { hasErrorCode } from "../utils/validation.js";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -172,8 +173,8 @@ finally { $env:MASON_UNINSTALL_TOKEN = $previousToken }
         };
   for (const [name, content] of Object.entries(launchers)) {
     const file = await storePath(bin, name);
-    const old = await fs.readFile(file, "utf8").catch((error) => {
-      if (error.code === "ENOENT") return null;
+    const old = await fs.readFile(file, "utf8").catch((error: unknown) => {
+      if (hasErrorCode(error, "ENOENT")) return null;
       throw error;
     });
     if (
@@ -192,8 +193,8 @@ finally { $env:MASON_UNINSTALL_TOKEN = $previousToken }
   );
   const checkRetired = async (name: string, expected: string) => {
     if (!launcherNames.includes(name)) throw new Error("Invalid owned launcher name.");
-    const actual = await fs.readFile(await storePath(bin, name), "utf8").catch((error) => {
-      if (error.code === "ENOENT") return null;
+    const actual = await fs.readFile(await storePath(bin, name), "utf8").catch((error: unknown) => {
+      if (hasErrorCode(error, "ENOENT")) return null;
       throw error;
     });
     if (actual !== null && actual !== expected)
@@ -284,8 +285,8 @@ async function copyBundle(
 ) {
   const exists = await fs.lstat(destination).then(
     () => true,
-    (error) => {
-      if (error.code === "ENOENT") return false;
+    (error: unknown) => {
+      if (hasErrorCode(error, "ENOENT")) return false;
       throw error;
     },
   );
@@ -404,7 +405,7 @@ export async function upgradeStandalone(version?: string, progress?: Progress) {
       method: "HEAD",
       redirect: "follow",
       signal: AbortSignal.timeout(30000),
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       throw releaseRequestError(error);
     });
     if (!response.ok) throw new Error(`Latest release request failed (HTTP ${response.status}).`);
@@ -485,8 +486,8 @@ export async function uninstallStandalone() {
     for (const [name, expected] of Object.entries(record.launchers)) {
       if (!launcherNames.includes(name)) throw new Error("Invalid owned launcher name.");
       const file = await storePath(record.bin, name);
-      const actual = await fs.readFile(file, "utf8").catch((error) => {
-        if (error.code === "ENOENT") return null;
+      const actual = await fs.readFile(file, "utf8").catch((error: unknown) => {
+        if (hasErrorCode(error, "ENOENT")) return null;
         throw error;
       });
       if (actual !== null && actual !== expected)

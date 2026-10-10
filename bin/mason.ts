@@ -178,7 +178,10 @@ try {
     let input = "";
     if (isHookCommand(forwarded) && !process.stdin.isTTY)
       for await (const chunk of process.stdin) {
-        input += chunk.toString();
+        const value: unknown = chunk;
+        if (typeof value === "string") input += value;
+        else if (value instanceof Uint8Array) input += Buffer.from(value).toString();
+        else throw new Error("Unsupported stdin chunk.");
         if (Buffer.byteLength(input) > 1024 * 1024) break;
       }
     process.exitCode = await runAutomationCli(forwarded, input, undefined, {

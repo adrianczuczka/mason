@@ -55,15 +55,22 @@ export async function ownershipEdit(
         }),
       ),
     };
+    const hostConfig: unknown = edit.path.endsWith(".json") ? JSON.parse(edit.after) : undefined;
+    const parsedHost = z
+      .object({
+        mcpServers: z.record(z.unknown()).optional(),
+        hooks: z.record(z.array(z.object({ hooks: z.array(z.unknown()) }))).optional(),
+      })
+      .parse(hostConfig ?? {});
     const mcp =
       edit.path === ".codex/config.toml"
         ? (parse(edit.after).mcp_servers as Record<string, unknown>)?.mason
         : edit.path === ".mcp.json"
-          ? JSON.parse(edit.after).mcpServers?.mason
+          ? parsedHost.mcpServers?.mason
           : undefined;
     const hooks =
       edit.path === ".codex/hooks.json" || edit.path === ".claude/settings.json"
-        ? (JSON.parse(edit.after).hooks as Record<string, Array<{ hooks: unknown[] }>> | undefined)
+        ? parsedHost.hooks
         : undefined;
     record.files[edit.path] = {
       ...entry,

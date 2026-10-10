@@ -63,8 +63,8 @@ export async function readSnapshotTrustIndex(
   snapshot: Snapshot,
   drift: DriftReport | null,
 ) {
-  const features: Record<string, TrustState> = Object.create(null),
-    flows: Record<string, TrustState> = Object.create(null);
+  const features: Record<string, TrustState> = Object.create(null) as Record<string, TrustState>,
+    flows: Record<string, TrustState> = Object.create(null) as Record<string, TrustState>;
   for (const [name, entry] of Object.entries(snapshot.features)) {
     features[name] = await readTrust(
       "feature",

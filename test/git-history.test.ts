@@ -5,7 +5,6 @@ import os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { GitHistoryAnalyzer } from "../src/analyzers/git-history.js";
-import type { AnalyzerContext } from "../src/types.js";
 import { fixturePath } from "./helpers.js";
 
 const exec = promisify(execFile);

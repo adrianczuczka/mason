@@ -1,13 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { prepareRepair, verifyRepair } from "../audit/repair.js";
 import { reviewAdvisory, type AdvisoryReviewInput } from "../audit/advisory-review.js";
 import { formatFixPrompt } from "../audit/cli.js";
 import type { CheckName } from "../audit/types.js";
 
-const exec = promisify(execFile);
 import { runAll } from "../analyzers/index.js";
 import { isGitRepo } from "../utils/git.js";
 import { sampleFiles } from "./sampler.js";
@@ -227,13 +224,12 @@ const UNINIT_MAX_TEST_PAIRS = 30;
 
 /** Keep architecture requests useful when the optional map is absent. */
 async function unmappedContextResponse(rootDir: string): Promise<string> {
-  const [structureRaw, analyzerResults, testMap] = await Promise.all([
-    getProjectStructure(rootDir),
+  const [structure, analyzerResults, testMap] = await Promise.all([
+    projectStructure(rootDir),
     runAll(await buildContext(rootDir)).catch(() => []),
     import("../test-map.js").then((m) => m.buildTestMap(rootDir)).catch(() => null),
   ]);
 
-  const structure = JSON.parse(structureRaw);
   structure.directories = (structure.directories ?? [])
     .sort((a: { fileCount: number }, b: { fileCount: number }) => b.fileCount - a.fileCount)
     .slice(0, UNINIT_MAX_DIRECTORIES);
@@ -259,6 +255,10 @@ async function unmappedContextResponse(rootDir: string): Promise<string> {
 }
 
 export async function getProjectStructure(dir: string): Promise<string> {
+  return JSON.stringify(await projectStructure(dir), null, 2);
+}
+
+async function projectStructure(dir: string) {
   const rootDir = path.resolve(dir);
 
   // Get all files
@@ -304,7 +304,7 @@ export async function getProjectStructure(dir: string): Promise<string> {
     directories,
   };
 
-  return JSON.stringify(output, null, 2);
+  return output;
 }
 
 export async function getTestMap(dir: string): Promise<string> {

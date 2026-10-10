@@ -1,9 +1,6 @@
-import { execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import type { MasonConfig } from "./config.js";
 import { getDefaultModel } from "./config.js";
-
-const exec = promisify(execFile);
 
 const CLAUDE_MD_SYSTEM_PROMPT = `You are Mason, a context engineering tool. You've been given a comprehensive analysis of a codebase including:
 - Git history stats (commit patterns, frequently changed files, stale directories)
@@ -91,31 +88,6 @@ function formatPromptForCopy(system: string, userMessage: string): string {
 }
 
 // === CLI-based providers (no API key) ===
-
-async function callViaTempFile(
-  command: string,
-  args: (promptPath: string) => string[],
-  system: string,
-  userMessage: string,
-): Promise<string> {
-  const fs = await import("node:fs/promises");
-  const os = await import("node:os");
-  const path = await import("node:path");
-
-  const prompt = `${system}\n\n${userMessage}`;
-  const tmpFile = path.join(os.tmpdir(), `mason-prompt-${Date.now()}.txt`);
-
-  try {
-    await fs.writeFile(tmpFile, prompt, "utf-8");
-    const { stdout } = await exec(command, args(tmpFile), {
-      maxBuffer: 10_000_000,
-      timeout: 300_000,
-    });
-    return stdout.trim();
-  } finally {
-    await fs.unlink(tmpFile).catch(() => {});
-  }
-}
 
 function spawnWithStdin(command: string, args: string[], input: string): Promise<string> {
   return new Promise((resolve, reject) => {

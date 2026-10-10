@@ -41,13 +41,12 @@ async function scripts() {
     new URL("../.github/workflows/mason-audit.yml", import.meta.url),
     "utf8",
   );
-  return [
-    ...workflow.matchAll(/          node --input-type=module <<'NODE'\n([\s\S]*?)          NODE/g),
-  ].map((match) =>
-    match[1]
-      .split("\n")
-      .map((line) => line.replace(/^          /, ""))
-      .join("\n"),
+  return [...workflow.matchAll(/ {10}node --input-type=module <<'NODE'\n([\s\S]*?) {10}NODE/g)].map(
+    (match) =>
+      match[1]
+        .split("\n")
+        .map((line) => line.replace(/^ {10}/, ""))
+        .join("\n"),
   );
 }
 async function run(script: string) {
