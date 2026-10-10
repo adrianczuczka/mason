@@ -24,6 +24,8 @@ Mason separately reads files and Git history needed by the requested checks or t
 | `~/.mason/config.json` | Optional Confluence credentials and LLM configuration. User-level JSON; credentials are not encrypted by Mason. |
 | Standalone installation directory | Executable, bundled Node, dependencies, receipts, update policy and last-attempt diagnostics, staged/previous versions, command and MCP process leases, and cached Sigstore trust metadata. Defaults to `~/.local/share/mason` or `%LOCALAPPDATA%\Mason`. |
 
+Claude Stop review tracking stores per-session pending anchor captures (file paths and content hashes), observed edited-file hashes, decision evidence digests, and delivery receipts under `.mason/reports/automation/`. Its local `stopBlock` preference defaults to `drift`; `off` disables blocking. Tracking stores no source bytes or tool arguments. Concurrent edits may contribute to observed changes.
+
 Teardown disconnects integrations but retains knowledge and evidence. Uninstall removes the standalone installation but keeps project data and optional user configuration. Review ignore rules before committing; they are not an access-control boundary. Mason runs with the invoking process's filesystem permissions.
 
 ## Network operations

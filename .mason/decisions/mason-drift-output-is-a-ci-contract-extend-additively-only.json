@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "mason-drift-output-is-a-ci-contract-extend-additively-only",
   "title": "mason-drift output is a CI contract — extend additively only",
   "body": "External CI pipelines consume the 0/1/2 exit codes and the --json shape, and 'stale' there means MAP staleness specifically. Decision drift (2026-07) was added as a parallel computeDecisionDrift with an optional extra JSON key for exactly this reason. Any future staleness source must follow the same pattern: new optional keys, never changed exit-code semantics.",
@@ -11,5 +11,50 @@
   "createdAt": "2026-07-22T14:19:45.359Z",
   "updatedAt": "2026-09-04T21:23:42.596Z",
   "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f",
-  "status": "active"
+  "status": "active",
+  "approval": "unreviewed",
+  "revision": 1,
+  "sources": [],
+  "history": [
+    {
+      "kind": "imported",
+      "at": "2026-10-10T10:06:48.146Z",
+      "note": "Imported a legacy record. Prior authorship and review history are unknown.",
+      "revision": 1,
+      "content": {
+        "title": "mason-drift output is a CI contract — extend additively only",
+        "body": "External CI pipelines consume the 0/1/2 exit codes and the --json shape, and 'stale' there means MAP staleness specifically. Decision drift (2026-07) was added as a parallel computeDecisionDrift with an optional extra JSON key for exactly this reason. Any future staleness source must follow the same pattern: new optional keys, never changed exit-code semantics.",
+        "category": "convention",
+        "files": [
+          "src/drift/cli.ts",
+          "src/decisions/drift.ts"
+        ],
+        "sources": []
+      },
+      "approval": "unreviewed",
+      "status": "active",
+      "refreshedHash": "49af6a39bb76ac0d5cca66abb33994b47635087f"
+    }
+  ],
+  "inspections": [
+    {
+      "at": "2026-10-10T10:06:48.147Z",
+      "inspector": "Codex",
+      "note": "Inspected src/decisions/drift.ts and src/drift/cli.ts. Local anchor paths now join the existing decision-drift file list. CLI still adds decisions separately to JSON, and exits 0/1/2 solely from map drift/history; decision advisories do not affect exit codes. No contradiction found with the additive CI contract. This is source inspection, not human acceptance.",
+      "outcome": "no_contradiction_found",
+      "decisionDigest": "9b38a09dbf25f63dbd02146066257cf1fb1000e5099bd953122fcb3087f9b97b",
+      "headHash": "b3fe5c6f58b89edf90c275a1b0b7d5e40706243f",
+      "capture": {
+        "anchors": [
+          "src/decisions/drift.ts",
+          "src/drift/cli.ts"
+        ],
+        "files": {
+          "src/decisions/drift.ts": "51294a196dca554485bf8e71b23344b713b5b5a65566e20b4013eb2c1c0ff59f",
+          "src/drift/cli.ts": "cf64aa280c6bb3233fb7ade657bb912a871dfbf722945638abe56ab5b2234f54"
+        },
+        "complete": true
+      }
+    }
+  ]
 }

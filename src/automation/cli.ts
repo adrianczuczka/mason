@@ -1,3 +1,4 @@
+import { configureStopBlock } from "./config.js";
 import {
   configureUsefulness,
   rateUsefulness,
@@ -47,6 +48,7 @@ const USAGE = `Usage: mason auto <setup|teardown|install|config|status|check|hoo
   teardown [--host claude|codex] Disconnect one host or all project hosts; retain knowledge and evidence
   install --host claude|codex  Merge lifecycle hooks into this project's host config
   config --host claude|codex   Print the host config without writing
+  config --stop-block off|drift Set local Claude Stop review behavior (default: drift)
   status                      Read configured hooks and observed runtime events
   stats                       Aggregate local observations; --enable/--disable to configure
                               Rate with --session <id> --finding <id> --rating helpful|already-knew|irrelevant|deferred
@@ -61,7 +63,8 @@ const USAGE = `Usage: mason auto <setup|teardown|install|config|status|check|hoo
 
 check exits 0 for verified checks, 1 for issues, 2 for incomplete/unavailable.
 teardown exits 0 for complete/no-op, 2 when cleanup needs attention (also in dry runs).
-Hooks are advisory and exit 0; a failed capture is reported explicitly.
+Hooks exit 0; Claude Stop can block once for uninspected session anchor edits.
+Re-entry and Codex remain advisory; failed captures are reported explicitly.
 Local evidence is written under .mason/reports/. No LLM calls or source edits.`;
 
 const parseCli = (argv: string[]) =>
@@ -72,6 +75,7 @@ const parseCli = (argv: string[]) =>
       dir: { type: "string" },
       host: { type: "string" },
       command: { type: "string" },
+      "stop-block": { type: "string" },
       json: { type: "boolean" },
       help: { type: "boolean", short: "h" },
       "dry-run": { type: "boolean" },
@@ -134,6 +138,14 @@ export async function runAutomationCli(
     const dir = values.dir ?? process.cwd();
     if (values["dry-run"] !== undefined && action !== "teardown")
       throw new Error("--dry-run applies only to teardown.");
+    if (values["stop-block"] !== undefined) {
+      if (action !== "config" || values.host || values.command)
+        throw new Error(
+          "--stop-block applies only to config, separately from host hook generation.",
+        );
+      io.out(JSON.stringify(await configureStopBlock(dir, values["stop-block"]), null, 2));
+      return 0;
+    }
     if (action === "teardown") {
       if (values.command !== undefined)
         throw new Error("--command applies only to install/config.");
@@ -230,7 +242,13 @@ export async function runAutomationCli(
       io.out(
         values.json || !process.stdout.isTTY
           ? JSON.stringify(result, null, 2)
-          : [summarizeActivation(setup), result.knowledge].filter(Boolean).join("\n\n"),
+          : [
+              summarizeActivation(setup),
+              `Claude Stop review blocking: ${result.stopBlock}`,
+              result.knowledge,
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
       );
       return 0;
     }

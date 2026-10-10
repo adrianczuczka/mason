@@ -19,7 +19,7 @@ export interface DecisionDriftReport {
   freshness?: Record<string, Freshness>;
   diagnostics?: StoreDiagnostic[];
   totalDecisions: number;
-  /** Decision id → anchor files changed since the record's refreshedHash. */
+  /** Decision id → committed and local anchor files changed since the evidence baseline. */
   staleDecisions: Record<string, string[]>;
   /** Draft anchors have their own freshness; they cannot replace accepted anchors. */
   pendingProposals?: Record<string, { freshness: Freshness; changedFiles: string[] }>;
@@ -103,7 +103,7 @@ export async function computeDecisionDrift(
           : hits.length || localHits.length
             ? "changed"
             : "current",
-      changedFiles: hits,
+      changedFiles: [...new Set([...hits, ...localHits])].sort(),
     };
   };
   for (const record of store.records) {

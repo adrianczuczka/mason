@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { withStoreLock } from "../utils/store-lock.js";
+import { stopReviewSchema } from "./stop-review.js";
 import { notificationStateSchema } from "./notifications.js";
 
 export const hostSchema = z.enum(["claude", "codex"]);
@@ -28,6 +29,7 @@ export const stateSchema = z.object({
       lastUsed: z.string(),
       notifiedDiagnostics: z.array(z.string()).default([]),
       pending: z.record(z.string()),
+      stopReview: stopReviewSchema.optional(),
       coverageGaps: z.array(z.string()),
       events: z.record(z.object({ at: z.string(), count: z.number().int().positive() })),
     }),

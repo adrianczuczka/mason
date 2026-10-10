@@ -1,3 +1,9 @@
+import { readAutomationConfig } from "./config.js";
+import {
+  observeDecisionEdits,
+  decisionStopReview,
+  clearResolvedStopReviews,
+} from "./stop-review.js";
 import { observeUsefulness } from "./usefulness.js";
 import { completionFindings, completionSummary, createNotificationState } from "./notifications.js";
 import { profilePhase } from "../utils/profile.js";
@@ -25,6 +31,7 @@ export interface AutomationEvent {
   toolId?: string;
   mutating?: boolean;
   retrievedDecisionIds?: string[];
+  stopHookActive?: boolean;
 }
 export interface AutomationReport {
   version: 1;
@@ -453,6 +460,7 @@ async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, st
 export async function automate(dir: string, event: AutomationEvent) {
   const startedAt = Date.now();
   const ws = await profilePhase("automation.workspace", () => workspace(dir));
+  const config = await readAutomationConfig(ws.root);
   const output = await recordExecution(ws.root, ws.directory, event.event, () =>
     withRepositoryInspection(ws.root, async () => {
       const inputs = await readInputs(ws.root);
@@ -527,7 +535,9 @@ export async function automate(dir: string, event: AutomationEvent) {
             };
           }
           const session = key ? state.sessions[key] : null;
+          clearResolvedStopReviews(state.sessions, report);
           if (session) {
+            observeDecisionEdits(session, inputs, event);
             session.lastUsed = now;
             session.events[event.event] = {
               at: now,
@@ -578,9 +588,17 @@ export async function automate(dir: string, event: AutomationEvent) {
                 ...diagnostics,
               ]),
             ];
+          const stopReview =
+            session &&
+            event.host === "claude" &&
+            event.event === "task_end" &&
+            config.stopBlock === "drift"
+              ? decisionStopReview(session, inputs, report, !!event.stopHookActive)
+              : { reason: null, block: false };
           const message = !session
             ? summarize(report)
             : [
+                stopReview.reason,
                 completionSummary(selected, report.reportPath),
                 completionSummary(feedback, report.reportPath),
                 ...(diagnostics.length
@@ -608,6 +626,7 @@ export async function automate(dir: string, event: AutomationEvent) {
           return {
             report,
             message,
+            stopBlockReason: stopReview.block ? stopReview.reason : null,
             observedAt: now,
             delivery: { agent: feedback.slice(0, 4), completion: selected.slice(0, 4) },
           };
@@ -642,6 +661,7 @@ export async function automate(dir: string, event: AutomationEvent) {
 export async function automationStatus(dir: string) {
   const { pendingKnowledge } = await import("../decisions/pending.js");
   const ws = await profilePhase("automation.workspace", () => workspace(dir));
+  const config = await readAutomationConfig(ws.root);
   const knowledge = await pendingKnowledge(ws.root);
   const execution = await executionStatus(ws.root, ws.directory);
   const notifications = await failureNotifications(ws.root, ws.directory);
@@ -649,6 +669,7 @@ export async function automationStatus(dir: string) {
   if (raw === null)
     return {
       version: 1,
+      stopBlock: config.stopBlock,
       status: execution.status === "not-observed" ? "not-observed" : "unavailable",
       root: ws.root,
       branch: ws.branch,
@@ -674,6 +695,7 @@ export async function automationStatus(dir: string) {
   const unfinished = ["failed", "unknown", "running"].includes(execution.status);
   return {
     version: 1,
+    stopBlock: config.stopBlock,
     status: unfinished
       ? "unavailable"
       : inputs.fingerprint === state.fingerprint

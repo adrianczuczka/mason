@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.21.0 — 2026-10-10
+
+- Continue Claude once at Stop when outstanding decision drift overlaps observed session anchor edits. Require source inspection, preserve human approval boundaries, and keep repeat Stops and Codex advisory. Add local `mason auto config --stop-block off|drift` controls and status reporting. Include uncommitted anchor changes in drift findings for accepted and legacy decisions using Git baselines.
 
 - Capture readable decision anchors when saving proposals, so committing a proposal with its implementing code does not create false drift. Later source edits still require inspection; unreadable scopes retain unknown freshness.
 - Add separate source inspections that resolve covered drift without claiming human acceptance or changing the accepted revision. Bind preparation tokens to source bytes, preserve original audit evidence, and reopen inspections after relevant changes.

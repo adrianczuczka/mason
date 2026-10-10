@@ -52,6 +52,7 @@ export function normalizeHook(
       host,
       sessionId: input.session_id,
       toolId: input.tool_use_id,
+      stopHookActive: input.stop_hook_active,
       mutating: !!input.tool_name && !readOnly,
       ...(input.hook_event_name === "PostToolUse"
         ? { retrievedDecisionIds: retrievedDecisions(input.tool_name, input.tool_response) }
@@ -100,9 +101,12 @@ export async function runAutomationHook(
       reportPath: result.report.reportPath,
     });
     if (warning) result.message = [result.message, warning].filter(Boolean).join("\n");
+    if (name === "Stop" && result.stopBlockReason) {
+      return { decision: "block", reason: result.message ?? result.stopBlockReason };
+    }
     if (!result.message) return null;
     if (name === "Stop") {
-      // Completion feedback never starts an automatic repair loop.
+      // Re-entry remains advisory; delivery does not resolve the finding.
       return { systemMessage: result.message };
     }
     return { hookSpecificOutput: { hookEventName: name, additionalContext: result.message } };

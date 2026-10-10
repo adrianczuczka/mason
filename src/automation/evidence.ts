@@ -1,7 +1,7 @@
 import { hasErrorCode } from "../utils/validation.js";
-import { captureAnchorScopes } from "../decisions/anchors.js";
+import { captureAnchorScopes, type AnchorCapture } from "../decisions/anchors.js";
 import { loadDecisionStore, readDecisionInputs } from "../decisions/decisions.js";
-import { decisionAnchors, latestDecisionInspection } from "../decisions/provenance.js";
+import { decisionAnchors, decisionInspectionDigest } from "../decisions/provenance.js";
 import { includedCheckPaths } from "../audit/policy.js";
 import { loadProjectConfig } from "../utils/files.js";
 import { execGit } from "../utils/git-read.js";
@@ -60,6 +60,7 @@ export interface Inputs {
   head: string;
   docs: Record<string, string | null>;
   keys: Record<CheckName, string>;
+  decisionEvidence: Record<string, { digest: string; capture: AnchorCapture }>;
 }
 
 export async function readInputs(root: string): Promise<Inputs> {
@@ -173,12 +174,7 @@ async function collectInputs(root: string): Promise<Inputs> {
   const records = decisions.length ? (await loadDecisionStore(root)).records : [];
   const scopes = new Map(
     records
-      .filter(
-        (record) =>
-          record.status === "active" &&
-          record.version === 2 &&
-          (record.capture || latestDecisionInspection(record)),
-      )
+      .filter((record) => record.status === "active")
       .map((record) => {
         const anchors = decisionAnchors(record).sort();
         return [JSON.stringify(anchors), anchors] as const;
@@ -187,6 +183,15 @@ async function collectInputs(root: string): Promise<Inputs> {
   // Dirty path/status alone cannot detect another edit to the same file.
   // Preserve each scope's bound: a large union must not hide smaller complete captures.
   const captures = await captureAnchorScopes(root, [...scopes.values()]);
+  const capturesByScope = new Map([...scopes.keys()].map((key, index) => [key, captures[index]]));
+  const decisionEvidence: Inputs["decisionEvidence"] = {};
+  for (const record of records.filter((record) => record.status === "active")) {
+    const key = JSON.stringify(decisionAnchors(record).sort());
+    decisionEvidence[record.id] = {
+      digest: decisionInspectionDigest(record),
+      capture: capturesByScope.get(key)!,
+    };
+  }
   const anchorContent = [...scopes.keys()].map((key, index) => [key, captures[index]]);
   const common = [8, engineVersion, head, shallow, replacements, docContents, auditPolicy];
   const keys: Record<CheckName, string> = {
@@ -204,7 +209,13 @@ async function collectInputs(root: string): Promise<Inputs> {
       anchorContent,
     ]),
   };
-  return { fingerprint: hash([keys, await advisoryReviewInventory(root)]), head, docs, keys };
+  return {
+    fingerprint: hash([keys, await advisoryReviewInventory(root)]),
+    head,
+    docs,
+    keys,
+    decisionEvidence,
+  };
 }
 
 const cacheSchema = z.object({
