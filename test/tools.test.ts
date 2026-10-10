@@ -29,8 +29,11 @@ async function git(args: string[], cwd: string): Promise<void> {
 async function withEmptyProject<T>(run: (rootDir: string) => Promise<T>): Promise<T> {
   // Git does not preserve empty directories in a fresh checkout.
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "mason-empty-project-"));
-  try { return await run(rootDir); }
-  finally { await fs.rm(rootDir, { recursive: true, force: true }); }
+  try {
+    return await run(rootDir);
+  } finally {
+    await fs.rm(rootDir, { recursive: true, force: true });
+  }
 }
 
 async function markInitialized(rootDir: string): Promise<void> {
@@ -41,7 +44,7 @@ async function markInitialized(rootDir: string): Promise<void> {
     JSON.stringify({
       version: 1,
       initializedAt: new Date().toISOString(),
-    })
+    }),
   );
 }
 
@@ -53,9 +56,7 @@ describe("MCP tools", () => {
 
       expect(data.project.configFilesPresent).toContain("build.gradle.kts");
       expect(data.project.configFilesPresent).toContain("settings.gradle.kts");
-      expect(data.project.configFilesPresent).toContain(
-        "gradle/libs.versions.toml"
-      );
+      expect(data.project.configFilesPresent).toContain("gradle/libs.versions.toml");
     });
 
     it("returns source file counts", async () => {
@@ -100,9 +101,7 @@ describe("MCP tools", () => {
       expect(data.totalFiles).toBeGreaterThanOrEqual(10);
       expect(data.topLevelFiles).toContain("package.json");
 
-      const srcDir = data.directories.find(
-        (d: { path: string }) => d.path === "src"
-      );
+      const srcDir = data.directories.find((d: { path: string }) => d.path === "src");
       expect(srcDir).toBeDefined();
       expect(srcDir.fileCount).toBeGreaterThanOrEqual(5);
     });
@@ -111,9 +110,7 @@ describe("MCP tools", () => {
       const raw = await getProjectStructure(fixturePath("go-api"));
       const data = JSON.parse(raw);
 
-      const internalDir = data.directories.find(
-        (d: { path: string }) => d.path === "internal"
-      );
+      const internalDir = data.directories.find((d: { path: string }) => d.path === "internal");
       expect(internalDir).toBeDefined();
       expect(internalDir.extensions.go).toBeGreaterThanOrEqual(5);
     });
@@ -158,9 +155,7 @@ describe("MCP tools", () => {
       expect(data.testMap).toBeDefined();
 
       // Verify analysis has project snapshot
-      expect(data.analysis.project.configFilesPresent).toContain(
-        "pyproject.toml"
-      );
+      expect(data.analysis.project.configFilesPresent).toContain("pyproject.toml");
 
       // Verify structure has directories
       expect(data.structure.totalFiles).toBeGreaterThanOrEqual(5);
@@ -206,9 +201,7 @@ describe("MCP tools", () => {
       expect(typeof data.hint).toBe("string");
       expect(data.hint).toMatch(/mason_init/);
       // Reads stay pure — no .mason directory should appear
-      await expect(
-        fs.access(path.join(tmpDir, ".mason"))
-      ).rejects.toBeTruthy();
+      await expect(fs.access(path.join(tmpDir, ".mason"))).rejects.toBeTruthy();
     });
 
     it("missing-map response carries usable context inline", async () => {
@@ -231,12 +224,10 @@ describe("MCP tools", () => {
       expect(data.testPairs).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ test: "src/a.test.ts", source: "src/a.ts" }),
-        ])
+        ]),
       );
       // Still read-only
-      await expect(
-        fs.access(path.join(tmpDir, ".mason"))
-      ).rejects.toBeTruthy();
+      await expect(fs.access(path.join(tmpDir, ".mason"))).rejects.toBeTruthy();
     });
 
     it("returns exists:false when initialized but no snapshot exists yet", async () => {
@@ -273,16 +264,10 @@ describe("MCP tools", () => {
         },
         flows: {},
       };
-      await fs.writeFile(
-        path.join(snapshotDir, "snapshot.json"),
-        JSON.stringify(snapshot)
-      );
+      await fs.writeFile(path.join(snapshotDir, "snapshot.json"), JSON.stringify(snapshot));
 
       // Second commit: modify a.ts so HEAD differs from snapshot.gitHash
-      await fs.writeFile(
-        path.join(tmpDir, "src", "a.ts"),
-        "export const a = 2;\n"
-      );
+      await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 2;\n");
       await git(["add", "."], tmpDir);
       await git(["commit", "-m", "fix: bump a"], tmpDir);
 
@@ -354,7 +339,7 @@ describe("MCP tools", () => {
           gitHash: firstHash.trim(),
           features: { core: { description: "core", files: ["src/a.ts"] } },
           flows: {},
-        })
+        }),
       );
 
       await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 2;\n");
@@ -391,7 +376,7 @@ describe("MCP tools", () => {
           gitHash: firstHash.trim(),
           features: { core: { description: "core", files: ["src/a.ts"] } },
           flows: {},
-        })
+        }),
       );
 
       // Advance HEAD without touching any mapped or source file
@@ -443,11 +428,7 @@ describe("MCP tools", () => {
       let batches = 0;
 
       while (offset !== null) {
-        const raw = await generateSnapshotBatch(
-          fixturePath("node-react"),
-          offset,
-          2
-        );
+        const raw = await generateSnapshotBatch(fixturePath("node-react"), offset, 2);
         const data = JSON.parse(raw);
         totalFiles = data.totalFiles;
         batches++;
@@ -478,12 +459,24 @@ describe("MCP tools", () => {
     });
 
     it("save_partial_snapshot persists; reduce_snapshot returns all partials", async () => {
-      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
-        Auth: { description: "login", files: ["src/auth.ts"] },
-      }, {});
-      await saveSnapshotPartial(tmpDir, "batch-000050", 50, {
-        Home: { description: "home", files: ["src/home.ts"] },
-      }, {});
+      await saveSnapshotPartial(
+        tmpDir,
+        "batch-000000",
+        0,
+        {
+          Auth: { description: "login", files: ["src/auth.ts"] },
+        },
+        {},
+      );
+      await saveSnapshotPartial(
+        tmpDir,
+        "batch-000050",
+        50,
+        {
+          Home: { description: "home", files: ["src/home.ts"] },
+        },
+        {},
+      );
 
       const raw = await reduceSnapshot(tmpDir);
       const data = JSON.parse(raw);
@@ -504,51 +497,81 @@ describe("MCP tools", () => {
     });
 
     it("save_snapshot clears partial-snapshots directory", async () => {
-      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
-        Auth: { description: "login", files: ["src/auth.ts"] },
-      }, {});
+      await saveSnapshotPartial(
+        tmpDir,
+        "batch-000000",
+        0,
+        {
+          Auth: { description: "login", files: ["src/auth.ts"] },
+        },
+        {},
+      );
 
       const partialsDir = path.join(tmpDir, ".mason", "partial-snapshots");
       await expect(fs.access(partialsDir)).resolves.toBeUndefined();
 
-      await saveSnapshotData(tmpDir, {
-        Auth: { description: "user login flow", files: ["src/auth.ts"] },
-      }, {});
+      await saveSnapshotData(
+        tmpDir,
+        {
+          Auth: { description: "user login flow", files: ["src/auth.ts"] },
+        },
+        {},
+      );
 
       await expect(fs.access(partialsDir)).rejects.toBeTruthy();
       // Final snapshot still exists
       await expect(
-        fs.access(path.join(tmpDir, ".mason", "snapshot.json"))
+        fs.access(path.join(tmpDir, ".mason", "snapshot.json")),
       ).resolves.toBeUndefined();
     });
 
     it("save_snapshot REPLACES when partials exist (consolidation case)", async () => {
       // Simulate a botched earlier save_snapshot that wrote hallucinated entries.
-      await saveSnapshotData(tmpDir, {
-        Hallucinated: { description: "wrong", files: ["src/made-up.ts"] },
-      }, {});
+      await saveSnapshotData(
+        tmpDir,
+        {
+          Hallucinated: { description: "wrong", files: ["src/made-up.ts"] },
+        },
+        {},
+      );
 
       // Now an MR run records partials.
-      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
-        Auth: { description: "x", files: ["src/auth.ts"] },
-      }, {});
-      await saveSnapshotPartial(tmpDir, "batch-000050", 50, {
-        Home: { description: "x", files: ["src/home.ts"] },
-      }, {});
+      await saveSnapshotPartial(
+        tmpDir,
+        "batch-000000",
+        0,
+        {
+          Auth: { description: "x", files: ["src/auth.ts"] },
+        },
+        {},
+      );
+      await saveSnapshotPartial(
+        tmpDir,
+        "batch-000050",
+        50,
+        {
+          Home: { description: "x", files: ["src/home.ts"] },
+        },
+        {},
+      );
 
       // The reduce-step output is what should land — the hallucinated entry
       // from before must be dropped, not merged in.
-      const raw = await saveSnapshotData(tmpDir, {
-        Auth: { description: "user login flow", files: ["src/auth.ts"] },
-        Home: { description: "home screen", files: ["src/home.ts"] },
-      }, {});
+      const raw = await saveSnapshotData(
+        tmpDir,
+        {
+          Auth: { description: "user login flow", files: ["src/auth.ts"] },
+          Home: { description: "home screen", files: ["src/home.ts"] },
+        },
+        {},
+      );
       const data = JSON.parse(raw);
       expect(data.status).toBe("replaced");
       expect(data.mode).toBe("replaced-from-partials");
       expect(data.features).toBe(2);
 
       const onDisk = JSON.parse(
-        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8")
+        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8"),
       );
       expect(Object.keys(onDisk.features).sort()).toEqual(["Auth", "Home"]);
       expect(onDisk.features.Hallucinated).toBeUndefined();
@@ -556,33 +579,47 @@ describe("MCP tools", () => {
 
     it("save_snapshot still MERGES when no partials are present (incremental case)", async () => {
       // First save sets a baseline.
-      await saveSnapshotData(tmpDir, {
-        Auth: { description: "user login", files: ["src/auth.ts"] },
-        Home: { description: "home", files: ["src/home.ts"] },
-      }, {});
+      await saveSnapshotData(
+        tmpDir,
+        {
+          Auth: { description: "user login", files: ["src/auth.ts"] },
+          Home: { description: "home", files: ["src/home.ts"] },
+        },
+        {},
+      );
 
       // No partials around — this is an incremental refresh of one feature.
-      const raw = await saveSnapshotData(tmpDir, {
-        Auth: { description: "updated description", files: ["src/auth.ts", "src/auth2.ts"] },
-      }, {});
+      const raw = await saveSnapshotData(
+        tmpDir,
+        {
+          Auth: { description: "updated description", files: ["src/auth.ts", "src/auth2.ts"] },
+        },
+        {},
+      );
       const data = JSON.parse(raw);
       expect(data.status).toBe("updated");
       expect(data.mode).toBe("merged");
 
       const onDisk = JSON.parse(
-        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8")
+        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8"),
       );
       expect(Object.keys(onDisk.features).sort()).toEqual(["Auth", "Home"]);
       expect(onDisk.features.Auth.description).toBe("updated description");
     });
 
     it("save_partial_snapshot sanitizes path-traversal attempts", async () => {
-      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
-        Bad: {
-          description: "x",
-          files: ["src/ok.ts", "../escape.ts", "/etc/passwd"],
+      await saveSnapshotPartial(
+        tmpDir,
+        "batch-000000",
+        0,
+        {
+          Bad: {
+            description: "x",
+            files: ["src/ok.ts", "../escape.ts", "/etc/passwd"],
+          },
         },
-      }, {});
+        {},
+      );
 
       const raw = await reduceSnapshot(tmpDir);
       const data = JSON.parse(raw);
@@ -593,14 +630,22 @@ describe("MCP tools", () => {
     });
 
     it("save_snapshot persists feature type, defaulting a missing type to capability", async () => {
-      await saveSnapshotData(tmpDir, {
-        Checkout: { description: "checkout", files: ["src/checkout.ts"], type: "capability" },
-        "Service wiring": { description: "DI container", files: ["src/container.ts"], type: "infrastructure" },
-        Legacy: { description: "no type field", files: ["src/legacy.ts"] },
-      }, {});
+      await saveSnapshotData(
+        tmpDir,
+        {
+          Checkout: { description: "checkout", files: ["src/checkout.ts"], type: "capability" },
+          "Service wiring": {
+            description: "DI container",
+            files: ["src/container.ts"],
+            type: "infrastructure",
+          },
+          Legacy: { description: "no type field", files: ["src/legacy.ts"] },
+        },
+        {},
+      );
 
       const onDisk = JSON.parse(
-        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8")
+        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8"),
       );
       expect(onDisk.features.Checkout.type).toBe("capability");
       expect(onDisk.features["Service wiring"].type).toBe("infrastructure");
@@ -609,16 +654,22 @@ describe("MCP tools", () => {
     });
 
     it("save_partial_snapshot normalizes and stores feature type for reduce", async () => {
-      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
-        Auth: { description: "login", files: ["src/auth.ts"] },
-        Logging: { description: "logger", files: ["src/log.ts"], type: "infrastructure" },
-      }, {});
+      await saveSnapshotPartial(
+        tmpDir,
+        "batch-000000",
+        0,
+        {
+          Auth: { description: "login", files: ["src/auth.ts"] },
+          Logging: { description: "logger", files: ["src/log.ts"], type: "infrastructure" },
+        },
+        {},
+      );
 
       const stored = JSON.parse(
         await fs.readFile(
           path.join(tmpDir, ".mason", "partial-snapshots", "batch-000000.json"),
-          "utf-8"
-        )
+          "utf-8",
+        ),
       );
       expect(stored.features.Auth.type).toBe("capability");
       expect(stored.features.Logging.type).toBe("infrastructure");
@@ -632,10 +683,7 @@ describe("MCP tools", () => {
       tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mason-scoped-test-"));
       await fs.mkdir(path.join(tmpDir, "src"));
       for (const name of ["a", "b", "c"]) {
-        await fs.writeFile(
-          path.join(tmpDir, "src", `${name}.ts`),
-          `export const ${name} = 1;\n`
-        );
+        await fs.writeFile(path.join(tmpDir, "src", `${name}.ts`), `export const ${name} = 1;\n`);
       }
     });
 
@@ -644,10 +692,7 @@ describe("MCP tools", () => {
     });
 
     it("walks only the scoped files and records a scope marker", async () => {
-      const raw = await generateSnapshotBatch(tmpDir, 0, 1, [
-        "src/a.ts",
-        "src/c.ts",
-      ]);
+      const raw = await generateSnapshotBatch(tmpDir, 0, 1, ["src/a.ts", "src/c.ts"]);
       const data = JSON.parse(raw);
 
       expect(data.scoped).toBe(true);
@@ -659,38 +704,45 @@ describe("MCP tools", () => {
 
       const scopeRaw = await fs.readFile(
         path.join(tmpDir, ".mason", "partial-snapshots", "scope.json"),
-        "utf-8"
+        "utf-8",
       );
       expect(JSON.parse(scopeRaw).files).toEqual(["src/a.ts", "src/c.ts"]);
     });
 
     it("does not fall back to the full project when the scope matches nothing", async () => {
-      const raw = await generateSnapshotBatch(tmpDir, 0, 50, [
-        "../outside.ts",
-        "src/missing.ts",
-      ]);
+      const raw = await generateSnapshotBatch(tmpDir, 0, 50, ["../outside.ts", "src/missing.ts"]);
       const data = JSON.parse(raw);
 
       expect(data.totalFiles).toBe(0);
       expect(data.next).toMatch(/None of the requested files/);
       // No scope marker for an empty scope
       await expect(
-        fs.access(path.join(tmpDir, ".mason", "partial-snapshots", "scope.json"))
+        fs.access(path.join(tmpDir, ".mason", "partial-snapshots", "scope.json")),
       ).rejects.toBeTruthy();
     });
 
     it("reduce_snapshot merges into the existing map when a scope marker exists", async () => {
       // Existing map with an entry outside the refresh scope
-      await saveSnapshotData(tmpDir, {
-        untouched: { description: "untouched feature", files: ["src/b.ts"] },
-        drifted: { description: "old description", files: ["src/a.ts"] },
-      }, {});
+      await saveSnapshotData(
+        tmpDir,
+        {
+          untouched: { description: "untouched feature", files: ["src/b.ts"] },
+          drifted: { description: "old description", files: ["src/a.ts"] },
+        },
+        {},
+      );
 
       // Scoped run over the drifted file
       await generateSnapshotBatch(tmpDir, 0, 50, ["src/a.ts"]);
-      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
-        drifted: { description: "new description", files: ["src/a.ts"] },
-      }, {});
+      await saveSnapshotPartial(
+        tmpDir,
+        "batch-000000",
+        0,
+        {
+          drifted: { description: "new description", files: ["src/a.ts"] },
+        },
+        {},
+      );
 
       const raw = await reduceSnapshot(tmpDir);
       const data = JSON.parse(raw);
@@ -708,20 +760,26 @@ describe("MCP tools", () => {
       // Abandoned scoped run leaves a marker behind
       await generateSnapshotBatch(tmpDir, 0, 50, ["src/a.ts"]);
       await expect(
-        fs.access(path.join(tmpDir, ".mason", "partial-snapshots", "scope.json"))
+        fs.access(path.join(tmpDir, ".mason", "partial-snapshots", "scope.json")),
       ).resolves.toBeUndefined();
 
       // Full build must not inherit it
       await generateSnapshotBatch(tmpDir, 0, 50);
       await expect(
-        fs.access(path.join(tmpDir, ".mason", "partial-snapshots", "scope.json"))
+        fs.access(path.join(tmpDir, ".mason", "partial-snapshots", "scope.json")),
       ).rejects.toBeTruthy();
     });
 
     it("reduce_snapshot stays in full-rebuild mode without a scope marker", async () => {
-      await saveSnapshotPartial(tmpDir, "batch-000000", 0, {
-        Auth: { description: "x", files: ["src/a.ts"] },
-      }, {});
+      await saveSnapshotPartial(
+        tmpDir,
+        "batch-000000",
+        0,
+        {
+          Auth: { description: "x", files: ["src/a.ts"] },
+        },
+        {},
+      );
 
       const raw = await reduceSnapshot(tmpDir);
       const data = JSON.parse(raw);
@@ -765,7 +823,7 @@ describe("MCP tools", () => {
           alpha: { description: "alpha", files: ["src/a.ts"] },
           beta: { description: "beta", files: ["src/b.ts"] },
         },
-        { fetch: { description: "fetch", chain: ["src/a.ts"] } }
+        { fetch: { description: "fetch", chain: ["src/a.ts"] } },
       );
 
       const raw = await saveSnapshotData(tmpDir, {}, {}, ["beta"], ["fetch"]);
@@ -775,7 +833,7 @@ describe("MCP tools", () => {
       expect(data.removedFlows).toBe(1);
 
       const onDisk = JSON.parse(
-        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8")
+        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8"),
       );
       expect(Object.keys(onDisk.features)).toEqual(["alpha"]);
       expect(onDisk.flows).toEqual({});
@@ -792,7 +850,7 @@ describe("MCP tools", () => {
           alpha: { description: "alpha", files: ["src/a.ts"] },
           beta: { description: "beta", files: ["src/b.ts"] },
         },
-        {}
+        {},
       );
 
       await fs.writeFile(path.join(tmpDir, "src", "a.ts"), "export const a = 2;\n");
@@ -802,11 +860,11 @@ describe("MCP tools", () => {
       await saveSnapshotData(
         tmpDir,
         { alpha: { description: "alpha v2", files: ["src/a.ts"] } },
-        {}
+        {},
       );
 
       const onDisk = JSON.parse(
-        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8")
+        await fs.readFile(path.join(tmpDir, ".mason", "snapshot.json"), "utf-8"),
       );
       expect(onDisk.gitHash).toBe(secondHash);
       expect(onDisk.features.alpha.refreshedHash).toBe(secondHash);
@@ -847,7 +905,9 @@ describe("MCP tools", () => {
       expect(data.playbook).toMatch(/`get_context` with the task text/);
       // Installation belongs to the shared setup engine; read-only inspection must stay available.
       expect(data.playbook).toMatch(/same engine as mason setup/);
-      expect(data.playbook).toMatch(/only requested inspection or review, report findings without running setup/);
+      expect(data.playbook).toMatch(
+        /only requested inspection or review, report findings without running setup/,
+      );
     });
 
     it("returns initialized=true after masonCompleteInit", async () => {

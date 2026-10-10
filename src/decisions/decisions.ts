@@ -9,14 +9,20 @@ import { writeStoreJson, storePath, type StoreDiagnostic } from "../utils/storag
 import { sanitizeRepoPaths } from "../utils/paths.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { jaccard, tokenSet } from "../context/lexical.js";
-import { attributionSchema, decisionSchema, decisionContent, decisionApproval, effectiveDecision, importLegacy, type DecisionSource, type DecisionRecord, type ReviewedDecisionRecord } from "./provenance.js";
+import {
+  attributionSchema,
+  decisionSchema,
+  decisionContent,
+  decisionApproval,
+  effectiveDecision,
+  importLegacy,
+  type DecisionSource,
+  type DecisionRecord,
+  type ReviewedDecisionRecord,
+} from "./provenance.js";
 export type { DecisionRecord } from "./provenance.js";
 
-export type DecisionCategory =
-  | "decision"
-  | "gotcha"
-  | "deprecation"
-  | "convention";
+export type DecisionCategory = "decision" | "gotcha" | "deprecation" | "convention";
 export type DecisionStatus = "active" | "superseded" | "retired";
 
 export const TITLE_MAX_CHARS = 80;
@@ -25,62 +31,97 @@ export const BODY_MAX_CHARS = 2500;
 export const MAX_ACTIVE_DECISIONS = 150;
 
 // Share validation with MCP so rejected tool calls include the actual length.
-const boundedText = (field: string, max: number, hint: string) => z.string({
-  errorMap: (issue, ctx) => ({ message: issue.code === "too_big"
-    ? `${field} has ${ctx.data.length} characters; maximum is ${max} (${ctx.data.length - max} over). ${hint}`
-    : ctx.defaultError }),
-}).trim().min(1, `${field} must be non-empty`).max(max);
+const boundedText = (field: string, max: number, hint: string) =>
+  z
+    .string({
+      errorMap: (issue, ctx) => ({
+        message:
+          issue.code === "too_big"
+            ? `${field} has ${ctx.data.length} characters; maximum is ${max} (${ctx.data.length - max} over). ${hint}`
+            : ctx.defaultError,
+      }),
+    })
+    .trim()
+    .min(1, `${field} must be non-empty`)
+    .max(max);
 
-export const decisionTitleSchema = boundedText("title", TITLE_MAX_CHARS, "Tighten it to a specific headline.");
-export const decisionBodySchema = boundedText("body", BODY_MAX_CHARS,
-  `Aim for ${BODY_RECOMMENDED_CHARS} characters or fewer. Preserve the rule, reason, and exceptions; put supporting references in sources.`);
+export const decisionTitleSchema = boundedText(
+  "title",
+  TITLE_MAX_CHARS,
+  "Tighten it to a specific headline.",
+);
+export const decisionBodySchema = boundedText(
+  "body",
+  BODY_MAX_CHARS,
+  `Aim for ${BODY_RECOMMENDED_CHARS} characters or fewer. Preserve the rule, reason, and exceptions; put supporting references in sources.`,
+);
 
 const DUPLICATE_JACCARD = 0.5;
 const DUPLICATE_JACCARD_WITH_SHARED_FILE = 0.35;
 
 /** Raw bytes also feed automation fingerprints, including malformed records. */
-export async function readDecisionInputs(rootDir: string): Promise<{ inputs: Array<[string, string | null]>; diagnostics: StoreDiagnostic[] }> {
-  return structuredClone(await inspectionRead(rootDir, "decision-store:inputs", async () => {
-    const inputs: Array<[string, string | null]> = [];
-    const diagnostics: StoreDiagnostic[] = [];
-    let entries: string[];
-    try { entries = await fs.readdir(await storePath(rootDir, ".mason/decisions")); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") diagnostics.push({ path: ".mason/decisions", message: String(error) });
-      return { inputs, diagnostics };
-    }
-    for (const entry of entries.sort()) {
-      if (!entry.endsWith(".json")) continue;
-      const relative = `.mason/decisions/${entry}`;
+export async function readDecisionInputs(
+  rootDir: string,
+): Promise<{ inputs: Array<[string, string | null]>; diagnostics: StoreDiagnostic[] }> {
+  return structuredClone(
+    await inspectionRead(rootDir, "decision-store:inputs", async () => {
+      const inputs: Array<[string, string | null]> = [];
+      const diagnostics: StoreDiagnostic[] = [];
+      let entries: string[];
       try {
-        const raw = await readBoundedFile(await storePath(rootDir, relative), 10 * 1024 * 1024);
-        if (raw === null) throw new Error("file is not regular or exceeds 10 MiB");
-        inputs.push([relative, raw]);
+        entries = await fs.readdir(await storePath(rootDir, ".mason/decisions"));
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") inputs.push([relative, null]);
-        else diagnostics.push({ path: relative, message: error instanceof Error ? error.message : String(error) });
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+          diagnostics.push({ path: ".mason/decisions", message: String(error) });
+        return { inputs, diagnostics };
       }
-    }
-    return { inputs, diagnostics };
-  }));
+      for (const entry of entries.sort()) {
+        if (!entry.endsWith(".json")) continue;
+        const relative = `.mason/decisions/${entry}`;
+        try {
+          const raw = await readBoundedFile(await storePath(rootDir, relative), 10 * 1024 * 1024);
+          if (raw === null) throw new Error("file is not regular or exceeds 10 MiB");
+          inputs.push([relative, raw]);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") inputs.push([relative, null]);
+          else
+            diagnostics.push({
+              path: relative,
+              message: error instanceof Error ? error.message : String(error),
+            });
+        }
+      }
+      return { inputs, diagnostics };
+    }),
+  );
 }
 
-export async function loadDecisionStore(rootDir: string): Promise<{ records: DecisionRecord[]; diagnostics: StoreDiagnostic[] }> {
+export async function loadDecisionStore(
+  rootDir: string,
+): Promise<{ records: DecisionRecord[]; diagnostics: StoreDiagnostic[] }> {
   // Callers may edit their returned records while preparing a write. Never expose
   // mutable cached records, and never share this cache with final validation.
-  return structuredClone(await inspectionRead(rootDir, "decision-store:parsed", async () => {
-    const raw = await readDecisionInputs(rootDir);
-    const records: DecisionRecord[] = [];
-    const diagnostics = [...raw.diagnostics];
-    for (const [relative, content] of raw.inputs) {
-      try {
-        const record = decisionSchema.parse(content === null ? null : JSON.parse(content));
-        if (relative !== `.mason/decisions/${record.id}.json`) throw new Error("Record id does not match its filename");
-        records.push(record);
-      } catch (error) { diagnostics.push({ path: relative, message: error instanceof Error ? error.message : String(error) }); }
-    }
-    return { records, diagnostics };
-  }));
+  return structuredClone(
+    await inspectionRead(rootDir, "decision-store:parsed", async () => {
+      const raw = await readDecisionInputs(rootDir);
+      const records: DecisionRecord[] = [];
+      const diagnostics = [...raw.diagnostics];
+      for (const [relative, content] of raw.inputs) {
+        try {
+          const record = decisionSchema.parse(content === null ? null : JSON.parse(content));
+          if (relative !== `.mason/decisions/${record.id}.json`)
+            throw new Error("Record id does not match its filename");
+          records.push(record);
+        } catch (error) {
+          diagnostics.push({
+            path: relative,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      return { records, diagnostics };
+    }),
+  );
 }
 
 export async function loadDecisions(rootDir: string): Promise<DecisionRecord[]> {
@@ -98,11 +139,7 @@ export async function saveDecisionRecord(rootDir: string, record: DecisionRecord
  * boundary when possible. A single longer word is cut to fit.
  * A slug collision with a DIFFERENT record appends a 6-hex content suffix.
  */
-export function decisionIdFor(
-  title: string,
-  body: string,
-  existingIds: Set<string>
-): string {
+export function decisionIdFor(title: string, body: string, existingIds: Set<string>): string {
   const fullSlug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -123,7 +160,7 @@ export function decisionIdFor(
 
 export function findNearDuplicate(
   candidate: { title: string; body: string; files: string[] },
-  existing: DecisionRecord[]
+  existing: DecisionRecord[],
 ): { record: DecisionRecord; similarity: number } | null {
   const candidateTokens = tokenSet(`${candidate.title} ${candidate.body}`);
   const candidateFiles = new Set(candidate.files);
@@ -131,14 +168,9 @@ export function findNearDuplicate(
 
   for (const record of existing) {
     if (record.status !== "active") continue;
-    const similarity = jaccard(
-      candidateTokens,
-      tokenSet(`${record.title} ${record.body}`)
-    );
+    const similarity = jaccard(candidateTokens, tokenSet(`${record.title} ${record.body}`));
     const sharesFile = record.files.some((f) => candidateFiles.has(f));
-    const threshold = sharesFile
-      ? DUPLICATE_JACCARD_WITH_SHARED_FILE
-      : DUPLICATE_JACCARD;
+    const threshold = sharesFile ? DUPLICATE_JACCARD_WITH_SHARED_FILE : DUPLICATE_JACCARD;
     if (similarity >= threshold && (!best || similarity > best.similarity)) {
       best = { record, similarity };
     }
@@ -177,94 +209,250 @@ export type UpsertDecisionResult =
   | { status: "error"; error: string };
 
 /** Serialize tool writes so prepared reviews cannot overwrite another decision edit. */
-export async function withDecisionWrite<T>(root: string, operation: () => Promise<T>): Promise<T | { status: "error"; error: string }> {
+export async function withDecisionWrite<T>(
+  root: string,
+  operation: () => Promise<T>,
+): Promise<T | { status: "error"; error: string }> {
   const lockPath = await storePath(root, ".mason/decisions/.write-lock", true);
   let lock;
-  try { lock = await fs.open(lockPath, "wx", 0o600); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") return { status: "error", error: "Decision store is locked by another write. Retry after it finishes; an abandoned .mason/decisions/.write-lock must be removed only after confirming no writer is running." };
+  try {
+    lock = await fs.open(lockPath, "wx", 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      return {
+        status: "error",
+        error:
+          "Decision store is locked by another write. Retry after it finishes; an abandoned .mason/decisions/.write-lock must be removed only after confirming no writer is running.",
+      };
     throw error;
   }
-  try { return await operation(); }
-  finally { await lock.close(); await fs.unlink(lockPath); }
+  try {
+    return await operation();
+  } finally {
+    await lock.close();
+    await fs.unlink(lockPath);
+  }
 }
 
-export async function upsertDecision(rootDir: string, input: UpsertDecisionInput): Promise<UpsertDecisionResult> {
-  const parsedTitle = decisionTitleSchema.safeParse(input.title), parsedBody = decisionBodySchema.safeParse(input.body);
+export async function upsertDecision(
+  rootDir: string,
+  input: UpsertDecisionInput,
+): Promise<UpsertDecisionResult> {
+  const parsedTitle = decisionTitleSchema.safeParse(input.title),
+    parsedBody = decisionBodySchema.safeParse(input.body);
   if (!parsedTitle.success) return { status: "error", error: parsedTitle.error.issues[0].message };
   if (!parsedBody.success) return { status: "error", error: parsedBody.error.issues[0].message };
-  const title = parsedTitle.data, body = parsedBody.data;
+  const title = parsedTitle.data,
+    body = parsedBody.data;
   const attribution = attributionSchema.safeParse(input);
   if (!attribution.success) return { status: "error", error: attribution.error.message };
-  if (input.id && input.supersedes) return { status: "error", error: "Use either id to revise or supersedes to replace a record, not both." };
+  if (input.id && input.supersedes)
+    return {
+      status: "error",
+      error: "Use either id to revise or supersedes to replace a record, not both.",
+    };
   return withDecisionWrite(rootDir, async () => {
     const store = await loadDecisionStore(rootDir);
-    if (store.diagnostics.length) return { status: "error", error: "Repair malformed decision records before saving: " + store.diagnostics.map(d => d.path).join(", ") };
-    const existing = store.records, byId = new Map(existing.map(r => [r.id, r]));
-    const now = new Date().toISOString(), head = await getCurrentGitHash(rootDir);
+    if (store.diagnostics.length)
+      return {
+        status: "error",
+        error:
+          "Repair malformed decision records before saving: " +
+          store.diagnostics.map((d) => d.path).join(", "),
+      };
+    const existing = store.records,
+      byId = new Map(existing.map((r) => [r.id, r]));
+    const now = new Date().toISOString(),
+      head = await getCurrentGitHash(rootDir);
     const warnings: string[] = [];
-    if (body.length > BODY_RECOMMENDED_CHARS) warnings.push(`body has ${body.length} characters, above the recommended ${BODY_RECOMMENDED_CHARS}; matching context and hooks include it in full. Keep the rule, reason, and exceptions concise; use sources for supporting references.`);
+    if (body.length > BODY_RECOMMENDED_CHARS)
+      warnings.push(
+        `body has ${body.length} characters, above the recommended ${BODY_RECOMMENDED_CHARS}; matching context and hooks include it in full. Keep the rule, reason, and exceptions concise; use sources for supporting references.`,
+      );
     const files = sanitizeRepoPaths(input.files ?? []);
-    if (input.files && files.length < input.files.length) warnings.push("some anchor paths were outside the repo or duplicated and were dropped");
+    if (input.files && files.length < input.files.length)
+      warnings.push("some anchor paths were outside the repo or duplicated and were dropped");
     for (const file of files) {
-      try { await fs.access(path.join(rootDir, file)); }
-      catch { warnings.push(`anchor file does not exist on disk: ${file}`); }
+      try {
+        await fs.access(path.join(rootDir, file));
+      } catch {
+        warnings.push(`anchor file does not exist on disk: ${file}`);
+      }
     }
-    const hint = "Saved locally for review and commit. Proposals are not accepted constraints; an existing accepted revision remains operative while its replacement is proposed. Use review_decision to prepare evidence and record a separate inspection without human approval, or an authorized acceptance or reaffirmation.";
+    const hint =
+      "Saved locally for review and commit. Proposals are not accepted constraints; an existing accepted revision remains operative while its replacement is proposed. Use review_decision to prepare evidence and record a separate inspection without human approval, or an authorized acceptance or reaffirmation.";
     if (input.id) {
       const original = byId.get(input.id);
       if (!original) return { status: "error", error: `no decision with id "${input.id}"` };
-      if (original.status !== "active") return { status: "error", error: "Archived records cannot be revised; create a new proposal." };
+      if (original.status !== "active")
+        return {
+          status: "error",
+          error: "Archived records cannot be revised; create a new proposal.",
+        };
       const record = importLegacy(original, now);
-      const content = decisionContent({ ...record, title, body, category: input.category,
+      const content = decisionContent({
+        ...record,
+        title,
+        body,
+        category: input.category,
         files: input.files !== undefined ? files : record.files,
-        owner: attribution.data.owner === undefined ? record.owner : attribution.data.owner ?? undefined,
+        owner:
+          attribution.data.owner === undefined
+            ? record.owner
+            : (attribution.data.owner ?? undefined),
         sources: attribution.data.sources ?? record.sources,
       });
       if (JSON.stringify(content) === JSON.stringify(decisionContent(record))) {
-        return { status: "unchanged", id: record.id, totalActive: existing.filter(r => r.status === "active").length, approval: decisionApproval(original), warnings,
-          hint: "Unchanged content; no review or freshness stamp was written. Use review_decision for explicit re-verification." };
+        return {
+          status: "unchanged",
+          id: record.id,
+          totalActive: existing.filter((r) => r.status === "active").length,
+          approval: decisionApproval(original),
+          warnings,
+          hint: "Unchanged content; no review or freshness stamp was written. Use review_decision for explicit re-verification.",
+        };
       }
       const revision = record.revision + 1;
       const capture = await captureAnchors(rootDir, content.files);
-      const updated: ReviewedDecisionRecord = { ...record, ...content, owner: content.owner, updatedAt: now, revision, approval: "proposed", capture,
-        history: [...record.history, { kind: "revised", at: now, actor: attribution.data.actor, revision, content, approval: "proposed", status: "active", refreshedHash: record.refreshedHash, capture }],
+      const updated: ReviewedDecisionRecord = {
+        ...record,
+        ...content,
+        owner: content.owner,
+        updatedAt: now,
+        revision,
+        approval: "proposed",
+        capture,
+        history: [
+          ...record.history,
+          {
+            kind: "revised",
+            at: now,
+            actor: attribution.data.actor,
+            revision,
+            content,
+            approval: "proposed",
+            status: "active",
+            refreshedHash: record.refreshedHash,
+            capture,
+          },
+        ],
       };
       await saveDecisionRecord(rootDir, updated);
-      return { status: "updated", id: record.id, totalActive: existing.filter(r => r.status === "active").length, approval: "proposed", warnings, hint };
+      return {
+        status: "updated",
+        id: record.id,
+        totalActive: existing.filter((r) => r.status === "active").length,
+        approval: "proposed",
+        warnings,
+        hint,
+      };
     }
     const old = input.supersedes ? byId.get(input.supersedes) : undefined;
-    if (input.supersedes && !old) return { status: "error", error: `no decision with id "${input.supersedes}" to supersede` };
-    if (old && (old.status !== "active" || decisionApproval(effectiveDecision(old)) === "accepted")) {
-      return { status: "error", error: "A proposal cannot supersede an accepted or archived record. Create and review the replacement separately, then explicitly retire the old decision with review_decision." };
+    if (input.supersedes && !old)
+      return { status: "error", error: `no decision with id "${input.supersedes}" to supersede` };
+    if (
+      old &&
+      (old.status !== "active" || decisionApproval(effectiveDecision(old)) === "accepted")
+    ) {
+      return {
+        status: "error",
+        error:
+          "A proposal cannot supersede an accepted or archived record. Create and review the replacement separately, then explicitly retire the old decision with review_decision.",
+      };
     }
     if (!input.force) {
       const duplicate = findNearDuplicate({ title, body, files }, existing);
-      if (duplicate) return { status: "duplicate_suspected", existing: duplicate.record, hint: `A similar decision exists ("${duplicate.record.title}"). Call save_decision with id="${duplicate.record.id}" to revise it, or force:true if distinct.` };
+      if (duplicate)
+        return {
+          status: "duplicate_suspected",
+          existing: duplicate.record,
+          hint: `A similar decision exists ("${duplicate.record.title}"). Call save_decision with id="${duplicate.record.id}" to revise it, or force:true if distinct.`,
+        };
     }
     const id = decisionIdFor(title, body, new Set(byId.keys()));
-    if (byId.has(id)) return { status: "error", error: `Decision id collision: ${id}. Choose a distinct title or revise the existing record.` };
-    const content = decisionContent({ title, body, category: input.category, files, owner: attribution.data.owner ?? undefined, sources: attribution.data.sources ?? [] });
+    if (byId.has(id))
+      return {
+        status: "error",
+        error: `Decision id collision: ${id}. Choose a distinct title or revise the existing record.`,
+      };
+    const content = decisionContent({
+      title,
+      body,
+      category: input.category,
+      files,
+      owner: attribution.data.owner ?? undefined,
+      sources: attribution.data.sources ?? [],
+    });
     const capture = await captureAnchors(rootDir, content.files);
-    const record: ReviewedDecisionRecord = { ...content, capture, version: 2, id, createdAt: now, updatedAt: now, refreshedHash: head,
-      status: "active", approval: "proposed", revision: 1,
-      history: [{ kind: "created", at: now, actor: attribution.data.actor, revision: 1, content, approval: "proposed", status: "active", refreshedHash: head, capture }],
+    const record: ReviewedDecisionRecord = {
+      ...content,
+      capture,
+      version: 2,
+      id,
+      createdAt: now,
+      updatedAt: now,
+      refreshedHash: head,
+      status: "active",
+      approval: "proposed",
+      revision: 1,
+      history: [
+        {
+          kind: "created",
+          at: now,
+          actor: attribution.data.actor,
+          revision: 1,
+          content,
+          approval: "proposed",
+          status: "active",
+          refreshedHash: head,
+          capture,
+        },
+      ],
     };
     // Write the replacement first: a failed second write leaves both records
     // available instead of removing the original before its replacement exists.
     await saveDecisionRecord(rootDir, record);
     if (old) {
       const imported = importLegacy(old, now);
-      await saveDecisionRecord(rootDir, { ...imported, status: "superseded", supersededBy: id, updatedAt: now,
-        history: [...imported.history, { kind: "superseded", at: now, actor: attribution.data.actor, note: `Replaced by proposal ${id}`,
-          revision: imported.revision, content: decisionContent(imported), approval: imported.approval, status: "superseded", refreshedHash: imported.refreshedHash, capture: imported.capture }],
+      await saveDecisionRecord(rootDir, {
+        ...imported,
+        status: "superseded",
+        supersededBy: id,
+        updatedAt: now,
+        history: [
+          ...imported.history,
+          {
+            kind: "superseded",
+            at: now,
+            actor: attribution.data.actor,
+            note: `Replaced by proposal ${id}`,
+            revision: imported.revision,
+            content: decisionContent(imported),
+            approval: imported.approval,
+            status: "superseded",
+            refreshedHash: imported.refreshedHash,
+            capture: imported.capture,
+          },
+        ],
       });
     }
-    const totalActive = existing.filter(r => r.status === "active").length + (old ? 0 : 1);
-    const result: UpsertDecisionResult = { status: old ? "superseded_and_created" : "created", id, totalActive, approval: "proposed", warnings, hint };
+    const totalActive = existing.filter((r) => r.status === "active").length + (old ? 0 : 1);
+    const result: UpsertDecisionResult = {
+      status: old ? "superseded_and_created" : "created",
+      id,
+      totalActive,
+      approval: "proposed",
+      warnings,
+      hint,
+    };
     if (totalActive > MAX_ACTIVE_DECISIONS) {
-      result.pruneCandidates = existing.filter(r => r.status !== "active").map(r => r.id).slice(0, 10);
-      warnings.push(`${totalActive} active decisions exceeds the soft cap of ${MAX_ACTIVE_DECISIONS} — consider a cleanup PR (archived records first)`);
+      result.pruneCandidates = existing
+        .filter((r) => r.status !== "active")
+        .map((r) => r.id)
+        .slice(0, 10);
+      warnings.push(
+        `${totalActive} active decisions exceeds the soft cap of ${MAX_ACTIVE_DECISIONS} — consider a cleanup PR (archived records first)`,
+      );
     }
     return result;
   });

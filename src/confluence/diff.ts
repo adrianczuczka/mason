@@ -68,22 +68,15 @@ export async function loadSyncState(rootDir: string): Promise<SyncState | null> 
   }
 }
 
-export async function saveSyncState(
-  rootDir: string,
-  state: SyncState
-): Promise<void> {
+export async function saveSyncState(rootDir: string, state: SyncState): Promise<void> {
   await fs.mkdir(syncStateDir(rootDir), { recursive: true });
-  await fs.writeFile(
-    syncStatePath(rootDir),
-    JSON.stringify(state, null, 2),
-    "utf-8"
-  );
+  await fs.writeFile(syncStatePath(rootDir), JSON.stringify(state, null, 2), "utf-8");
 }
 
 export function computeDiff(
   previous: SyncState | null,
   current: Snapshot,
-  syncedAt: string
+  syncedAt: string,
 ): DiffSection {
   const prevFeatures = previous?.lastSnapshot.features ?? {};
   const prevFlows = previous?.lastSnapshot.flows ?? {};
@@ -91,16 +84,10 @@ export function computeDiff(
   const currentFeatureNames = Object.keys(current.features);
   const prevFeatureNames = Object.keys(prevFeatures);
 
-  const addedFeatures = currentFeatureNames.filter(
-    (n) => !(n in prevFeatures)
-  );
-  const removedFeatures = prevFeatureNames.filter(
-    (n) => !(n in current.features)
-  );
+  const addedFeatures = currentFeatureNames.filter((n) => !(n in prevFeatures));
+  const removedFeatures = prevFeatureNames.filter((n) => !(n in current.features));
   const changedFeatures = currentFeatureNames.filter(
-    (n) =>
-      n in prevFeatures &&
-      prevFeatures[n].description !== current.features[n].description
+    (n) => n in prevFeatures && prevFeatures[n].description !== current.features[n].description,
   );
 
   const currentFlowNames = Object.keys(current.flows);

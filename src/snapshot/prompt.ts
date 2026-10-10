@@ -33,28 +33,25 @@ Merge rules:
 - Feature descriptions in the final map should be 1–2 sentences, written for a product/PM audience — concrete and specific, but free of code-level detail.
 - Each feature should have 2–8 files. If merging produces a feature with 20+ files, consider whether it should be split into sub-features.`;
 
-export function buildBatchPrompt(
-  batch: {
-    offset: number;
-    batchSize: number;
-    nextOffset: number | null;
-    totalFiles: number;
-    skeletons: Array<{ path: string; content: string }>;
-    samples: Array<{ path: string; content: string }>;
-    testPairs?: Array<{ test: string; source: string; confidence: string }>;
-  }
-): string {
+export function buildBatchPrompt(batch: {
+  offset: number;
+  batchSize: number;
+  nextOffset: number | null;
+  totalFiles: number;
+  skeletons: Array<{ path: string; content: string }>;
+  samples: Array<{ path: string; content: string }>;
+  testPairs?: Array<{ test: string; source: string; confidence: string }>;
+}): string {
   const skeletonBlocks = batch.skeletons
     .map(
-      (f) =>
-        `--- ${f.path} ---\n${f.content}${f.content.length >= 500 ? "\n... (truncated)" : ""}`
+      (f) => `--- ${f.path} ---\n${f.content}${f.content.length >= 500 ? "\n... (truncated)" : ""}`,
     )
     .join("\n\n");
 
   const sampleBlocks = batch.samples
     .map(
       (f) =>
-        `=== ${f.path} (deeper read) ===\n${f.content}${f.content.length >= 1500 ? "\n... (truncated)" : ""}`
+        `=== ${f.path} (deeper read) ===\n${f.content}${f.content.length >= 1500 ? "\n... (truncated)" : ""}`,
     )
     .join("\n\n");
 
@@ -71,9 +68,7 @@ ${skeletonBlocks}
 ${sampleBlocks}`;
 
   if (batch.testPairs && batch.testPairs.length > 0) {
-    const testBlock = batch.testPairs
-      .map((p) => `${p.test} → ${p.source}`)
-      .join("\n");
+    const testBlock = batch.testPairs.map((p) => `${p.test} → ${p.source}`).join("\n");
     prompt += `\n\n=== TEST → SOURCE MAPPINGS (for this batch) ===\n\n${testBlock}`;
   }
 
@@ -86,7 +81,7 @@ export function buildReducePrompt(
     offset: number;
     features: Record<string, { description: string; files: string[]; tests?: string[] }>;
     flows: Record<string, { description: string; chain: string[] }>;
-  }>
+  }>,
 ): string {
   return `Merge the following ${partials.length} partial concept maps into a single unified map.
 
@@ -118,7 +113,7 @@ export function buildRefreshReducePrompt(
     offset: number;
     features: Record<string, { description: string; files: string[]; tests?: string[] }>;
     flows: Record<string, { description: string; chain: string[] }>;
-  }>
+  }>,
 ): string {
   return `Merge this scoped refresh into the existing concept map.
 
@@ -131,4 +126,3 @@ ${refreshedFiles.join("\n")}
 === PARTIALS (derived from the re-analyzed files only) ===
 ${JSON.stringify({ partials }, null, 2)}`;
 }
-

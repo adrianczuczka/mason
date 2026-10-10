@@ -6,7 +6,13 @@ import { automate } from "../automation/runtime.js";
 import { inspectOnboarding } from "../mcp/onboarding.js";
 import { writeStoreJson } from "../utils/storage.js";
 import { applyEdit, readText } from "./files.js";
-import { ancillaryEdits, hookEdits, instructionEdits, mcpEdit, inspectHostConfig } from "./config.js";
+import {
+  ancillaryEdits,
+  hookEdits,
+  instructionEdits,
+  mcpEdit,
+  inspectHostConfig,
+} from "./config.js";
 import { hookCommand, installedCommand } from "./launcher.js";
 import { hookConfig } from "../automation/adapters.js";
 import { loadSetup, loadSetupReceipt, SETUP_PATH, type SetupConfig } from "./model.js";
@@ -16,15 +22,27 @@ import type { Progress } from "../utils/progress.js";
 
 export async function selectHost(root: string, explicit?: Host): Promise<Host> {
   if (explicit) return explicit;
-  if (process.env.MASON_SETUP_HOST === "codex" || process.env.MASON_SETUP_HOST === "claude") return process.env.MASON_SETUP_HOST;
+  if (process.env.MASON_SETUP_HOST === "codex" || process.env.MASON_SETUP_HOST === "claude")
+    return process.env.MASON_SETUP_HOST;
   const found: Host[] = [];
-  if (await readText(root, ".codex/config.toml") !== null || await readText(root, ".codex/hooks.json") !== null) found.push("codex");
-  if (await readText(root, ".claude/settings.json") !== null || await readText(root, ".mcp.json") !== null) found.push("claude");
+  if (
+    (await readText(root, ".codex/config.toml")) !== null ||
+    (await readText(root, ".codex/hooks.json")) !== null
+  )
+    found.push("codex");
+  if (
+    (await readText(root, ".claude/settings.json")) !== null ||
+    (await readText(root, ".mcp.json")) !== null
+  )
+    found.push("claude");
   if (found.length === 1) return found[0];
   throw new Error("Choose the assistant for setup with --host codex or --host claude.");
 }
 
-export async function setupProject(dir: string, options: { host?: Host; base?: string; evidence?: string[]; progress?: Progress } = {}) {
+export async function setupProject(
+  dir: string,
+  options: { host?: Host; base?: string; evidence?: string[]; progress?: Progress } = {},
+) {
   options.progress?.step("Checking project configuration");
   const ws = await workspace(dir);
   const host = await selectHost(ws.root, options.host);
@@ -43,15 +61,27 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
     const mcpFingerprint = hash((await inspectHostConfig(ws.root, host, mcp.after)).mcp);
     const desiredHooks = hookConfig(host, hookCommand(host)).hooks;
     const configuredHook = desiredHooks.SessionStart[0].hooks[0].command;
-    const ownership = await ownershipEdit(ws.root, [...instructions, mcp, hooks[0]], { [hooks[0].path]: configuredHook });
-    const fingerprint = hash({ command: "mason",
-      mcp: mcpFingerprint, hooks: desiredHooks,
-      instructions: instructions.map(edit => edit.path) });
+    const ownership = await ownershipEdit(ws.root, [...instructions, mcp, hooks[0]], {
+      [hooks[0].path]: configuredHook,
+    });
+    const fingerprint = hash({
+      command: "mason",
+      mcp: mcpFingerprint,
+      hooks: desiredHooks,
+      instructions: instructions.map((edit) => edit.path),
+    });
     const previous = existing?.hosts[host];
-    const changed = edits.some(edit => edit.before !== edit.after) || previous?.fingerprint !== fingerprint;
+    const changed =
+      edits.some((edit) => edit.before !== edit.after) || previous?.fingerprint !== fingerprint;
     const revision = !changed && previous ? previous.revision : randomUUID();
     const setup: SetupConfig = existing ?? { version: 2, hosts: {} };
-    setup.hosts[host] = { configuredVersion: installed.version!, revision, fingerprint, mcpFingerprint, instructions: instructions.map(e => e.path) };
+    setup.hosts[host] = {
+      configuredVersion: installed.version!,
+      revision,
+      fingerprint,
+      mcpFingerprint,
+      instructions: instructions.map((e) => e.path),
+    };
 
     // Capture through the ordinary automation engine so later hooks resume the
     // same immutable baselines. This must precede instruction and ignore edits.
@@ -61,46 +91,93 @@ export async function setupProject(dir: string, options: { host?: Host; base?: s
     const findings = await inspectOnboarding(ws.root, options.base, options.evidence);
     const receiptPath = ws.directory + "/setup-" + host + ".json";
     const initialReportPath = previousReceipt?.initialReportPath ?? initial.report.reportPath;
-    const initialBaselinePaths = previousReceipt?.initialBaselinePaths ?? initial.report.baselinePaths;
+    const initialBaselinePaths =
+      previousReceipt?.initialBaselinePaths ?? initial.report.baselinePaths;
     options.progress?.step(`Configuring ${host === "codex" ? "Codex" : "Claude Code"} integration`);
-    await writeStoreJson(ws.root, receiptPath, { version: 1, host, status: "installing", initialReportPath,
-      initialBaselinePaths, root: ws.root, revision });
+    await writeStoreJson(ws.root, receiptPath, {
+      version: 1,
+      host,
+      status: "installing",
+      initialReportPath,
+      initialBaselinePaths,
+      root: ws.root,
+      revision,
+    });
     const changedFiles: string[] = [];
     if (await applyEdit(ws.root, ownership)) changedFiles.push(ownership.path);
     for (const edit of edits) if (await applyEdit(ws.root, edit)) changedFiles.push(edit.path);
-    if (await applyEdit(ws.root, { path: SETUP_PATH, before: setupBefore, after: JSON.stringify(setup, null, 2) + "\n" })) changedFiles.push(SETUP_PATH);
-    if (await applyEdit(ws.root, await completedHookOwnership(ws.root, hooks[0].path, configuredHook)) && !changedFiles.includes(ownership.path)) changedFiles.push(ownership.path);
+    if (
+      await applyEdit(ws.root, {
+        path: SETUP_PATH,
+        before: setupBefore,
+        after: JSON.stringify(setup, null, 2) + "\n",
+      })
+    )
+      changedFiles.push(SETUP_PATH);
+    if (
+      (await applyEdit(
+        ws.root,
+        await completedHookOwnership(ws.root, hooks[0].path, configuredHook),
+      )) &&
+      !changedFiles.includes(ownership.path)
+    )
+      changedFiles.push(ownership.path);
     // Ensure a repo that initially had no instructions now has a baseline too.
     options.progress?.step("Checking configuration and retained findings");
     const checked = await automate(ws.root, { event: "turn_start" });
     const configured = await inspectHostConfig(ws.root, host, undefined);
     const stats = await configureUsefulness(ws.root, true, { onlyIfUnset: true }).catch(() => ({
-      enabled: null, storage: ".mason/local/usefulness",
+      enabled: null,
+      storage: ".mason/local/usefulness",
       note: "Local stats unavailable. Inspect mason stats --json, or use mason stats --disable to reset the preference. Existing observations were retained.",
     }));
-    await writeStoreJson(ws.root, receiptPath, { version: 1, host, status: "configured", initialReportPath,
-      initialBaselinePaths, root: ws.root, revision, configuredAt: new Date().toISOString() });
-    return { version: 1, action: "setup", status: "configured", host, root: ws.root,
-      runtime: { kind: "global", command: "mason", version: installed.version }, changedFiles, initialReportPath, findings, reportPath: checked.report.reportPath,
-      activation: await setupStatus(ws.root), stats,
-      next: configured.disabled || configured.mcpDisabled ? "Mason hooks or MCP are disabled in project configuration. Review that setting before activation."
-        : host === "codex" ? "Review/trust this project's MCP configuration and hooks in Codex (/hooks in the CLI), then start a new session and give it a normal task."
-        : "Approve the project MCP server in Claude Code, then start a new session and give it a normal task.",
+    await writeStoreJson(ws.root, receiptPath, {
+      version: 1,
+      host,
+      status: "configured",
+      initialReportPath,
+      initialBaselinePaths,
+      root: ws.root,
+      revision,
+      configuredAt: new Date().toISOString(),
+    });
+    return {
+      version: 1,
+      action: "setup",
+      status: "configured",
+      host,
+      root: ws.root,
+      runtime: { kind: "global", command: "mason", version: installed.version },
+      changedFiles,
+      initialReportPath,
+      findings,
+      reportPath: checked.report.reportPath,
+      activation: await setupStatus(ws.root),
+      stats,
+      next:
+        configured.disabled || configured.mcpDisabled
+          ? "Mason hooks or MCP are disabled in project configuration. Review that setting before activation."
+          : host === "codex"
+            ? "Review/trust this project's MCP configuration and hooks in Codex (/hooks in the CLI), then start a new session and give it a normal task."
+            : "Approve the project MCP server in Claude Code, then start a new session and give it a normal task.",
     };
   });
 }
 
 export function summarizeSetup(result: Awaited<ReturnType<typeof setupProject>>): string {
   const audit = result.findings.audit;
-  return [`Mason configured for ${result.host}.`,
+  return [
+    `Mason configured for ${result.host}.`,
     "  MCP server and lifecycle hooks use mason from PATH.",
     "  Project instructions updated; original audit evidence retained.",
     `  ${result.changedFiles.length} files changed.`,
-    result.stats.enabled === null ? result.stats.note : result.stats.enabled
-      ? "Local stats enabled: metadata stays in .mason/local/usefulness/; nothing is uploaded. View with mason stats; disable with mason stats --disable."
-      : "Local stats remain disabled by your saved preference. Enable with mason stats --enable.",
+    result.stats.enabled === null
+      ? result.stats.note
+      : result.stats.enabled
+        ? "Local stats enabled: metadata stays in .mason/local/usefulness/; nothing is uploaded. View with mason stats; disable with mason stats --disable."
+        : "Local stats remain disabled by your saved preference. Enable with mason stats --enable.",
     `Initial audit: ${audit.status}${"counts" in audit ? `; ${audit.counts.issues} issues, ${audit.counts.advisories + audit.counts.suppressedAdvisories} advisories` : ""}.`,
-    ...("issues" in audit ? audit.issues.slice(0, 3).map(f => "  " + f.message) : []),
+    ...("issues" in audit ? audit.issues.slice(0, 3).map((f) => "  " + f.message) : []),
     `Original evidence: ${result.initialReportPath}`,
     "Activation: " + result.activation.status + ".",
     result.next,

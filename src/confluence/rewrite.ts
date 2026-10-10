@@ -1,15 +1,7 @@
 import { callLLM } from "../llm/providers.js";
 import type { MasonConfig } from "../llm/config.js";
-import type {
-  FeatureEntry,
-  FlowEntry,
-  Snapshot,
-} from "../snapshot/snapshot.js";
-import {
-  hashDescription,
-  type RewriteCache,
-  type RewriteCacheEntry,
-} from "./diff.js";
+import type { FeatureEntry, FlowEntry, Snapshot } from "../snapshot/snapshot.js";
+import { hashDescription, type RewriteCache, type RewriteCacheEntry } from "./diff.js";
 
 const PM_REWRITE_SYSTEM_PROMPT = `You are Mason, rewriting an engineering-flavoured concept map into product-readable language for a company wiki.
 
@@ -102,21 +94,13 @@ function pick<T>(source: Record<string, T>, keys: string[]): Record<string, T> {
 export async function rewriteForProduct(
   snapshot: Snapshot,
   config: MasonConfig,
-  ctx: RewriteContext = {}
+  ctx: RewriteContext = {},
 ): Promise<RewriteResult> {
   const featureHashes = hashEntries(snapshot.features);
   const flowHashes = hashEntries(snapshot.flows);
 
-  const missFeatures = missingNames(
-    snapshot.features,
-    featureHashes,
-    ctx.previousCache?.features
-  );
-  const missFlows = missingNames(
-    snapshot.flows,
-    flowHashes,
-    ctx.previousCache?.flows
-  );
+  const missFeatures = missingNames(snapshot.features, featureHashes, ctx.previousCache?.features);
+  const missFlows = missingNames(snapshot.flows, flowHashes, ctx.previousCache?.flows);
 
   let parsed: Rewritten = { features: {}, flows: {} };
   if (missFeatures.length > 0 || missFlows.length > 0) {
@@ -128,11 +112,7 @@ export async function rewriteForProduct(
     const llm = ctx.llm ?? callLLM;
     const result = await llm(config, prompt, PM_REWRITE_SYSTEM_PROMPT);
     const text =
-      typeof result === "string"
-        ? result
-        : result.type === "response"
-          ? result.text
-          : "";
+      typeof result === "string" ? result : result.type === "response" ? result.text : "";
     // Empty text means no API/CLI is available — leave `parsed` empty so every
     // miss falls back to its engineering description (cached as fallback).
     if (text) parsed = parseRewriteResponse(text);
@@ -142,14 +122,9 @@ export async function rewriteForProduct(
     snapshot.features,
     featureHashes,
     parsed.features,
-    ctx.previousCache?.features
+    ctx.previousCache?.features,
   );
-  const flows = resolve(
-    snapshot.flows,
-    flowHashes,
-    parsed.flows,
-    ctx.previousCache?.flows
-  );
+  const flows = resolve(snapshot.flows, flowHashes, parsed.flows, ctx.previousCache?.flows);
 
   return {
     features: features.descriptions,
@@ -158,9 +133,7 @@ export async function rewriteForProduct(
   };
 }
 
-function hashEntries(
-  entries: Record<string, { description: string }>
-): Record<string, string> {
+function hashEntries(entries: Record<string, { description: string }>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, entry] of Object.entries(entries)) {
     out[name] = hashDescription(entry.description);
@@ -169,21 +142,16 @@ function hashEntries(
 }
 
 /** A cache entry is a hit only if the source hash matches and it isn't a fallback. */
-function isHit(
-  prev: RewriteCacheEntry | undefined,
-  hash: string
-): prev is RewriteCacheEntry {
+function isHit(prev: RewriteCacheEntry | undefined, hash: string): prev is RewriteCacheEntry {
   return !!prev && prev.sourceHash === hash && !prev.fallback;
 }
 
 function missingNames(
   entries: Record<string, { description: string }>,
   hashes: Record<string, string>,
-  prevCache: Record<string, RewriteCacheEntry> | undefined
+  prevCache: Record<string, RewriteCacheEntry> | undefined,
 ): string[] {
-  return Object.keys(entries).filter(
-    (name) => !isHit(prevCache?.[name], hashes[name])
-  );
+  return Object.keys(entries).filter((name) => !isHit(prevCache?.[name], hashes[name]));
 }
 
 /**
@@ -195,7 +163,7 @@ function resolve(
   entries: Record<string, { description: string }>,
   hashes: Record<string, string>,
   rewritten: Record<string, string>,
-  prevCache: Record<string, RewriteCacheEntry> | undefined
+  prevCache: Record<string, RewriteCacheEntry> | undefined,
 ): { descriptions: Record<string, string>; cache: Record<string, RewriteCacheEntry> } {
   const descriptions: Record<string, string> = {};
   const cache: Record<string, RewriteCacheEntry> = {};

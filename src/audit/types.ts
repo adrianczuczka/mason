@@ -1,10 +1,6 @@
 import type { decisionProvenance } from "../decisions/provenance.js";
 
-export type IssueType =
-  | "deleted-reference"
-  | "new-module"
-  | "stale-count"
-  | "dead-command";
+export type IssueType = "deleted-reference" | "new-module" | "stale-count" | "dead-command";
 
 export type AdvisoryType = "deps-changed" | "decision-anchor-drift" | IssueType;
 

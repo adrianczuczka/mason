@@ -111,47 +111,60 @@ describe("runAuditCli: outcomes", () => {
 
   it("filters checks via --checks", async () => {
     await seedStaleRepo();
-    expect(
-      await runAuditCli(["--dir", tmpDir, "--checks", "stale-count"], io)
-    ).toBe(0);
+    expect(await runAuditCli(["--dir", tmpDir, "--checks", "stale-count"], io)).toBe(0);
   });
 });
 
 describe("runAuditCli: --json contract", () => {
-  it.each(["dedicated", "unified"])("flushes large piped repair reports through the %s CLI", async (entry) => {
-    await write("settings.gradle.kts", 'include(":app")\n');
-    await write("README.md", Array.from({ length: 500 }, (_, i) => `${i + 2} modules`).join("\n"));
-    await commitAll(tmpDir, "large audit fixture");
+  it.each(["dedicated", "unified"])(
+    "flushes large piped repair reports through the %s CLI",
+    async (entry) => {
+      await write("settings.gradle.kts", 'include(":app")\n');
+      await write(
+        "README.md",
+        Array.from({ length: 500 }, (_, i) => `${i + 2} modules`).join("\n"),
+      );
+      await commitAll(tmpDir, "large audit fixture");
 
-    const run = async (args: string[]) => {
-      const binary = path.resolve("dist", entry === "dedicated" ? "mason-audit.js" : "mason.js");
-      const child = spawn(process.execPath, [binary, ...(entry === "unified" ? ["audit"] : []), "--dir", tmpDir, "--json", ...args],
-        { stdio: ["ignore", "pipe", "pipe"] });
-      const output: Buffer[] = [], errors: Buffer[] = [];
-      child.stderr.on("data", chunk => errors.push(chunk));
-      // Delay the reader to exercise stdout backpressure instead of relying on
-      // the runner's pipe capacity or scheduling to reproduce truncation.
-      child.stdout.once("readable", () => setTimeout(() => {
-        child.stdout.on("data", chunk => output.push(chunk));
-        child.stdout.resume();
-      }, 100));
-      const code = await new Promise<number | null>((resolve, reject) => {
-        child.once("error", reject);
-        child.once("close", resolve);
-      });
-      expect(code).toBe(1);
-      expect(Buffer.concat(errors).toString()).toBe("");
-      const text = Buffer.concat(output).toString();
-      expect(Buffer.byteLength(text)).toBeGreaterThan(128 * 1024);
-      return JSON.parse(text);
-    };
+      const run = async (args: string[]) => {
+        const binary = path.resolve("dist", entry === "dedicated" ? "mason-audit.js" : "mason.js");
+        const child = spawn(
+          process.execPath,
+          [binary, ...(entry === "unified" ? ["audit"] : []), "--dir", tmpDir, "--json", ...args],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        const output: Buffer[] = [],
+          errors: Buffer[] = [];
+        child.stderr.on("data", (chunk) => errors.push(chunk));
+        // Delay the reader to exercise stdout backpressure instead of relying on
+        // the runner's pipe capacity or scheduling to reproduce truncation.
+        child.stdout.once("readable", () =>
+          setTimeout(() => {
+            child.stdout.on("data", (chunk) => output.push(chunk));
+            child.stdout.resume();
+          }, 100),
+        );
+        const code = await new Promise<number | null>((resolve, reject) => {
+          child.once("error", reject);
+          child.once("close", resolve);
+        });
+        expect(code).toBe(1);
+        expect(Buffer.concat(errors).toString()).toBe("");
+        const text = Buffer.concat(output).toString();
+        expect(Buffer.byteLength(text)).toBeGreaterThan(128 * 1024);
+        return JSON.parse(text);
+      };
 
-    const prepared = await run(["--checks", "stale-count", "--prepare-repair"]);
-    expect(prepared.report.issues).toHaveLength(500);
-    const verified = await run(["--verify-repair", prepared.baselinePath]);
-    expect(verified.findings).toHaveLength(500);
-    expect(verified.findings.every((finding: { status: string }) => finding.status === "unresolved")).toBe(true);
-  }, 30000);
+      const prepared = await run(["--checks", "stale-count", "--prepare-repair"]);
+      expect(prepared.report.issues).toHaveLength(500);
+      const verified = await run(["--verify-repair", prepared.baselinePath]);
+      expect(verified.findings).toHaveLength(500);
+      expect(
+        verified.findings.every((finding: { status: string }) => finding.status === "unresolved"),
+      ).toBe(true);
+    },
+    30000,
+  );
 
   it("emits the versioned report shape", async () => {
     await seedStaleRepo();

@@ -45,9 +45,10 @@ async function countNpmWorkspaces(root: string): Promise<CountSource | null> {
       // Malformed package.json — nothing provable here.
     }
     if (globs.length > 0) {
-      const matched = await auditGlob(root,
+      const matched = await auditGlob(
+        root,
         globs.map((g) => `${g.replace(/\/+$/, "")}/package.json`),
-        { ignore: ["**/node_modules/**"], label: "npm workspace discovery" }
+        { ignore: ["**/node_modules/**"], label: "npm workspace discovery" },
       );
       return {
         actual: matched.length,
@@ -76,9 +77,10 @@ async function countNpmWorkspaces(root: string): Promise<CountSource | null> {
       }
     }
     if (globs.length > 0) {
-      const matched = await auditGlob(root,
+      const matched = await auditGlob(
+        root,
         globs.map((g) => `${g.replace(/\/+$/, "")}/package.json`),
-        { ignore: ["**/node_modules/**"], label: "pnpm workspace discovery" }
+        { ignore: ["**/node_modules/**"], label: "pnpm workspace discovery" },
       );
       return {
         actual: matched.length,
@@ -95,9 +97,7 @@ async function countCargoCrates(root: string): Promise<CountSource | null> {
   if (content === null) return null;
   const membersBlock = content.match(/members\s*=\s*\[([\s\S]*?)\]/);
   if (!membersBlock) return null;
-  const entries = [...membersBlock[1].matchAll(/["']([^"']+)["']/g)].map(
-    (m) => m[1]
-  );
+  const entries = [...membersBlock[1].matchAll(/["']([^"']+)["']/g)].map((m) => m[1]);
   if (entries.length === 0) return null;
 
   // Workspace members may be globs ("crates/*") — resolve them against
@@ -110,9 +110,7 @@ async function countCargoCrates(root: string): Promise<CountSource | null> {
         label: "Cargo workspace discovery",
       });
       for (const m of matched) members.add(path.dirname(m));
-    } else if (
-      (await readAuditInput(root, path.posix.join(entry, "Cargo.toml"))) !== null
-    ) {
+    } else if ((await readAuditInput(root, path.posix.join(entry, "Cargo.toml"))) !== null) {
       members.add(entry);
     }
   }
@@ -131,7 +129,7 @@ async function countCargoCrates(root: string): Promise<CountSource | null> {
  */
 export async function resolveCountSource(
   root: string,
-  claim: CountClaim
+  claim: CountClaim,
 ): Promise<CountSource | null> {
   const unit = claim.unit.replace(/s$/, "");
   if (unit === "module") return countGradleModules(root);
@@ -146,25 +144,33 @@ export async function resolveCountSource(
 }
 
 /** Nested documents cannot assert the root workspace's count implicitly. */
-export async function resolveDocCountSource(root: string, doc: string, claim: CountClaim): Promise<CountSource | null> {
+export async function resolveDocCountSource(
+  root: string,
+  doc: string,
+  claim: CountClaim,
+): Promise<CountSource | null> {
   const scope = documentScope(doc);
   const source = await resolveCountSource(path.join(root, scope), claim);
   if (!source || scope === ".") return source;
-  return { ...source, countedFrom: scope + "/" + source.countedFrom,
-    members: source.members.map(member => scope + "/" + member) };
+  return {
+    ...source,
+    countedFrom: scope + "/" + source.countedFrom,
+    members: source.members.map((member) => scope + "/" + member),
+  };
 }
 
-export async function checkStaleCounts(
-  ctx: CheckContext
-): Promise<CheckResult> {
+export async function checkStaleCounts(ctx: CheckContext): Promise<CheckResult> {
   const result = emptyResult();
 
   for (const doc of ctx.docs) {
     for (const claim of doc.claims.counts) {
       const source = await resolveDocCountSource(ctx.root, doc.path, claim);
       if (source === null) {
-        result.skipped.push({ check: "stale-count", doc: doc.path,
-          reason: `${doc.path}: cannot resolve a workspace manifest for "${claim.excerpt}"` });
+        result.skipped.push({
+          check: "stale-count",
+          doc: doc.path,
+          reason: `${doc.path}: cannot resolve a workspace manifest for "${claim.excerpt}"`,
+        });
         continue;
       }
       if (source.actual === claim.count) continue;

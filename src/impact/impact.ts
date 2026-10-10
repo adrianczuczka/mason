@@ -26,10 +26,7 @@ export interface ImpactResult {
   tests: TestEntry[];
 }
 
-export async function analyzeImpact(
-  rootDir: string,
-  targetFiles: string[]
-): Promise<ImpactResult> {
+export async function analyzeImpact(rootDir: string, targetFiles: string[]): Promise<ImpactResult> {
   const resolvedRoot = path.resolve(rootDir);
 
   // Resolve target files to full relative paths if only basename given
@@ -49,10 +46,7 @@ export async function analyzeImpact(
   };
 }
 
-async function resolveTargetFiles(
-  rootDir: string,
-  targets: string[]
-): Promise<string[]> {
+async function resolveTargetFiles(rootDir: string, targets: string[]): Promise<string[]> {
   const resolved: string[] = [];
   const access = await createFileAccess(rootDir);
 
@@ -84,10 +78,7 @@ async function resolveTargetFiles(
   return resolved;
 }
 
-async function getCochangeFiles(
-  rootDir: string,
-  targetFiles: string[]
-): Promise<CochangeEntry[]> {
+async function getCochangeFiles(rootDir: string, targetFiles: string[]): Promise<CochangeEntry[]> {
   const cochangeCounts = new Map<string, number>();
   let totalTargetCommits = 0;
 
@@ -97,7 +88,7 @@ async function getCochangeFiles(
       const { stdout: commitLog } = await exec(
         "git",
         ["log", "--format=%H", "-n", "500", "--", targetFile],
-        { cwd: rootDir, maxBuffer: 5_000_000 }
+        { cwd: rootDir, maxBuffer: 5_000_000 },
       );
 
       const commits = commitLog.trim().split("\n").filter(Boolean);
@@ -111,7 +102,7 @@ async function getCochangeFiles(
           const { stdout: filesInCommit } = await exec(
             "git",
             ["diff-tree", "--no-commit-id", "--name-only", "-r", commit],
-            { cwd: rootDir }
+            { cwd: rootDir },
           );
 
           const files = filesInCommit.trim().split("\n").filter(Boolean);
@@ -142,31 +133,30 @@ async function getCochangeFiles(
     .slice(0, 20);
 }
 
-async function getReferences(
-  rootDir: string,
-  targetFiles: string[]
-): Promise<ReferenceEntry[]> {
+async function getReferences(rootDir: string, targetFiles: string[]): Promise<ReferenceEntry[]> {
   const access = await createFileAccess(rootDir);
   const allSourceFiles = await access.list(SOURCE_GLOB);
   const available = new Set(allSourceFiles);
   const targetContents = new Map<string, string>();
   for (const target of targetFiles) {
     const source = await access.read(target);
-    if (source) { available.add(target); targetContents.set(target, source.content); }
+    if (source) {
+      available.add(target);
+      targetContents.set(target, source.content);
+    }
   }
   const match = createReferenceMatcher(targetFiles, available, targetContents);
   const references: ReferenceEntry[] = [];
   for (let i = 0; i < allSourceFiles.length; i += 50) {
-    const batch = await Promise.all(allSourceFiles.slice(i, i + 50).map(file => access.read(file)));
+    const batch = await Promise.all(
+      allSourceFiles.slice(i, i + 50).map((file) => access.read(file)),
+    );
     for (const source of batch) if (source) references.push(...match(source));
   }
   return sortReferences(references);
 }
 
-async function getRelatedTests(
-  rootDir: string,
-  targetFiles: string[]
-): Promise<TestEntry[]> {
+async function getRelatedTests(rootDir: string, targetFiles: string[]): Promise<TestEntry[]> {
   const testPatterns = [
     "**/*.test.*",
     "**/*.spec.*",
@@ -186,14 +176,10 @@ async function getRelatedTests(
   const results: TestEntry[] = [];
 
   for (const target of targetFiles) {
-    const targetBaseName = path
-      .basename(target)
-      .replace(/\.[^.]+$/, "");
+    const targetBaseName = path.basename(target).replace(/\.[^.]+$/, "");
 
     for (const testFile of testFiles) {
-      const testBaseName = path
-        .basename(testFile)
-        .replace(/\.[^.]+$/, "");
+      const testBaseName = path.basename(testFile).replace(/\.[^.]+$/, "");
 
       // Strip test suffixes to get the source name
       const sourceName = testBaseName

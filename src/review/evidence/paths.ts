@@ -15,7 +15,9 @@ export function evidencePath(value: string, sourceRoot: string, uri = false): st
         file = decodeURIComponent(file);
       }
     }
-  } catch { return null; }
+  } catch {
+    return null;
+  }
   file = file.replace(/\\/g, "/");
   const root = sourceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
   if (file.startsWith("/") || /^[A-Za-z]:/.test(file)) {

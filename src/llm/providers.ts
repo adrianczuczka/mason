@@ -26,14 +26,12 @@ The CLAUDE.md should include:
 
 Be specific and actionable. Reference actual file paths. Don't be generic — every rule should be grounded in what you see in the data.`;
 
-export type CallResult =
-  | { type: "response"; text: string }
-  | { type: "prompt"; text: string };
+export type CallResult = { type: "response"; text: string } | { type: "prompt"; text: string };
 
 export async function callLLM(
   config: MasonConfig,
   userMessage: string,
-  systemPrompt?: string
+  systemPrompt?: string,
 ): Promise<CallResult> {
   const model = config.model ?? getDefaultModel(config.provider);
   const system = systemPrompt ?? CLAUDE_MD_SYSTEM_PROMPT;
@@ -98,7 +96,7 @@ async function callViaTempFile(
   command: string,
   args: (promptPath: string) => string[],
   system: string,
-  userMessage: string
+  userMessage: string,
 ): Promise<string> {
   const fs = await import("node:fs/promises");
   const os = await import("node:os");
@@ -119,11 +117,7 @@ async function callViaTempFile(
   }
 }
 
-function spawnWithStdin(
-  command: string,
-  args: string[],
-  input: string
-): Promise<string> {
+function spawnWithStdin(command: string, args: string[], input: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       stdio: ["pipe", "pipe", "pipe"],
@@ -165,17 +159,11 @@ function spawnWithStdin(
   });
 }
 
-async function callClaudeCLI(
-  system: string,
-  userMessage: string
-): Promise<string> {
+async function callClaudeCLI(system: string, userMessage: string): Promise<string> {
   return spawnWithStdin("claude", ["-p", "--system-prompt", system], userMessage);
 }
 
-async function callGeminiCLI(
-  system: string,
-  userMessage: string
-): Promise<string> {
+async function callGeminiCLI(system: string, userMessage: string): Promise<string> {
   const prompt = `<system>\n${system}\n</system>\n\n${userMessage}`;
   return spawnWithStdin("gemini", ["-p", ""], prompt);
 }
@@ -184,7 +172,7 @@ async function callOllamaCLI(
   host: string,
   model: string,
   system: string,
-  userMessage: string
+  userMessage: string,
 ): Promise<string> {
   const response = await fetch(`${host}/api/chat`, {
     method: "POST",
@@ -211,7 +199,7 @@ async function callClaudeAPI(
   apiKey: string,
   model: string,
   system: string,
-  userMessage: string
+  userMessage: string,
 ): Promise<string> {
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
   const client = new Anthropic({ apiKey });
@@ -231,7 +219,7 @@ async function callGeminiAPI(
   apiKey: string,
   model: string,
   system: string,
-  userMessage: string
+  userMessage: string,
 ): Promise<string> {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
@@ -255,7 +243,7 @@ async function callOpenAIAPI(
   apiKey: string,
   model: string,
   system: string,
-  userMessage: string
+  userMessage: string,
 ): Promise<string> {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey });

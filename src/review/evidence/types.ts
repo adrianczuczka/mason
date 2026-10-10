@@ -1,5 +1,9 @@
 export type CheckOutcome = "passed" | "failed" | "skipped" | "unavailable";
-export interface EvidenceLocation { file: string; line?: number; column?: number }
+export interface EvidenceLocation {
+  file: string;
+  line?: number;
+  column?: number;
+}
 export interface RawFinding {
   id: string;
   message: string;

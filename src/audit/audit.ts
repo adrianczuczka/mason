@@ -28,14 +28,17 @@ export interface AuditOptions {
  */
 export async function computeAudit(
   rootDir: string,
-  options: AuditOptions = {}
+  options: AuditOptions = {},
 ): Promise<AuditReport | null> {
   return profilePhase("audit.current", () => auditCurrent(rootDir, options));
 }
 
 async function auditCurrent(rootDir: string, options: AuditOptions): Promise<AuditReport | null> {
   const resolvedRoot = path.resolve(rootDir);
-  const [docs, headHash] = await Promise.all([discoverDocs(resolvedRoot), getCurrentGitHash(resolvedRoot)]);
+  const [docs, headHash] = await Promise.all([
+    discoverDocs(resolvedRoot),
+    getCurrentGitHash(resolvedRoot),
+  ]);
   if (docs.length === 0) return null;
 
   const report: AuditReport = {
@@ -68,7 +71,8 @@ async function auditCurrent(rootDir: string, options: AuditOptions): Promise<Aud
   const changesByCommit = new Map<string, FileChange[] | null>();
   for (const doc of docs) {
     const hash = doc.lastCommit?.hash;
-    if (hash && !changesByCommit.has(hash)) changesByCommit.set(hash, await getChangesWithStatus(resolvedRoot, hash));
+    if (hash && !changesByCommit.has(hash))
+      changesByCommit.set(hash, await getChangesWithStatus(resolvedRoot, hash));
     changesSinceDoc.set(doc.path, hash ? changesByCommit.get(hash)! : null);
   }
 
@@ -94,24 +98,42 @@ async function auditCurrent(rootDir: string, options: AuditOptions): Promise<Aud
   for (const name of ALL_CHECKS) {
     if (!selected.includes(name)) continue;
     const exclusions = policy?.exclude?.[name] ?? [];
-    const included = await includedCheckPaths(resolvedRoot, docs.map(doc => doc.path), exclusions);
-    const excluded = docs.filter(doc => !included.has(doc.path)).map(doc => ({ check: name, doc: doc.path }));
+    const included = await includedCheckPaths(
+      resolvedRoot,
+      docs.map((doc) => doc.path),
+      exclusions,
+    );
+    const excluded = docs
+      .filter((doc) => !included.has(doc.path))
+      .map((doc) => ({ check: name, doc: doc.path }));
     if (excluded.length) (report.excludedChecks ??= []).push(...excluded);
-    const scoped = { ...ctx, docs: docs.filter(doc => included.has(doc.path)) };
+    const scoped = { ...ctx, docs: docs.filter((doc) => included.has(doc.path)) };
     const { issues, advisories, suppressedAdvisories, skipped } = await (options.runCheck
-      ? options.runCheck(name, scoped) : CHECKS[name](scoped));
+      ? options.runCheck(name, scoped)
+      : CHECKS[name](scoped));
     report.checksRun!.push(name);
     report.issues.push(...issues);
-    const advisoryPaths = await includedCheckPaths(resolvedRoot, [...new Set(advisories.map(f => f.anchor.doc))], exclusions);
-    report.advisories.push(...advisories.filter(f => advisoryPaths.has(f.anchor.doc)));
-    for (const f of advisories) if (!advisoryPaths.has(f.anchor.doc)) (report.excludedChecks ??= []).push({ check: name, doc: f.anchor.doc });
+    const advisoryPaths = await includedCheckPaths(
+      resolvedRoot,
+      [...new Set(advisories.map((f) => f.anchor.doc))],
+      exclusions,
+    );
+    report.advisories.push(...advisories.filter((f) => advisoryPaths.has(f.anchor.doc)));
+    for (const f of advisories)
+      if (!advisoryPaths.has(f.anchor.doc))
+        (report.excludedChecks ??= []).push({ check: name, doc: f.anchor.doc });
     report.suppressedAdvisories!.push(...(suppressedAdvisories ?? []));
     report.skippedChecks.push(...skipped);
   }
 
   report.clean = report.issues.length === 0;
-  const reviews = (await Promise.all([...report.advisories, ...report.suppressedAdvisories!]
-    .map(finding => assessAdvisory(resolvedRoot, finding, headHash)))).filter(review => review !== null);
+  const reviews = (
+    await Promise.all(
+      [...report.advisories, ...report.suppressedAdvisories!].map((finding) =>
+        assessAdvisory(resolvedRoot, finding, headHash),
+      ),
+    )
+  ).filter((review) => review !== null);
   if (reviews.length) report.advisoryReviews = reviews;
   return report;
 }

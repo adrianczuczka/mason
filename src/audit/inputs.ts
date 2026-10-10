@@ -13,10 +13,14 @@ const MAX_INPUTS = 100_000;
 /** Check the paths a particular audit actually reads, including their parents. */
 export async function auditInputPath(root: string, file: string): Promise<string> {
   if (file === ".") return fs.realpath(root);
-  try { return await storePath(root, file); }
-  catch (error) {
+  try {
+    return await storePath(root, file);
+  } catch (error) {
     if (error instanceof Error && error.message.startsWith("Symlink")) {
-      throw new Error(`Audit input contains a symbolic link: ${file}. Its evidence could not be verified.`, { cause: error });
+      throw new Error(
+        `Audit input contains a symbolic link: ${file}. Its evidence could not be verified.`,
+        { cause: error },
+      );
     }
     throw error;
   }
@@ -34,23 +38,43 @@ export async function readAuditInput(root: string, file: string): Promise<string
 }
 
 /** Bound relevant results and directory traversal, without counting unrelated files. */
-export async function auditGlob(root: string, patterns: string | string[], options: {
-  ignore?: string[]; onlyDirectories?: boolean; followSymbolicLinks?: boolean; label: string; select?: (file: string) => boolean;
-}): Promise<string[]> {
+export async function auditGlob(
+  root: string,
+  patterns: string | string[],
+  options: {
+    ignore?: string[];
+    onlyDirectories?: boolean;
+    followSymbolicLinks?: boolean;
+    label: string;
+    select?: (file: string) => boolean;
+  },
+): Promise<string[]> {
   if (Array.isArray(patterns) && !patterns.length) return [];
   const directories = new Set<string>();
   // fast-glob may stat a link, but must never enumerate a linked directory.
   // Validate each traversal and each selected result instead of scanning the
   // entire repository just to reject unrelated symlinks.
-  const readdir = ((directory: string, opts: unknown, callback: (error: unknown, entries?: unknown) => void) => {
+  const readdir = ((
+    directory: string,
+    opts: unknown,
+    callback: (error: unknown, entries?: unknown) => void,
+  ) => {
     const relative = path.relative(root, directory).split(path.sep).join("/") || ".";
     directories.add(relative);
     if (directories.size > MAX_INPUTS) {
-      callback(new Error(`${options.label} exceeds ${MAX_INPUTS.toLocaleString("en-US")} directories while inspecting ${relative}. Narrow this check's inputs.`));
+      callback(
+        new Error(
+          `${options.label} exceeds ${MAX_INPUTS.toLocaleString("en-US")} directories while inspecting ${relative}. Narrow this check's inputs.`,
+        ),
+      );
       return;
     }
     auditInputPath(root, relative).then(() => {
-      nativeFs.readdir(directory, opts as { withFileTypes: true }, callback as (error: NodeJS.ErrnoException | null, entries: nativeFs.Dirent[]) => void);
+      nativeFs.readdir(
+        directory,
+        opts as { withFileTypes: true },
+        callback as (error: NodeJS.ErrnoException | null, entries: nativeFs.Dirent[]) => void,
+      );
     }, callback);
   }) as typeof nativeFs.readdir;
   // Literal workspace patterns use lstat instead of readdir. Validate them
@@ -59,9 +83,16 @@ export async function auditGlob(root: string, patterns: string | string[], optio
     const relative = path.relative(root, file).split(path.sep).join("/") || ".";
     auditInputPath(root, relative).then(() => nativeFs.lstat(file, callback), callback);
   }) as typeof nativeFs.lstat;
-  const stream = fg.stream(patterns, { cwd: root, ignore: options.ignore,
-    onlyFiles: false, onlyDirectories: options.onlyDirectories, objectMode: true,
-    followSymbolicLinks: options.followSymbolicLinks ?? true, fs: { readdir, lstat }, concurrency: 16 }) as Readable;
+  const stream = fg.stream(patterns, {
+    cwd: root,
+    ignore: options.ignore,
+    onlyFiles: false,
+    onlyDirectories: options.onlyDirectories,
+    objectMode: true,
+    followSymbolicLinks: options.followSymbolicLinks ?? true,
+    fs: { readdir, lstat },
+    concurrency: 16,
+  }) as Readable;
   const matches: string[] = [];
   try {
     for await (const value of stream) {
@@ -72,13 +103,23 @@ export async function auditGlob(root: string, patterns: string | string[], optio
       if (!options.onlyDirectories && !entry.dirent.isFile()) continue;
       matches.push(file);
       if (matches.length > MAX_INPUTS) {
-        const largest = [...matches.reduce((counts, item) => {
-          const dir = item.split("/")[0]; counts.set(dir, (counts.get(dir) ?? 0) + 1); return counts;
-        }, new Map<string, number>())].sort((a, b) => b[1] - a[1]).slice(0, 3);
-        throw new Error(`${options.label} exceeds ${MAX_INPUTS.toLocaleString("en-US")} relevant paths. Largest directories: ${largest.map(([dir, count]) => `${dir} (${count})`).join(", ")}. Narrow this check's inputs.`);
+        const largest = [
+          ...matches.reduce((counts, item) => {
+            const dir = item.split("/")[0];
+            counts.set(dir, (counts.get(dir) ?? 0) + 1);
+            return counts;
+          }, new Map<string, number>()),
+        ]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3);
+        throw new Error(
+          `${options.label} exceeds ${MAX_INPUTS.toLocaleString("en-US")} relevant paths. Largest directories: ${largest.map(([dir, count]) => `${dir} (${count})`).join(", ")}. Narrow this check's inputs.`,
+        );
       }
     }
-  } finally { stream.destroy(); }
+  } finally {
+    stream.destroy();
+  }
   return matches.sort();
 }
 
@@ -94,7 +135,10 @@ export async function gitIgnoredPaths(root: string, files: string[]): Promise<Se
   for (let offset = 0; offset < files.length; offset += 1000) {
     try {
       const { stdout } = await execGit(["check-ignore", "-z", "--stdin"], {
-        cwd: root, maxBuffer: 4 * 1024 * 1024, timeout: 10_000, input: files.slice(offset, offset + 1000).join("\0") + "\0",
+        cwd: root,
+        maxBuffer: 4 * 1024 * 1024,
+        timeout: 10_000,
+        input: files.slice(offset, offset + 1000).join("\0") + "\0",
       });
       for (const file of stdout.split("\0").filter(Boolean)) ignored.add(file);
     } catch (error) {

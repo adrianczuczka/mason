@@ -5,32 +5,90 @@ import path from "node:path";
 import fg from "fast-glob";
 import { isWithinRoot, normalizeRepoPath } from "./paths.js";
 
-export const SOURCE_EXTENSIONS = ["ts", "tsx", "js", "jsx", "mts", "cts", "mjs", "cjs", "vue", "svelte", "kt", "kts", "java", "py", "go", "rs", "swift", "rb", "cs", "cpp", "c", "h", "hpp", "dart", "php"];
+export const SOURCE_EXTENSIONS = [
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mts",
+  "cts",
+  "mjs",
+  "cjs",
+  "vue",
+  "svelte",
+  "kt",
+  "kts",
+  "java",
+  "py",
+  "go",
+  "rs",
+  "swift",
+  "rb",
+  "cs",
+  "cpp",
+  "c",
+  "h",
+  "hpp",
+  "dart",
+  "php",
+];
 export const SOURCE_GLOB = `**/*.{${SOURCE_EXTENSIONS.join(",")}}`;
 export const SOURCE_IGNORE = [
-  "**/node_modules/**", "**/dist/**", "**/build/**", "**/.gradle/**",
-  "**/target/**", "**/.git/**", "**/.mason/**", "**/vendor/**", "**/__pycache__/**",
-  "**/venv/**", "**/.venv/**", "**/*.min.*", "**/*.map", "**/*.lock",
-  "**/generated/**", "**/*.generated.*", "**/R.java", "**/BuildConfig.java",
-  "**/package-lock.json", "**/yarn.lock", "**/pnpm-lock.yaml",
+  "**/node_modules/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/.gradle/**",
+  "**/target/**",
+  "**/.git/**",
+  "**/.mason/**",
+  "**/vendor/**",
+  "**/__pycache__/**",
+  "**/venv/**",
+  "**/.venv/**",
+  "**/*.min.*",
+  "**/*.map",
+  "**/*.lock",
+  "**/generated/**",
+  "**/*.generated.*",
+  "**/R.java",
+  "**/BuildConfig.java",
+  "**/package-lock.json",
+  "**/yarn.lock",
+  "**/pnpm-lock.yaml",
 ];
 export const MAX_SOURCE_BYTES = 1024 * 1024;
 export interface ProjectConfig {
-  patterns?: string[]; alwaysInclude?: string[]; ignore?: string[];
-  audit?: { include?: string[]; exclude?: Partial<Record<import("../audit/types.js").CheckName, string[]>> };
+  patterns?: string[];
+  alwaysInclude?: string[];
+  ignore?: string[];
+  audit?: {
+    include?: string[];
+    exclude?: Partial<Record<import("../audit/types.js").CheckName, string[]>>;
+  };
 }
-export interface SourceFile { path: string; content: string; totalLines: number }
+export interface SourceFile {
+  path: string;
+  content: string;
+  totalLines: number;
+}
 
 export function isSensitiveFile(file: string): boolean {
-  return file.split(/[\\/]/).some(part =>
-    /^(?:\.env(?:\..*)?|id_rsa.*|id_ed25519.*)$|\.(?:pem|key|p12|pfx|jks|keystore)$|credentials\.|secret|^local\.properties$/i.test(part)
-  );
+  return file
+    .split(/[\\/]/)
+    .some((part) =>
+      /^(?:\.env(?:\..*)?|id_rsa.*|id_ed25519.*)$|\.(?:pem|key|p12|pfx|jks|keystore)$|credentials\.|secret|^local\.properties$/i.test(
+        part,
+      ),
+    );
 }
 
 /** Bound reads even if a file grows after stat. Only read regular files. */
 export async function readBoundedFile(file: string, maxBytes: number): Promise<string | null> {
   // Do not block on a FIFO or follow a symlink substituted after resolution.
-  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
+  const handle = await fs.open(
+    file,
+    constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+  );
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || stat.size > maxBytes) return null;
@@ -42,18 +100,23 @@ export async function readBoundedFile(file: string, maxBytes: number): Promise<s
       bytes += result.bytesRead;
     }
     return bytes === buffer.length ? null : buffer.subarray(0, bytes).toString("utf8");
-  } finally { await handle.close(); }
+  } finally {
+    await handle.close();
+  }
 }
 
 export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
   try {
     const canonicalRoot = await fs.realpath(root);
     const configPath = await fs.realpath(path.join(root, ".mason/config.json"));
-    if (!isWithinRoot(canonicalRoot, configPath)) throw new Error("Project configuration resolves outside the repository");
+    if (!isWithinRoot(canonicalRoot, configPath))
+      throw new Error("Project configuration resolves outside the repository");
     const raw = await readBoundedFile(configPath, 64 * 1024);
-    if (raw === null) throw new Error("Project configuration is not a regular file or exceeds 64 KiB");
+    if (raw === null)
+      throw new Error("Project configuration is not a regular file or exceeds 64 KiB");
     const value = JSON.parse(raw);
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Expected a configuration object");
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("Expected a configuration object");
     const config: ProjectConfig = {};
     for (const key of ["patterns", "alwaysInclude", "ignore"] as const) {
       if (value[key] === undefined) continue;
@@ -64,30 +127,46 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
     }
     if (value.audit !== undefined) {
       const audit = value.audit;
-      if (!audit || typeof audit !== "object" || Array.isArray(audit)) throw new Error("Configuration audit must be an object");
+      if (!audit || typeof audit !== "object" || Array.isArray(audit))
+        throw new Error("Configuration audit must be an object");
       const patterns = (raw: unknown): string[] => {
-        if (!Array.isArray(raw) || raw.length > 100 || !raw.every(s => typeof s === "string" &&
-          normalizeRepoPath(s) === s && !s.startsWith("!") && !/[\x00-\x1f]/.test(s))) {
-          throw new Error("Audit patterns must be at most 100 repository-relative globs without traversal or negation");
+        if (
+          !Array.isArray(raw) ||
+          raw.length > 100 ||
+          !raw.every(
+            (s) =>
+              typeof s === "string" &&
+              normalizeRepoPath(s) === s &&
+              !s.startsWith("!") &&
+              !/[\x00-\x1f]/.test(s),
+          )
+        ) {
+          throw new Error(
+            "Audit patterns must be at most 100 repository-relative globs without traversal or negation",
+          );
         }
         return raw;
       };
       config.audit = {};
       if (audit.include !== undefined) config.audit.include = patterns(audit.include);
       if (audit.exclude !== undefined) {
-        if (!audit.exclude || typeof audit.exclude !== "object" || Array.isArray(audit.exclude)) throw new Error("audit.exclude must map check names to patterns");
+        if (!audit.exclude || typeof audit.exclude !== "object" || Array.isArray(audit.exclude))
+          throw new Error("audit.exclude must map check names to patterns");
         const { ALL_CHECKS } = await import("../audit/types.js");
         config.audit.exclude = {};
         for (const [check, globs] of Object.entries(audit.exclude)) {
-          if (!ALL_CHECKS.includes(check as typeof ALL_CHECKS[number])) throw new Error("Unknown audit check: " + check);
-          config.audit.exclude[check as typeof ALL_CHECKS[number]] = patterns(globs);
+          if (!ALL_CHECKS.includes(check as (typeof ALL_CHECKS)[number]))
+            throw new Error("Unknown audit check: " + check);
+          config.audit.exclude[check as (typeof ALL_CHECKS)[number]] = patterns(globs);
         }
       }
     }
     return config;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-    throw new Error(`Cannot apply project file policy: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Cannot apply project file policy: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -99,33 +178,49 @@ export async function createFileAccess(rootDir: string) {
   const ignore = [...SOURCE_IGNORE, ...(config.ignore ?? [])];
   let gitFiles: Set<string> | null = null;
   try {
-    const { stdout } = await execGit(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root, maxBuffer: 50 * 1024 * 1024 });
+    const { stdout } = await execGit(
+      ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+      { cwd: root, maxBuffer: 50 * 1024 * 1024 },
+    );
     gitFiles = new Set(stdout.split("\0").filter(Boolean));
   } catch {
     // File-system projects are supported. Fail closed if this IS a Git repo.
     let inGit = false;
-    try { await execGit(["rev-parse", "--git-dir"], { cwd: root }); inGit = true; } catch { /* no Git */ }
+    try {
+      await execGit(["rev-parse", "--git-dir"], { cwd: root });
+      inGit = true;
+    } catch {
+      /* no Git */
+    }
     if (inGit) throw new Error("Cannot enumerate Git files safely");
   }
 
   async function resolve(file: string): Promise<string | null> {
     const relative = normalizeRepoPath(file);
-    if (!relative || isSensitiveFile(relative) || (gitFiles && !gitFiles.has(relative))) return null;
+    if (!relative || isSensitiveFile(relative) || (gitFiles && !gitFiles.has(relative)))
+      return null;
     const candidate = path.join(root, relative);
     try {
       const real = await fs.realpath(candidate);
-      if (!isWithinRoot(canonicalRoot, real) || isSensitiveFile(path.relative(canonicalRoot, real))) return null;
+      if (!isWithinRoot(canonicalRoot, real) || isSensitiveFile(path.relative(canonicalRoot, real)))
+        return null;
       const stat = await fs.stat(real);
       if (!stat.isFile() || stat.size > MAX_SOURCE_BYTES) return null;
       // A symlink must not bypass the target's ignore policy either.
-      if (gitFiles && !gitFiles.has(path.relative(canonicalRoot, real).split(path.sep).join("/"))) return null;
+      if (gitFiles && !gitFiles.has(path.relative(canonicalRoot, real).split(path.sep).join("/")))
+        return null;
       return real;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
-  async function list(patterns: string | string[] = SOURCE_GLOB, options: { deep?: number; dot?: boolean } = {}): Promise<string[]> {
+  async function list(
+    patterns: string | string[] = SOURCE_GLOB,
+    options: { deep?: number; dot?: boolean } = {},
+  ): Promise<string[]> {
     const found = await fg(patterns, { cwd: root, ignore, followSymbolicLinks: false, ...options });
-    const safe = await Promise.all(found.map(async f => (await resolve(f)) ? f : null));
+    const safe = await Promise.all(found.map(async (f) => ((await resolve(f)) ? f : null)));
     return safe.filter((f): f is string => f !== null).sort();
   }
 
@@ -135,13 +230,20 @@ export async function createFileAccess(rootDir: string) {
     const real = await resolve(relative);
     if (!real) return null;
     // Apply the same glob exclusions to explicit reads and symlink targets.
-    for (const rel of new Set([relative, path.relative(canonicalRoot, real).split(path.sep).join("/")])) {
+    for (const rel of new Set([
+      relative,
+      path.relative(canonicalRoot, real).split(path.sep).join("/"),
+    ])) {
       if (!(await fg(fg.escapePath(rel), { cwd: root, ignore, dot: true })).length) return null;
     }
     try {
       const content = await readBoundedFile(real, MAX_SOURCE_BYTES);
-      return content === null ? null : { path: relative, content, totalLines: content.split("\n").length };
-    } catch { return null; }
+      return content === null
+        ? null
+        : { path: relative, content, totalLines: content.split("\n").length };
+    } catch {
+      return null;
+    }
   }
-  return { root, config, list, read, inventory: () => gitFiles ? [...gitFiles].sort() : null };
+  return { root, config, list, read, inventory: () => (gitFiles ? [...gitFiles].sort() : null) };
 }

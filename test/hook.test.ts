@@ -29,10 +29,7 @@ async function write(relPath: string, content: string): Promise<void> {
   await fs.writeFile(abs, content);
 }
 
-async function writeDecision(
-  id: string,
-  overrides: Record<string, unknown> = {}
-): Promise<void> {
+async function writeDecision(id: string, overrides: Record<string, unknown> = {}): Promise<void> {
   await write(
     `.mason/decisions/${id}.json`,
     JSON.stringify({
@@ -47,14 +44,11 @@ async function writeDecision(
       refreshedHash: "unknown",
       status: "active",
       ...overrides,
-    })
+    }),
   );
 }
 
-function stdinFor(
-  relPath: string,
-  extra: Record<string, unknown> = {}
-): string {
+function stdinFor(relPath: string, extra: Record<string, unknown> = {}): string {
   return JSON.stringify({
     session_id: "session-1",
     cwd: tmpDir,
@@ -85,9 +79,7 @@ describe("runHook", () => {
     const head = await commitAll(tmpDir, "init");
     await writeDecision("auth-is-weird", { refreshedHash: head });
 
-    const context = contextOf(
-      await runHook(stdinFor("src/auth.ts"), { stateDir })
-    );
+    const context = contextOf(await runHook(stdinFor("src/auth.ts"), { stateDir }));
     expect(context).toContain("Title of auth-is-weird");
     expect(context).toContain("src/auth.ts");
     expect(context).not.toContain("older commit");
@@ -100,9 +92,7 @@ describe("runHook", () => {
     await write("src/auth.ts", "export const a = 2;\n");
     await commitAll(tmpDir, "feat: change auth");
 
-    const context = contextOf(
-      await runHook(stdinFor("src/auth.ts"), { stateDir })
-    );
+    const context = contextOf(await runHook(stdinFor("src/auth.ts"), { stateDir }));
     expect(context).toContain("changed files");
     expect(context).toContain("verify against current code");
   });
@@ -112,9 +102,7 @@ describe("runHook", () => {
     await writeDecision("payments-gotcha", { files: ["src/payments"] });
     await commitAll(tmpDir, "init");
 
-    const context = contextOf(
-      await runHook(stdinFor("src/payments/stripe.ts"), { stateDir })
-    );
+    const context = contextOf(await runHook(stdinFor("src/payments/stripe.ts"), { stateDir }));
     expect(context).toContain("payments-gotcha");
   });
 
@@ -136,7 +124,7 @@ describe("runHook", () => {
     expect(
       await runHook(stdinFor("src/auth.ts", { session_id: "session-2" }), {
         stateDir,
-      })
+      }),
     ).not.toBeNull();
   });
 
@@ -155,12 +143,13 @@ describe("runHook", () => {
     await writeDecision("dir-one", { files: ["src"], updatedAt: "2026-04-01T00:00:00.000Z" });
     await writeDecision("dir-two", { files: ["src"], updatedAt: "2026-03-01T00:00:00.000Z" });
     await writeDecision("dir-three", { files: ["src"], updatedAt: "2026-02-01T00:00:00.000Z" });
-    await writeDecision("exact-hit", { files: ["src/auth.ts"], updatedAt: "2026-01-01T00:00:00.000Z" });
+    await writeDecision("exact-hit", {
+      files: ["src/auth.ts"],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
     await commitAll(tmpDir, "init");
 
-    const context = contextOf(
-      await runHook(stdinFor("src/auth.ts"), { stateDir })
-    );
+    const context = contextOf(await runHook(stdinFor("src/auth.ts"), { stateDir }));
     expect(context).toContain("exact-hit");
     expect(context).toContain("dir-one");
     expect(context).toContain("dir-two");
@@ -176,21 +165,26 @@ describe("runHook", () => {
     expect(
       await runHook(stdinFor("src/auth.ts", { tool_name: "Bash" }), {
         stateDir,
-      })
+      }),
     ).toBeNull();
   });
 });
 
 describe("runHookCli", () => {
-  it.each(["--help", "-h", "--print-config"])("prints %s without waiting for stdin to close", async flag => {
-    // execFile leaves the child's stdin pipe open: informational commands must
-    // finish without a hook payload or EOF, including from an automated caller.
-    const binary = fileURLToPath(new URL("../dist/mason-hook.js", import.meta.url));
-    const { stdout, stderr } = await promisify(execFile)(process.execPath, [binary, flag], { timeout: 3000 });
-    expect(stderr).toBe("");
-    if (flag === "--print-config") expect(JSON.parse(stdout).hooks.PostToolUse).toHaveLength(1);
-    else expect(stdout).toContain("Usage: mason-hook");
-  });
+  it.each(["--help", "-h", "--print-config"])(
+    "prints %s without waiting for stdin to close",
+    async (flag) => {
+      // execFile leaves the child's stdin pipe open: informational commands must
+      // finish without a hook payload or EOF, including from an automated caller.
+      const binary = fileURLToPath(new URL("../dist/mason-hook.js", import.meta.url));
+      const { stdout, stderr } = await promisify(execFile)(process.execPath, [binary, flag], {
+        timeout: 3000,
+      });
+      expect(stderr).toBe("");
+      if (flag === "--print-config") expect(JSON.parse(stdout).hooks.PostToolUse).toHaveLength(1);
+      else expect(stdout).toContain("Usage: mason-hook");
+    },
+  );
 
   it("prints the settings config block", async () => {
     const out: string[] = [];

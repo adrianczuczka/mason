@@ -8,7 +8,6 @@ import { withSnapshotWrite } from "./lock.js";
 import { normalizeRepoPath } from "../utils/paths.js";
 import { buildTestMap } from "../test-map.js";
 
-
 export interface FeatureEntry {
   description: string;
   files: string[];
@@ -78,21 +77,39 @@ export interface Snapshot {
   flows: Record<string, FlowEntry>;
 }
 
-const repoPath = z.string().refine(value => normalizeRepoPath(value) !== null, "Expected a relative repository path");
+const repoPath = z
+  .string()
+  .refine((value) => normalizeRepoPath(value) !== null, "Expected a relative repository path");
 const verificationFields = {
-  refreshedHash: z.string().optional(), verifiedAt: z.string().optional(),
-  verifiedHash: z.string().optional(), verificationToken: z.string().optional(), verificationFailed: z.boolean().optional(),
+  refreshedHash: z.string().optional(),
+  verifiedAt: z.string().optional(),
+  verifiedHash: z.string().optional(),
+  verificationToken: z.string().optional(),
+  verificationFailed: z.boolean().optional(),
   verificationNote: z.string().optional(),
 };
-export const featureSchema = z.object({
-  description: z.string(), files: z.array(repoPath), tests: z.array(repoPath).optional(),
-  type: z.enum(["capability", "infrastructure"]).optional(), ...verificationFields,
-}).passthrough();
-export const flowSchema = z.object({ description: z.string(), chain: z.array(repoPath), ...verificationFields }).passthrough();
-const snapshotSchema = z.object({
-  version: z.literal(2), createdAt: z.string(), updatedAt: z.string(), gitHash: z.string(),
-  features: z.record(featureSchema), flows: z.record(flowSchema),
-}).passthrough();
+export const featureSchema = z
+  .object({
+    description: z.string(),
+    files: z.array(repoPath),
+    tests: z.array(repoPath).optional(),
+    type: z.enum(["capability", "infrastructure"]).optional(),
+    ...verificationFields,
+  })
+  .passthrough();
+export const flowSchema = z
+  .object({ description: z.string(), chain: z.array(repoPath), ...verificationFields })
+  .passthrough();
+const snapshotSchema = z
+  .object({
+    version: z.literal(2),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    gitHash: z.string(),
+    features: z.record(featureSchema),
+    flows: z.record(flowSchema),
+  })
+  .passthrough();
 
 export async function loadSnapshot(rootDir: string): Promise<Snapshot | null> {
   const parsed = await readStoreJson(rootDir, ".mason/snapshot.json");
@@ -113,18 +130,28 @@ export async function inspectSnapshot(rootDir: string): Promise<{
     const snapshot = raw === null ? null : snapshotSchema.parse(raw);
     return { status: snapshot ? "available" : "missing", snapshot, diagnostics: [] };
   } catch (error) {
-    return { status: "invalid", snapshot: null, diagnostics: [{
-      path: ".mason/snapshot.json", message: error instanceof Error ? error.message : String(error),
-    }] };
+    return {
+      status: "invalid",
+      snapshot: null,
+      diagnostics: [
+        {
+          path: ".mason/snapshot.json",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      ],
+    };
   }
 }
 
 /** Read and commit under one cross-process lock; a null snapshot means no write. */
-export async function updateSnapshot<T>(rootDir: string, update: (current: Snapshot | null) => Promise<{
-  snapshot: Snapshot | null;
-  result: T;
-  afterSave?: () => Promise<void>;
-}>): Promise<T> {
+export async function updateSnapshot<T>(
+  rootDir: string,
+  update: (current: Snapshot | null) => Promise<{
+    snapshot: Snapshot | null;
+    result: T;
+    afterSave?: () => Promise<void>;
+  }>,
+): Promise<T> {
   return withSnapshotWrite(rootDir, async () => {
     const change = await update(await loadSnapshot(rootDir));
     if (change.snapshot) {
@@ -169,7 +196,7 @@ export async function prepareSnapshotBatch(
   rootDir: string,
   offset: number,
   batchSize: number = DEFAULT_BATCH_SIZE,
-  scopeFiles?: string[]
+  scopeFiles?: string[],
 ): Promise<SnapshotBatch> {
   const resolvedRoot = path.resolve(rootDir);
   const access = await createFileAccess(resolvedRoot);
@@ -217,11 +244,10 @@ export async function prepareSnapshotBatch(
   const batchPathSet = new Set(batchPaths);
   const allTestPairs = (await buildTestMap(resolvedRoot)).paired;
   const testPairs = allTestPairs.filter(
-    (p) => batchPathSet.has(p.test) || batchPathSet.has(p.source)
+    (p) => batchPathSet.has(p.test) || batchPathSet.has(p.source),
   );
 
-  const nextOffset =
-    safeOffset + batchSize >= totalFiles ? null : safeOffset + batchSize;
+  const nextOffset = safeOffset + batchSize >= totalFiles ? null : safeOffset + batchSize;
 
   return {
     offset: safeOffset,

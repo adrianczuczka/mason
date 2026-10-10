@@ -10,7 +10,7 @@ async function writeSnapshot(
   dir: string,
   gitHash: string,
   features: Record<string, FeatureEntry>,
-  flows: Record<string, FlowEntry> = {}
+  flows: Record<string, FlowEntry> = {},
 ): Promise<void> {
   const now = new Date().toISOString();
   await fs.mkdir(path.join(dir, ".mason"), { recursive: true });
@@ -23,7 +23,7 @@ async function writeSnapshot(
       gitHash,
       features,
       flows,
-    })
+    }),
   );
 }
 
@@ -91,7 +91,7 @@ describe("computeDrift", () => {
       tmpDir,
       hash,
       { alpha: { description: "alpha", files: ["src/a.ts"] } },
-      { fetch: { description: "fetch flow", chain: ["src/a.ts", "src/b.ts"] } }
+      { fetch: { description: "fetch flow", chain: ["src/a.ts", "src/b.ts"] } },
     );
 
     await fs.writeFile(path.join(tmpDir, "src", "b.ts"), "export const b = 2;\n");
@@ -137,7 +137,7 @@ describe("computeDrift", () => {
   it("tracks renames and marks the affected feature stale", async () => {
     await fs.writeFile(
       path.join(tmpDir, "src", "old.ts"),
-      "export const value = 42;\nexport function compute(): number { return value; }\n"
+      "export const value = 42;\nexport function compute(): number { return value; }\n",
     );
     const hash = await commitAll(tmpDir, "feat: add old");
     await writeSnapshot(tmpDir, hash, {
@@ -216,10 +216,7 @@ describe("computeDrift", () => {
 
     // Touch 11 of 12 mapped files — over both full-rebuild thresholds
     for (let i = 0; i < fileCount - 1; i++) {
-      await fs.writeFile(
-        path.join(tmpDir, `src/f${i}.ts`),
-        `export const f${i} = 2;\n`
-      );
+      await fs.writeFile(path.join(tmpDir, `src/f${i}.ts`), `export const f${i} = 2;\n`);
     }
     await commitAll(tmpDir, "refactor: rewrite almost everything");
 

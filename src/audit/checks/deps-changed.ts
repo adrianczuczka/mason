@@ -10,12 +10,21 @@ const MANIFEST_COMMITS_CAP = 10;
 
 /** A relevance filter, not semantic validation of a dependency or its version. */
 export function hasDependencyContent(content: string): boolean {
-  const text = content.replace(/<!-- mason:start -->[\s\S]*?<!-- mason:end -->/g, "")
+  const text = content
+    .replace(/<!-- mason:start -->[\s\S]*?<!-- mason:end -->/g, "")
     .replace(/<!--[\s\S]*?-->/g, "");
-  return /\b(?:dependenc(?:y|ies)|librar(?:y|ies)|frameworks?|tech(?:nology)? stack|prerequisites|requirements)\b/i.test(text)
-    || /\b(?:package\.json|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|libs\.versions\.toml|Cargo\.toml|go\.mod|pyproject\.toml|requirements\.txt|Gemfile|composer\.json)\b/i.test(text)
-    || /\b(?:node(?:\.js)?|npm|pnpm|yarn|bun|deno|python|ruby|rust|go|java|jdk|kotlin|gradle|swift|php|react|vue|angular|compose|ktor|room)\s*(?:version\s*)?[`*:=>~^v\s-]*\d+(?:\.\d+)*\b/i.test(text)
-    || /\b(?:npm|pnpm|yarn|pip3?|cargo|gem|composer)\s+(?:install|add|require)\b/i.test(text);
+  return (
+    /\b(?:dependenc(?:y|ies)|librar(?:y|ies)|frameworks?|tech(?:nology)? stack|prerequisites|requirements)\b/i.test(
+      text,
+    ) ||
+    /\b(?:package\.json|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|libs\.versions\.toml|Cargo\.toml|go\.mod|pyproject\.toml|requirements\.txt|Gemfile|composer\.json)\b/i.test(
+      text,
+    ) ||
+    /\b(?:node(?:\.js)?|npm|pnpm|yarn|bun|deno|python|ruby|rust|go|java|jdk|kotlin|gradle|swift|php|react|vue|angular|compose|ktor|room)\s*(?:version\s*)?[`*:=>~^v\s-]*\d+(?:\.\d+)*\b/i.test(
+      text,
+    ) ||
+    /\b(?:npm|pnpm|yarn|pip3?|cargo|gem|composer)\s+(?:install|add|require)\b/i.test(text)
+  );
 }
 
 /**
@@ -42,17 +51,18 @@ export function manifestPathspecs(doc: string): string[] {
   const scope = documentScope(doc);
   if (scope === ".") return MANIFEST_PATHSPECS;
   const escaped = scope.replace(/[\\*?\[\]]/g, "\\$&");
-  return MANIFEST_PATHSPECS.map(spec => spec.startsWith(":(glob)")
-    ? ":(glob)" + escaped + "/" + spec.slice(":(glob)".length) : ":(literal)" + scope + "/" + spec);
+  return MANIFEST_PATHSPECS.map((spec) =>
+    spec.startsWith(":(glob)")
+      ? ":(glob)" + escaped + "/" + spec.slice(":(glob)".length)
+      : ":(literal)" + scope + "/" + spec,
+  );
 }
 
 /**
  * A matched declaration change is advisory, never proof of an incorrect claim.
  * Manifest recency without an affected passage is background information.
  */
-export async function checkDepsChanged(
-  ctx: CheckContext
-): Promise<CheckResult> {
+export async function checkDepsChanged(ctx: CheckContext): Promise<CheckResult> {
   const result = emptyResult();
   result.suppressedAdvisories = [];
   const releaseOnly = new Map<string, boolean>();
@@ -72,10 +82,19 @@ export async function checkDepsChanged(
     let content = doc.content;
     if (doc.dirty) {
       try {
-        content = (await inspectionGit(["show", `${doc.lastCommit.hash}:${doc.path}`],
-          { cwd: ctx.root, maxBuffer: 10 * 1024 * 1024, timeout: 10000 })).stdout;
+        content = (
+          await inspectionGit(["show", `${doc.lastCommit.hash}:${doc.path}`], {
+            cwd: ctx.root,
+            maxBuffer: 10 * 1024 * 1024,
+            timeout: 10000,
+          })
+        ).stdout;
       } catch {
-        result.skipped.push({ check: "deps-changed", doc: doc.path, reason: `${doc.path}: committed dependency content is unavailable` });
+        result.skipped.push({
+          check: "deps-changed",
+          doc: doc.path,
+          reason: `${doc.path}: committed dependency content is unavailable`,
+        });
         continue;
       }
     }
@@ -83,7 +102,7 @@ export async function checkDepsChanged(
     const range = await commitsTouchingSince(
       ctx.root,
       doc.lastCommit.hash,
-      manifestPathspecs(doc.path)
+      manifestPathspecs(doc.path),
     );
     if (range === null) {
       result.skipped.push({
@@ -105,13 +124,22 @@ export async function checkDepsChanged(
     range.total = relevant.length;
     if (range.total === 0) continue;
 
-    const relevance = await matchDependencyChanges(ctx.root, doc.lastCommit.hash, ctx.headHash,
-      [...new Set(range.commits.flatMap(commit => commit.files))], content);
+    const relevance = await matchDependencyChanges(
+      ctx.root,
+      doc.lastCommit.hash,
+      ctx.headHash,
+      [...new Set(range.commits.flatMap((commit) => commit.files))],
+      content,
+    );
     // Documents without any dependency guidance or matched declaration stay quiet.
     if (!relevance.matches.length && !hasDependencyContent(content)) continue;
     const match = relevance.matches[0];
-    if (doc.dirty && match) result.skipped.push({ check: "deps-changed", doc: doc.path,
-      reason: `${doc.path} has uncommitted edits – suppressed while in flight` });
+    if (doc.dirty && match)
+      result.skipped.push({
+        check: "deps-changed",
+        doc: doc.path,
+        reason: `${doc.path} has uncommitted edits – suppressed while in flight`,
+      });
     (doc.dirty ? result.suppressedAdvisories : result.advisories).push({
       type: "deps-changed",
       ...(match ? {} : { resolution: "informational" as const }),

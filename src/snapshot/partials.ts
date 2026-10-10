@@ -15,20 +15,27 @@ export interface Partial {
 
 const DIRECTORY = ".mason/partial-snapshots";
 const partialSchema = z.object({
-  batchId: z.string().regex(/^[a-zA-Z0-9_-]+$/), offset: z.number().int().nonnegative(),
-  features: z.record(featureSchema), flows: z.record(flowSchema), savedAt: z.string(),
+  batchId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+  offset: z.number().int().nonnegative(),
+  features: z.record(featureSchema),
+  flows: z.record(flowSchema),
+  savedAt: z.string(),
 });
 const scopeSchema = z.object({ files: z.array(z.string()), savedAt: z.string() });
 
 export async function savePartial(rootDir: string, partial: Partial): Promise<void> {
-  if (!/^[a-zA-Z0-9_-]+$/.test(partial.batchId)) throw new Error(`Invalid batchId: ${partial.batchId}`);
-  await withSnapshotWrite(rootDir, () => writeStoreJson(rootDir, `${DIRECTORY}/${partial.batchId}.json`, partialSchema.parse(partial)));
+  if (!/^[a-zA-Z0-9_-]+$/.test(partial.batchId))
+    throw new Error(`Invalid batchId: ${partial.batchId}`);
+  await withSnapshotWrite(rootDir, () =>
+    writeStoreJson(rootDir, `${DIRECTORY}/${partial.batchId}.json`, partialSchema.parse(partial)),
+  );
 }
 
 export async function loadAllPartials(rootDir: string): Promise<Partial[]> {
   let entries: string[];
-  try { entries = await fs.readdir(await storePath(rootDir, DIRECTORY)); }
-  catch (error) {
+  try {
+    entries = await fs.readdir(await storePath(rootDir, DIRECTORY));
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
@@ -43,7 +50,12 @@ export async function loadAllPartials(rootDir: string): Promise<Partial[]> {
 }
 
 export async function saveScope(rootDir: string, files: string[]): Promise<void> {
-  await withSnapshotWrite(rootDir, () => writeStoreJson(rootDir, `${DIRECTORY}/scope.json`, { files, savedAt: new Date().toISOString() }));
+  await withSnapshotWrite(rootDir, () =>
+    writeStoreJson(rootDir, `${DIRECTORY}/scope.json`, {
+      files,
+      savedAt: new Date().toISOString(),
+    }),
+  );
 }
 
 export async function loadScope(rootDir: string): Promise<string[] | null> {

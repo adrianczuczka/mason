@@ -44,7 +44,7 @@ export async function runHookCli(
     out: (line) => process.stdout.write(`${line}\n`),
     err: (line) => process.stderr.write(`${line}\n`),
   },
-  env: HookEnv = {}
+  env: HookEnv = {},
 ): Promise<number> {
   if (argv.includes("--help") || argv.includes("-h")) {
     io.out(USAGE);

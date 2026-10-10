@@ -39,7 +39,7 @@ describe("normalizePathToken", () => {
 describe("extractClaims: paths", () => {
   it("extracts backtick and quoted paths with line numbers", () => {
     const claims = extractClaims(
-      'Line one.\nSee `src/audit/cli.ts` and "src/drift/drift.ts" here.\n'
+      'Line one.\nSee `src/audit/cli.ts` and "src/drift/drift.ts" here.\n',
     );
     expect(claims.paths).toEqual([
       { path: "src/audit/cli.ts", line: 2, excerpt: "src/audit/cli.ts" },
@@ -55,17 +55,12 @@ describe("extractClaims: paths", () => {
 
   it("skips prose-y backtick tokens", () => {
     expect(
-      pathsOf("Run `npm install` and name your file `config.ts` or `words and/or more`.\n")
+      pathsOf("Run `npm install` and name your file `config.ts` or `words and/or more`.\n"),
     ).toEqual([]);
   });
 
   it("claims exact-token path lines inside fences, but not code", () => {
-    const content = [
-      "```",
-      "src/deep/file.ts",
-      'import { x } from "./foo.js";',
-      "```",
-    ].join("\n");
+    const content = ["```", "src/deep/file.ts", 'import { x } from "./foo.js";', "```"].join("\n");
     expect(pathsOf(content)).toEqual(["src/deep/file.ts"]);
   });
 });
@@ -73,9 +68,7 @@ describe("extractClaims: paths", () => {
 describe("extractClaims: counts", () => {
   it("extracts count claims outside fences", () => {
     const claims = extractClaims("The repo has 6 packages in one workspace.\n");
-    expect(claims.counts).toEqual([
-      { count: 6, unit: "packages", line: 1, excerpt: "6 packages" },
-    ]);
+    expect(claims.counts).toEqual([{ count: 6, unit: "packages", line: 1, excerpt: "6 packages" }]);
   });
 
   it("ignores counts inside fences and denylisted noun phrases", () => {
@@ -86,17 +79,9 @@ describe("extractClaims: counts", () => {
 
 describe("extractClaims: commands", () => {
   it("extracts npm-family run commands from prose and shell fences", () => {
-    const content = [
-      "Run `npm run build` first.",
-      "```bash",
-      "pnpm run lint",
-      "```",
-    ].join("\n");
+    const content = ["Run `npm run build` first.", "```bash", "pnpm run lint", "```"].join("\n");
     const claims = extractClaims(content);
-    expect(claims.commands.map((c) => c.scriptName).sort()).toEqual([
-      "build",
-      "lint",
-    ]);
+    expect(claims.commands.map((c) => c.scriptName).sort()).toEqual(["build", "lint"]);
   });
 
   it("ignores bare invocations and non-shell fences", () => {
@@ -112,18 +97,13 @@ describe("extractClaims: commands", () => {
 
 describe("extractClaims: ignore markers", () => {
   it("suppresses claims on a line with an end-of-line marker", () => {
-    expect(
-      pathsOf("`src/kept.ts`\n`src/dropped.ts` <!-- mason:ignore -->\n")
-    ).toEqual(["src/kept.ts"]);
+    expect(pathsOf("`src/kept.ts`\n`src/dropped.ts` <!-- mason:ignore -->\n")).toEqual([
+      "src/kept.ts",
+    ]);
   });
 
   it("suppresses the next non-blank line for an own-line marker", () => {
-    const content = [
-      "<!-- mason:ignore -->",
-      "",
-      "`src/dropped.ts`",
-      "`src/kept.ts`",
-    ].join("\n");
+    const content = ["<!-- mason:ignore -->", "", "`src/dropped.ts`", "`src/kept.ts`"].join("\n");
     expect(pathsOf(content)).toEqual(["src/kept.ts"]);
   });
 
@@ -137,10 +117,7 @@ describe("extractClaims: ignore markers", () => {
       "`src/also-kept.ts`",
     ].join("\n");
     const claims = extractClaims(content);
-    expect(claims.paths.map((p) => p.path)).toEqual([
-      "src/kept.ts",
-      "src/also-kept.ts",
-    ]);
+    expect(claims.paths.map((p) => p.path)).toEqual(["src/kept.ts", "src/also-kept.ts"]);
     expect(claims.counts).toEqual([]);
   });
 });
@@ -171,10 +148,7 @@ describe("extractTreeClaims", () => {
   });
 
   it("works without a root prefix", () => {
-    const claims = extractTreeClaims(
-      ["├── a/", "│   └── b.ts", "└── c.ts"],
-      1
-    );
+    const claims = extractTreeClaims(["├── a/", "│   └── b.ts", "└── c.ts"], 1);
     expect(claims.map((c) => c.path)).toEqual(["a", "a/b.ts", "c.ts"]);
   });
 
@@ -185,7 +159,7 @@ describe("extractTreeClaims", () => {
   it("aborts below a malformed line, keeping earlier claims", () => {
     const claims = extractTreeClaims(
       ["├── a.ts", "├── not a path at all", "├── b.ts", "└── c.ts"],
-      1
+      1,
     );
     expect(claims.map((c) => c.path)).toEqual(["a.ts"]);
   });

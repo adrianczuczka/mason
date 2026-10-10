@@ -10,7 +10,7 @@ async function readStdin(): Promise<string> {
 }
 
 const argv = process.argv.slice(2);
-const informational = argv.some(arg => ["--help", "-h", "--print-config"].includes(arg));
+const informational = argv.some((arg) => ["--help", "-h", "--print-config"].includes(arg));
 
 (informational ? Promise.resolve("") : readStdin())
   .then((stdinText) => runHookCli(argv, stdinText))

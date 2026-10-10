@@ -53,18 +53,12 @@ interface PageApiResponse {
 
 export function createConfluenceClient(
   config: ConfluenceConfig,
-  fetchFn: typeof fetch = fetch
+  fetchFn: typeof fetch = fetch,
 ): ConfluenceClient {
   const baseUrl = config.baseUrl.replace(/\/+$/, "");
-  const auth =
-    "Basic " +
-    Buffer.from(`${config.email}:${config.apiToken}`).toString("base64");
+  const auth = "Basic " + Buffer.from(`${config.email}:${config.apiToken}`).toString("base64");
 
-  async function call(
-    method: string,
-    path: string,
-    body?: unknown
-  ): Promise<unknown> {
+  async function call(method: string, path: string, body?: unknown): Promise<unknown> {
     const res = await fetchFn(`${baseUrl}${path}`, {
       method,
       headers: {
@@ -78,7 +72,7 @@ export function createConfluenceClient(
     if (!res.ok) {
       const text = await res.text();
       throw new Error(
-        `Confluence ${method} ${path} failed: ${res.status} ${res.statusText} — ${text}`
+        `Confluence ${method} ${path} failed: ${res.status} ${res.statusText} — ${text}`,
       );
     }
 
@@ -100,7 +94,7 @@ export function createConfluenceClient(
     async resolveSpaceId(spaceKey: string): Promise<string> {
       const res = (await call(
         "GET",
-        `/wiki/api/v2/spaces?keys=${encodeURIComponent(spaceKey)}`
+        `/wiki/api/v2/spaces?keys=${encodeURIComponent(spaceKey)}`,
       )) as { results?: Array<{ id: string; key: string }> };
       const space = res.results?.find((s) => s.key === spaceKey);
       if (!space) {
@@ -130,18 +124,14 @@ export function createConfluenceClient(
 
     async listRootPages(spaceId: string): Promise<ConfluenceRootPage[]> {
       const url =
-        `/wiki/api/v2/spaces/${encodeURIComponent(spaceId)}/pages` +
-        `?depth=root&limit=50`;
+        `/wiki/api/v2/spaces/${encodeURIComponent(spaceId)}/pages` + `?depth=root&limit=50`;
       const res = (await call("GET", url)) as {
         results?: Array<{ id: string; title: string }>;
       };
       return (res.results ?? []).map((p) => ({ id: p.id, title: p.title }));
     },
 
-    async findPageByTitle(
-      spaceId: string,
-      title: string
-    ): Promise<ConfluencePage | null> {
+    async findPageByTitle(spaceId: string, title: string): Promise<ConfluencePage | null> {
       const url =
         `/wiki/api/v2/spaces/${encodeURIComponent(spaceId)}/pages` +
         `?title=${encodeURIComponent(title)}&body-format=storage&limit=1`;

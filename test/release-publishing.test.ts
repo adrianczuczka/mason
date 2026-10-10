@@ -1,12 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { validateRelease, validateNpm, validateRegistry, registryAlreadyPublished } from "../scripts/verify-release.mjs";
+import {
+  validateRelease,
+  validateNpm,
+  validateRegistry,
+  registryAlreadyPublished,
+} from "../scripts/verify-release.mjs";
 
 function fixture() {
   const pkg = { name: "mason-context", version: "1.2.3", mcpName: "com.adrianczuczka/mason" };
   const server = {
     name: pkg.mcpName,
     version: pkg.version,
-    packages: [{ registryType: "npm", identifier: pkg.name, version: pkg.version, transport: { type: "stdio" } }],
+    packages: [
+      {
+        registryType: "npm",
+        identifier: pkg.name,
+        version: pkg.version,
+        transport: { type: "stdio" },
+      },
+    ],
   };
   return { pkg, server };
 }
@@ -22,7 +34,7 @@ describe("release publication guards", () => {
     expect(() => validateRelease(pkg, server, "v1.2.2")).toThrow("Release tag");
   });
 
-  it.each(["server", "package"])("rejects a stale %s version in server.json", field => {
+  it.each(["server", "package"])("rejects a stale %s version in server.json", (field) => {
     const { pkg, server } = fixture();
     if (field === "server") server.version = "1.2.2";
     else server.packages[0].version = "1.2.2";
@@ -74,11 +86,16 @@ describe("release publication guards", () => {
 
   it("only publishes a missing version and safely skips a matching active version", () => {
     const { server } = fixture();
-    const response = { server, _meta: { "io.modelcontextprotocol.registry/official": { status: "active" } } };
+    const response = {
+      server,
+      _meta: { "io.modelcontextprotocol.registry/official": { status: "active" } },
+    };
     expect(registryAlreadyPublished(server, 404, null)).toBe(false);
     expect(registryAlreadyPublished(server, 200, response)).toBe(true);
     expect(() => registryAlreadyPublished(server, 503, null)).toThrow("HTTP 503");
     expect(() => registryAlreadyPublished(server, 403, null)).toThrow("HTTP 403");
-    expect(() => registryAlreadyPublished(server, 200, { ...response, server: { ...server, packages: [] } })).toThrow("package metadata");
+    expect(() =>
+      registryAlreadyPublished(server, 200, { ...response, server: { ...server, packages: [] } }),
+    ).toThrow("package metadata");
   });
 });

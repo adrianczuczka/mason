@@ -60,20 +60,22 @@ export function getDefaultModel(provider: Provider): string {
 export function validateProvider(value: string): Provider {
   const valid: Provider[] = ["claude", "gemini", "openai", "ollama"];
   if (!valid.includes(value as Provider)) {
-    throw new Error(
-      `Invalid provider "${value}". Must be one of: ${valid.join(", ")}`
-    );
+    throw new Error(`Invalid provider "${value}". Must be one of: ${valid.join(", ")}`);
   }
   return value as Provider;
 }
 
 export async function detectCLI(
-  provider: Provider
+  provider: Provider,
 ): Promise<{ available: boolean; version?: string }> {
-  const cliName = provider === "claude" ? "claude"
-    : provider === "gemini" ? "gemini"
-    : provider === "ollama" ? "ollama"
-    : null;
+  const cliName =
+    provider === "claude"
+      ? "claude"
+      : provider === "gemini"
+        ? "gemini"
+        : provider === "ollama"
+          ? "ollama"
+          : null;
 
   if (!cliName) return { available: false };
 
@@ -89,9 +91,7 @@ export function needsApiKey(provider: Provider): boolean {
   return provider === "openai";
 }
 
-export async function saveConfluenceConfig(
-  confluence: ConfluenceConfig
-): Promise<void> {
+export async function saveConfluenceConfig(confluence: ConfluenceConfig): Promise<void> {
   const existing = (await loadConfig()) ?? { provider: "claude" as Provider };
   await saveConfig({ ...existing, confluence });
 }

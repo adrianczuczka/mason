@@ -33,39 +33,78 @@ export interface DecisionDriftReport {
  */
 export async function computeDecisionDrift(
   rootDir: string,
-  decisions?: DecisionRecord[]
+  decisions?: DecisionRecord[],
 ): Promise<DecisionDriftReport> {
   const resolvedRoot = path.resolve(rootDir);
-  const store = decisions ? { records: decisions, diagnostics: [] } : await loadDecisionStore(resolvedRoot);
-  const report: DecisionDriftReport = { historyAvailable: true, totalDecisions: store.records.length, staleDecisions: {}, freshness: {}, diagnostics: store.diagnostics };
-  const [head, workingTree] = await Promise.all([getCurrentGitHash(resolvedRoot), getWorkingTree(resolvedRoot)]);
+  const store = decisions
+    ? { records: decisions, diagnostics: [] }
+    : await loadDecisionStore(resolvedRoot);
+  const report: DecisionDriftReport = {
+    historyAvailable: true,
+    totalDecisions: store.records.length,
+    staleDecisions: {},
+    freshness: {},
+    diagnostics: store.diagnostics,
+  };
+  const [head, workingTree] = await Promise.all([
+    getCurrentGitHash(resolvedRoot),
+    getWorkingTree(resolvedRoot),
+  ]);
   const changesByHash = new Map<string, string[] | null>();
-  const baselines = store.records.filter(record => record.status === "active").flatMap(record => {
-    const inspection = latestDecisionInspection(record);
-    if (inspection) return [inspection.capture];
-    return [...new Set([effectiveDecision(record), record])].flatMap(candidate =>
-      candidate.version === 2 && candidate.capture ? [candidate.capture] : []);
-  });
-  const captures = await captureAnchorScopes(resolvedRoot, baselines.map(baseline => baseline.anchors));
-  const currentCaptures = new Map(baselines.map((baseline, index) => [JSON.stringify(baseline.anchors), captures[index]]));
-  const inspect = async (record: DecisionRecord, inspectionCapture?: AnchorCapture): Promise<{ freshness: Freshness; changedFiles: string[] }> => {
+  const baselines = store.records
+    .filter((record) => record.status === "active")
+    .flatMap((record) => {
+      const inspection = latestDecisionInspection(record);
+      if (inspection) return [inspection.capture];
+      return [...new Set([effectiveDecision(record), record])].flatMap((candidate) =>
+        candidate.version === 2 && candidate.capture ? [candidate.capture] : [],
+      );
+    });
+  const captures = await captureAnchorScopes(
+    resolvedRoot,
+    baselines.map((baseline) => baseline.anchors),
+  );
+  const currentCaptures = new Map(
+    baselines.map((baseline, index) => [JSON.stringify(baseline.anchors), captures[index]]),
+  );
+  const inspect = async (
+    record: DecisionRecord,
+    inspectionCapture?: AnchorCapture,
+  ): Promise<{ freshness: Freshness; changedFiles: string[] }> => {
     if (record.files.length === 0) return { freshness: "unknown", changedFiles: [] };
     const baseline = inspectionCapture ?? (record.version === 2 ? record.capture : undefined);
     if (baseline) {
       const current = currentCaptures.get(JSON.stringify(baseline.anchors))!;
-      const hits = changedCaptureFiles(baseline, current).filter(file => matchingPaths(record.files, [file]).length);
-      return { freshness: !baseline.complete || !current.complete ? "unknown" : hits.length ? "changed" : "current", changedFiles: hits };
+      const hits = changedCaptureFiles(baseline, current).filter(
+        (file) => matchingPaths(record.files, [file]).length,
+      );
+      return {
+        freshness:
+          !baseline.complete || !current.complete ? "unknown" : hits.length ? "changed" : "current",
+        changedFiles: hits,
+      };
     }
     let touched = changesByHash.get(record.refreshedHash);
     if (touched === undefined) {
-      const changes = record.refreshedHash === head && head !== "unknown" ? [] : await getChangesWithStatus(resolvedRoot, record.refreshedHash);
+      const changes =
+        record.refreshedHash === head && head !== "unknown"
+          ? []
+          : await getChangesWithStatus(resolvedRoot, record.refreshedHash);
       touched = changes === null ? null : touchedPaths(changes);
       changesByHash.set(record.refreshedHash, touched);
     }
     if (touched === null) report.historyAvailable = false;
     const hits = touched ? matchingPaths(record.files, touched) : [];
     const localHits = matchingPaths(record.files, workingTree.changedFiles);
-    return { freshness: touched === null || !workingTree.available ? "unknown" : hits.length || localHits.length ? "changed" : "current", changedFiles: hits };
+    return {
+      freshness:
+        touched === null || !workingTree.available
+          ? "unknown"
+          : hits.length || localHits.length
+            ? "changed"
+            : "current",
+      changedFiles: hits,
+    };
   };
   for (const record of store.records) {
     if (record.status !== "active") continue;
@@ -74,7 +113,8 @@ export async function computeDecisionDrift(
     const state = await inspect(effective, inspection?.capture);
     report.freshness![record.id] = state.freshness;
     if (state.changedFiles.length) report.staleDecisions[record.id] = state.changedFiles;
-    if (effective !== record) (report.pendingProposals ??= {})[record.id] = await inspect(record, inspection?.capture);
+    if (effective !== record)
+      (report.pendingProposals ??= {})[record.id] = await inspect(record, inspection?.capture);
   }
   return report;
 }

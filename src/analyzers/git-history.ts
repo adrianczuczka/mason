@@ -30,10 +30,7 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
     return this.createResult(findings, gaps, startTime);
   }
 
-  private async git(
-    args: string[],
-    cwd: string
-  ): Promise<string> {
+  private async git(args: string[], cwd: string): Promise<string> {
     try {
       const { stdout } = await exec("git", args, { cwd, maxBuffer: 10_000_000 });
       return stdout.trim();
@@ -42,16 +39,14 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
     }
   }
 
-  private async findStaleDirectories(
-    context: AnalyzerContext
-  ): Promise<[Finding[], Gap[]]> {
+  private async findStaleDirectories(context: AnalyzerContext): Promise<[Finding[], Gap[]]> {
     const findings: Finding[] = [];
     const gaps: Gap[] = [];
 
     // Get top-level directories with their last commit date
     const output = await this.git(
       ["log", "--all", "--format=%ci", "--name-only", "--diff-filter=AMCR", "-n", "500"],
-      context.rootDir
+      context.rootDir,
     );
 
     if (!output) return [findings, gaps];
@@ -65,11 +60,7 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
         currentDate = new Date(line);
       } else if (currentDate) {
         const topDir = line.split("/")[0];
-        if (
-          topDir &&
-          !topDir.startsWith(".") &&
-          !topDir.includes("node_modules")
-        ) {
+        if (topDir && !topDir.startsWith(".") && !topDir.includes("node_modules")) {
           const existing = dirLastTouch.get(topDir);
           if (!existing || currentDate > existing) {
             dirLastTouch.set(topDir, currentDate);
@@ -84,7 +75,7 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
     for (const [dir, lastTouch] of dirLastTouch) {
       if (lastTouch < sixMonthsAgo) {
         const monthsStale = Math.floor(
-          (Date.now() - lastTouch.getTime()) / (1000 * 60 * 60 * 24 * 30)
+          (Date.now() - lastTouch.getTime()) / (1000 * 60 * 60 * 24 * 30),
         );
         findings.push(
           this.createFinding({
@@ -95,7 +86,7 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
               { filePath: dir, detail: `Last commit: ${lastTouch.toISOString().split("T")[0]}` },
             ],
             ruleCandidate: `Do not refactor or modify files in "${dir}/" unless explicitly asked — this area has been stable for ${monthsStale} months and may be legacy code.`,
-          })
+          }),
         );
         gaps.push({
           analyzer: this.name,
@@ -115,7 +106,7 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
     // Most frequently changed files in the last 3 months
     const output = await this.git(
       ["log", "--since=3 months ago", "--format=", "--name-only"],
-      context.rootDir
+      context.rootDir,
     );
 
     if (!output) return findings;
@@ -126,9 +117,7 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
       fileCounts.set(line, (fileCounts.get(line) ?? 0) + 1);
     }
 
-    const sorted = [...fileCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
+    const sorted = [...fileCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
 
     if (sorted.length > 0 && sorted[0][1] >= 5) {
       const hotFiles = sorted.filter(([, count]) => count >= 5);
@@ -143,7 +132,7 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
               detail: `${count} commits`,
             })),
             ruleCandidate: `These files change frequently and are high-risk for conflicts: ${hotFiles.map(([f]) => f).join(", ")}. Take extra care when modifying them.`,
-          })
+          }),
         );
       }
     }
@@ -151,25 +140,19 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
     return findings;
   }
 
-  private async analyzeCommitPatterns(
-    context: AnalyzerContext
-  ): Promise<Finding[]> {
+  private async analyzeCommitPatterns(context: AnalyzerContext): Promise<Finding[]> {
     const findings: Finding[] = [];
 
-    const output = await this.git(
-      ["log", "--format=%s", "-n", "100"],
-      context.rootDir
-    );
+    const output = await this.git(["log", "--format=%s", "-n", "100"], context.rootDir);
 
     if (!output) return findings;
 
     const messages = output.split("\n").filter(Boolean);
 
     // Check for conventional commits
-    const conventionalPattern = /^(feat|fix|chore|docs|style|refactor|test|perf|ci|build|revert)(\(.+\))?:/;
-    const conventionalCount = messages.filter((m) =>
-      conventionalPattern.test(m)
-    ).length;
+    const conventionalPattern =
+      /^(feat|fix|chore|docs|style|refactor|test|perf|ci|build|revert)(\(.+\))?:/;
+    const conventionalCount = messages.filter((m) => conventionalPattern.test(m)).length;
     const conventionalRatio = conventionalCount / messages.length;
 
     if (conventionalRatio > 0.5) {
@@ -186,7 +169,7 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
           ],
           ruleCandidate:
             "Use conventional commit format: type(scope): description (e.g., feat(auth): add login endpoint)",
-        })
+        }),
       );
     }
 
@@ -207,9 +190,8 @@ export class GitHistoryAnalyzer extends BaseAnalyzer {
               detail: `${ticketCount} of ${messages.length} commits have ticket refs`,
             },
           ],
-          ruleCandidate:
-            "Include issue/ticket references in commit messages when applicable.",
-        })
+          ruleCandidate: "Include issue/ticket references in commit messages when applicable.",
+        }),
       );
     }
 

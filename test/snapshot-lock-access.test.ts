@@ -20,7 +20,9 @@ it("retries a Windows delete-pending lock without running an unprotected write",
   const denied = Object.assign(new Error("delete pending"), { code: "EPERM" });
   const open = vi.spyOn(fs, "open").mockRejectedValueOnce(denied);
   const write = vi.fn(async () => {
-    const owner = JSON.parse(await fs.readFile(path.join(root, ".mason/local/test-lock/lock"), "utf8"));
+    const owner = JSON.parse(
+      await fs.readFile(path.join(root, ".mason/local/test-lock/lock"), "utf8"),
+    );
     expect(owner.pid).toBe(process.pid);
     return "saved";
   });
@@ -29,14 +31,17 @@ it("retries a Windows delete-pending lock without running an unprotected write",
   expect(write).toHaveBeenCalledTimes(1);
 });
 
-it.each(["win32", "linux"])("preserves persistent access failures on %s without writing", async current => {
-  Object.defineProperty(process, "platform", { value: current });
-  const denied = Object.assign(new Error("access denied"), { code: "EPERM" });
-  vi.spyOn(fs, "open").mockRejectedValue(denied);
-  const write = vi.fn();
-  await expect(withStoreLock(root, ".mason/local/test-lock", write, 0)).rejects.toBe(denied);
-  expect(write).not.toHaveBeenCalled();
-});
+it.each(["win32", "linux"])(
+  "preserves persistent access failures on %s without writing",
+  async (current) => {
+    Object.defineProperty(process, "platform", { value: current });
+    const denied = Object.assign(new Error("access denied"), { code: "EPERM" });
+    vi.spyOn(fs, "open").mockRejectedValue(denied);
+    const write = vi.fn();
+    await expect(withStoreLock(root, ".mason/local/test-lock", write, 0)).rejects.toBe(denied);
+    expect(write).not.toHaveBeenCalled();
+  },
+);
 
 it("does not retry owner-record write failures as lock contention", async () => {
   Object.defineProperty(process, "platform", { value: "win32" });
@@ -51,5 +56,7 @@ it("does not retry owner-record write failures as lock contention", async () => 
   await expect(withStoreLock(root, ".mason/local/test-lock", write)).rejects.toBe(denied);
   expect(open).toHaveBeenCalledTimes(1);
   expect(write).not.toHaveBeenCalled();
-  await expect(fs.stat(path.join(root, ".mason/local/test-lock/lock"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(fs.stat(path.join(root, ".mason/local/test-lock/lock"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
 });

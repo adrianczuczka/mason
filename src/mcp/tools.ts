@@ -15,9 +15,17 @@ import { createFileAccess } from "../utils/files.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { sanitizeRepoPaths } from "../utils/paths.js";
 import { trustHint, type TrustState } from "../context/trust.js";
-import { compactDecisionKnowledge, effectiveDecision, decisionTrust, DECISION_GUIDANCE } from "../decisions/provenance.js";
+import {
+  compactDecisionKnowledge,
+  effectiveDecision,
+  decisionTrust,
+  DECISION_GUIDANCE,
+} from "../decisions/provenance.js";
 import type { UpsertDecisionInput } from "../decisions/decisions.js";
-import { reviewDecision as runDecisionReview, type ReviewDecisionInput } from "../decisions/review.js";
+import {
+  reviewDecision as runDecisionReview,
+  type ReviewDecisionInput,
+} from "../decisions/review.js";
 import { computeDecisionDrift } from "../decisions/drift.js";
 import {
   loadSnapshot,
@@ -30,7 +38,11 @@ import {
 } from "../snapshot/snapshot.js";
 import { createSnapshotTrustReader, readSnapshotTrustIndex } from "../snapshot/trust.js";
 import { computeDrift } from "../drift/drift.js";
-import { prepareSnapshotReview, snapshotEntryContent, type SnapshotVerdict } from "../snapshot/review.js";
+import {
+  prepareSnapshotReview,
+  snapshotEntryContent,
+  type SnapshotVerdict,
+} from "../snapshot/review.js";
 import type { DriftReport } from "../drift/drift.js";
 import {
   BATCH_SYSTEM_PROMPT,
@@ -52,7 +64,8 @@ import {
 import type { Snapshot, FeatureEntry, FlowEntry } from "../snapshot/snapshot.js";
 import type { AnalyzerContext } from "../types.js";
 import {
-  loadProjectMarker, loadProjectFeatures,
+  loadProjectMarker,
+  loadProjectFeatures,
   saveProjectMarker,
   setupPlaybook,
   type ProjectMarker,
@@ -101,15 +114,30 @@ async function detectProjectSnapshot(rootDir: string): Promise<Record<string, un
   // Build config files present (what exists, not what's in them)
   const access = await createFileAccess(rootDir);
   const buildFiles = [
-    "package.json", "tsconfig.json",
-    "build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle",
+    "package.json",
+    "tsconfig.json",
+    "build.gradle.kts",
+    "build.gradle",
+    "settings.gradle.kts",
+    "settings.gradle",
     "gradle/libs.versions.toml",
-    "Cargo.toml", "go.mod", "go.sum",
-    "pyproject.toml", "setup.py", "requirements.txt", "Pipfile",
-    "Gemfile", "Package.swift",
-    "Makefile", "CMakeLists.txt",
-    "Dockerfile", "docker-compose.yml", "docker-compose.yaml",
-    ".github/workflows", ".gitlab-ci.yml", "Jenkinsfile",
+    "Cargo.toml",
+    "go.mod",
+    "go.sum",
+    "pyproject.toml",
+    "setup.py",
+    "requirements.txt",
+    "Pipfile",
+    "Gemfile",
+    "Package.swift",
+    "Makefile",
+    "CMakeLists.txt",
+    "Dockerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    ".github/workflows",
+    ".gitlab-ci.yml",
+    "Jenkinsfile",
   ];
 
   const present: string[] = [];
@@ -124,9 +152,15 @@ async function detectProjectSnapshot(rootDir: string): Promise<Record<string, un
 
   // Test directories and file counts
   const testDirs = [
-    "test", "tests", "__tests__", "spec",
-    "src/test", "src/tests",
-    "**/src/test", "**/src/androidTest", "**/src/iosTest",
+    "test",
+    "tests",
+    "__tests__",
+    "spec",
+    "src/test",
+    "src/tests",
+    "**/src/test",
+    "**/src/androidTest",
+    "**/src/iosTest",
   ];
   const testInfo: Record<string, number> = {};
   for (const pattern of testDirs) {
@@ -170,10 +204,7 @@ async function detectProjectSnapshot(rootDir: string): Promise<Record<string, un
   };
 }
 
-export async function getCodeSamples(
-  dir: string,
-  count: number = 15
-): Promise<string> {
+export async function getCodeSamples(dir: string, count: number = 15): Promise<string> {
   const rootDir = path.resolve(dir);
   const samples = await sampleFiles(rootDir, count);
 
@@ -199,17 +230,12 @@ async function unmappedContextResponse(rootDir: string): Promise<string> {
   const [structureRaw, analyzerResults, testMap] = await Promise.all([
     getProjectStructure(rootDir),
     runAll(await buildContext(rootDir)).catch(() => []),
-    import("../test-map.js")
-      .then((m) => m.buildTestMap(rootDir))
-      .catch(() => null),
+    import("../test-map.js").then((m) => m.buildTestMap(rootDir)).catch(() => null),
   ]);
 
   const structure = JSON.parse(structureRaw);
   structure.directories = (structure.directories ?? [])
-    .sort(
-      (a: { fileCount: number }, b: { fileCount: number }) =>
-        b.fileCount - a.fileCount
-    )
+    .sort((a: { fileCount: number }, b: { fileCount: number }) => b.fileCount - a.fileCount)
     .slice(0, UNINIT_MAX_DIRECTORIES);
 
   const gitSignals = analyzerResults.flatMap((r) =>
@@ -217,7 +243,7 @@ async function unmappedContextResponse(rootDir: string): Promise<string> {
       category: f.category,
       summary: f.summary,
       evidence: f.evidence.slice(0, 5),
-    }))
+    })),
   );
 
   return JSON.stringify({
@@ -239,10 +265,7 @@ export async function getProjectStructure(dir: string): Promise<string> {
   const allFiles = await (await createFileAccess(rootDir)).list("**/*");
 
   // Build directory summary with file counts and extension breakdown
-  const dirInfo = new Map<
-    string,
-    { fileCount: number; extensions: Map<string, number> }
-  >();
+  const dirInfo = new Map<string, { fileCount: number; extensions: Map<string, number> }>();
 
   for (const file of allFiles) {
     const parts = file.split("/");
@@ -295,7 +318,7 @@ const STALE_DIFF_MAX_FILES = 25;
 
 async function buildChangedFilePreviews(
   rootDir: string,
-  changedFiles: string[]
+  changedFiles: string[],
 ): Promise<Array<{ path: string; totalLines: number; preview: string }>> {
   const access = await createFileAccess(rootDir);
   const capped = changedFiles.slice(0, STALE_DIFF_MAX_FILES);
@@ -331,10 +354,8 @@ export async function getSnapshot(dir: string): Promise<string> {
   // Descriptions and metadata stay in the full snapshot on disk.
   // Deduplicate files that appear in multiple features.
   const seenFiles = new Set<string>();
-  const compactFeatures: Record<
-    string,
-    { files: string[]; tests?: string[]; type: FeatureType }
-  > = {};
+  const compactFeatures: Record<string, { files: string[]; tests?: string[]; type: FeatureType }> =
+    {};
   for (const [name, feat] of Object.entries(snapshot.features)) {
     const unique = feat.files.filter((f) => !seenFiles.has(f));
     if (unique.length === 0) continue; // Skip fully duplicate features
@@ -371,21 +392,33 @@ export async function getSnapshot(dir: string): Promise<string> {
   const decisionRecords = store.records;
   const decisionDrift = await computeDecisionDrift(rootDir, decisionRecords);
   const readTrust = createSnapshotTrustReader(rootDir);
-  const trust: { features: Record<string, TrustState>; flows: Record<string, TrustState>; decisions: Record<string, TrustState> } = {
-    ...await readSnapshotTrustIndex(readTrust, snapshot, drift),
-    decisions: Object.fromEntries(decisionRecords.filter(d => d.status === "active").map(d => [d.id, decisionTrust(effectiveDecision(d), decisionDrift.freshness?.[d.id] ?? "unknown")])),
+  const trust: {
+    features: Record<string, TrustState>;
+    flows: Record<string, TrustState>;
+    decisions: Record<string, TrustState>;
+  } = {
+    ...(await readSnapshotTrustIndex(readTrust, snapshot, drift)),
+    decisions: Object.fromEntries(
+      decisionRecords
+        .filter((d) => d.status === "active")
+        .map((d) => [
+          d.id,
+          decisionTrust(effectiveDecision(d), decisionDrift.freshness?.[d.id] ?? "unknown"),
+        ]),
+    ),
   };
   output.trust = trust;
   output.workingTree = drift?.workingTree;
   output.diagnostics = store.diagnostics;
   if (decisionRecords.length > 0) {
-    const compactDecisions: Record<
-      string,
-      ReturnType<typeof compactDecisionKnowledge>
-    > = {};
+    const compactDecisions: Record<string, ReturnType<typeof compactDecisionKnowledge>> = {};
     for (const d of decisionRecords) {
       if (d.status !== "active") continue;
-      compactDecisions[d.id] = compactDecisionKnowledge(d, decisionDrift.freshness?.[d.id] ?? "unknown", decisionDrift.pendingProposals?.[d.id]?.freshness ?? "unknown");
+      compactDecisions[d.id] = compactDecisionKnowledge(
+        d,
+        decisionDrift.freshness?.[d.id] ?? "unknown",
+        decisionDrift.pendingProposals?.[d.id]?.freshness ?? "unknown",
+      );
     }
     output.decisions = compactDecisions;
     output.decisionsHint =
@@ -404,10 +437,7 @@ export async function getSnapshot(dir: string): Promise<string> {
       recommendation: drift.recommendation,
     };
     if (drift.historyAvailable && drift.changedFiles.length > 0) {
-      const samples = await buildChangedFilePreviews(
-        rootDir,
-        drift.changedFiles
-      );
+      const samples = await buildChangedFilePreviews(rootDir, drift.changedFiles);
       output.diff = {
         changedFiles: drift.changedFiles,
         samples,
@@ -416,7 +446,17 @@ export async function getSnapshot(dir: string): Promise<string> {
     }
   }
 
-  output.hint = [output.hint, trustHint([...Object.values(trust.features), ...Object.values(trust.flows), ...Object.values(trust.decisions)]), store.diagnostics.length ? "Some decision records are invalid; consult diagnostics." : ""].filter(Boolean).join(" ");
+  output.hint = [
+    output.hint,
+    trustHint([
+      ...Object.values(trust.features),
+      ...Object.values(trust.flows),
+      ...Object.values(trust.decisions),
+    ]),
+    store.diagnostics.length ? "Some decision records are invalid; consult diagnostics." : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return JSON.stringify(output);
 }
 
@@ -447,12 +487,11 @@ function driftHint(report: DriftReport): string {
 export async function checkDrift(dir: string): Promise<string> {
   const rootDir = path.resolve(dir);
 
-
   const report = await computeDrift(rootDir);
   if (!report) {
     return JSON.stringify({
       exists: false,
-      hint: "No concept map exists to check. Decisions and impact work without one; mason_init with mode: \"map\" provides the optional map workflow.",
+      hint: 'No concept map exists to check. Decisions and impact work without one; mason_init with mode: "map" provides the optional map workflow.',
     });
   }
 
@@ -461,10 +500,7 @@ export async function checkDrift(dir: string): Promise<string> {
   let verification: Record<string, unknown> | undefined;
   let hint = driftHint(report);
   if (snapshot) {
-    const all = [
-      ...Object.values(snapshot.features),
-      ...Object.values(snapshot.flows),
-    ];
+    const all = [...Object.values(snapshot.features), ...Object.values(snapshot.flows)];
     const failedNames = [
       ...Object.entries(snapshot.features)
         .filter(([, e]) => e.verificationFailed)
@@ -489,7 +525,7 @@ export async function generateSnapshotBatch(
   dir: string,
   offset: number = 0,
   batchSize: number = DEFAULT_BATCH_SIZE,
-  files?: string[]
+  files?: string[],
 ): Promise<string> {
   const rootDir = path.resolve(dir);
   const scoped = files !== undefined && files.length > 0;
@@ -528,7 +564,7 @@ export async function generateSnapshotBatch(
           : "No source files were found. Skip the rest of the playbook and call mason_complete_init.",
       },
       null,
-      2
+      2,
     );
   }
 
@@ -555,7 +591,7 @@ export async function generateSnapshotBatch(
           : `Derive partial features/flows for this batch and call save_partial_snapshot(dir, batchId="${batchId}", features, flows). Then call ${continueCall} to continue.`,
     },
     null,
-    2
+    2,
   );
 }
 
@@ -567,7 +603,7 @@ export async function saveSnapshotPartial(
     string,
     { description: string; files: string[]; tests?: string[]; type?: FeatureType }
   >,
-  flows: Record<string, { description: string; chain: string[] }>
+  flows: Record<string, { description: string; chain: string[] }>,
 ): Promise<string> {
   const rootDir = path.resolve(dir);
 
@@ -596,11 +632,10 @@ export async function saveSnapshotPartial(
       status: "stored",
       batchId,
       partialsStored: all.length,
-      hint:
-        "Partial saved. Continue with the next generate_snapshot_batch call, or proceed to reduce_snapshot when nextOffset is null.",
+      hint: "Partial saved. Continue with the next generate_snapshot_batch call, or proceed to reduce_snapshot when nextOffset is null.",
     },
     null,
-    2
+    2,
   );
 }
 
@@ -616,15 +651,14 @@ export async function reduceSnapshot(dir: string): Promise<string> {
           "No partial snapshots found. Run generate_snapshot_batch and save_partial_snapshot at least once before calling reduce_snapshot.",
       },
       null,
-      2
+      2,
     );
   }
 
   // A scope marker means these partials re-analyzed only a drifted subset —
   // merge them into the existing map instead of rebuilding from scratch.
   const scope = await loadScope(rootDir);
-  const existing =
-    scope && scope.length > 0 ? await loadSnapshot(rootDir) : null;
+  const existing = scope && scope.length > 0 ? await loadSnapshot(rootDir) : null;
 
   if (scope && existing) {
     // Strip bookkeeping fields — the assistant shouldn't echo them back.
@@ -637,13 +671,13 @@ export async function reduceSnapshot(dir: string): Promise<string> {
           ...(feat.tests && feat.tests.length > 0 ? { tests: feat.tests } : {}),
           type: normalizeFeatureType(feat.type),
         },
-      ])
+      ]),
     );
     const cleanFlows = Object.fromEntries(
       Object.entries(existing.flows).map(([name, flow]) => [
         name,
         { description: flow.description, chain: flow.chain },
-      ])
+      ]),
     );
 
     return JSON.stringify(
@@ -655,12 +689,12 @@ export async function reduceSnapshot(dir: string): Promise<string> {
         prompt: buildRefreshReducePrompt(
           { features: cleanFeatures, flows: cleanFlows },
           scope,
-          partials
+          partials,
         ),
         next: "Follow `instructions` to produce the COMPLETE updated features/flows (entries untouched by the refresh copied through unchanged), then call save_snapshot(dir, features, flows). Partials and the scope marker are cleaned up automatically after save_snapshot succeeds.",
       },
       null,
-      2
+      2,
     );
   }
 
@@ -673,7 +707,7 @@ export async function reduceSnapshot(dir: string): Promise<string> {
       next: "Follow `instructions` to produce the unified features/flows, then call save_snapshot(dir, features, flows). Partial files will be cleaned up automatically after save_snapshot succeeds. Finish with mason_complete_init(dir).",
     },
     null,
-    2
+    2,
   );
 }
 
@@ -709,10 +743,7 @@ export async function fullAnalysis(dir: string): Promise<string> {
   return JSON.stringify(output, null, 2);
 }
 
-function sanitizePaths(
-  rootDir: string,
-  files: string[]
-): string[] {
+function sanitizePaths(rootDir: string, files: string[]): string[] {
   return sanitizeRepoPaths(files);
 }
 
@@ -728,15 +759,12 @@ export async function saveSnapshotData(
       type?: FeatureType;
     }
   >,
-  flows: Record<
-    string,
-    { description: string; chain: string[]; refreshedHash?: string }
-  >,
+  flows: Record<string, { description: string; chain: string[]; refreshedHash?: string }>,
   removeFeatures: string[] = [],
-  removeFlows: string[] = []
+  removeFlows: string[] = [],
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  return updateSnapshot(rootDir, async previous => {
+  return updateSnapshot(rootDir, async (previous) => {
     const gitHash = await getCurrentGitHash(rootDir);
     const now = new Date().toISOString();
 
@@ -760,22 +788,28 @@ export async function saveSnapshotData(
     const existing = replaceMode ? null : previous;
     // Copy-through entries must not silently lose a failed verification during
     // a scoped rebuild. A changed description/path set requires a new verdict.
-    const preserveVerification = (next: FeatureEntry | FlowEntry, old?: FeatureEntry | FlowEntry) => {
+    const preserveVerification = (
+      next: FeatureEntry | FlowEntry,
+      old?: FeatureEntry | FlowEntry,
+    ) => {
       delete next.verifiedAt;
       delete next.verifiedHash;
       delete next.verificationToken;
       delete next.verificationFailed;
       delete next.verificationNote;
       if (!old) return;
-      if (JSON.stringify(snapshotEntryContent(next)) !== JSON.stringify(snapshotEntryContent(old))) return;
+      if (JSON.stringify(snapshotEntryContent(next)) !== JSON.stringify(snapshotEntryContent(old)))
+        return;
       next.verificationToken = old.verificationToken;
       next.verifiedAt = old.verifiedAt;
       next.verifiedHash = old.verifiedHash;
       next.verificationFailed = old.verificationFailed;
       next.verificationNote = old.verificationNote;
     };
-    for (const [name, entry] of Object.entries(features)) preserveVerification(entry, previous?.features[name]);
-    for (const [name, entry] of Object.entries(flows)) preserveVerification(entry, previous?.flows[name]);
+    for (const [name, entry] of Object.entries(features))
+      preserveVerification(entry, previous?.features[name]);
+    for (const [name, entry] of Object.entries(flows))
+      preserveVerification(entry, previous?.flows[name]);
 
     if (existing) {
       // Entries not re-sent in this call are only verified as of the previous
@@ -790,9 +824,7 @@ export async function saveSnapshotData(
         }
       }
 
-      const removedFeatures = removeFeatures.filter(
-        (name) => name in existing.features
-      );
+      const removedFeatures = removeFeatures.filter((name) => name in existing.features);
       const removedFlows = removeFlows.filter((name) => name in existing.flows);
       for (const name of removedFeatures) delete existing.features[name];
       for (const name of removedFlows) delete existing.flows[name];
@@ -806,14 +838,18 @@ export async function saveSnapshotData(
       existing.flows = { ...existing.flows, ...flows };
       existing.updatedAt = now;
       existing.gitHash = gitHash;
-      return { snapshot: existing, afterSave: () => clearAllPartials(rootDir), result: JSON.stringify({
-        status: "updated",
-        mode: "merged",
-        features: Object.keys(existing.features).length,
-        flows: Object.keys(existing.flows).length,
-        removedFeatures: removedFeatures.length,
-        removedFlows: removedFlows.length,
-      }) };
+      return {
+        snapshot: existing,
+        afterSave: () => clearAllPartials(rootDir),
+        result: JSON.stringify({
+          status: "updated",
+          mode: "merged",
+          features: Object.keys(existing.features).length,
+          flows: Object.keys(existing.flows).length,
+          removedFeatures: removedFeatures.length,
+          removedFlows: removedFlows.length,
+        }),
+      };
     }
 
     const snapshot: Snapshot = {
@@ -825,12 +861,16 @@ export async function saveSnapshotData(
       flows,
     };
 
-    return { snapshot, afterSave: () => clearAllPartials(rootDir), result: JSON.stringify({
-      status: replaceMode ? "replaced" : "created",
-      mode: replaceMode ? "replaced-from-partials" : "fresh",
-      features: Object.keys(features).length,
-      flows: Object.keys(flows).length,
-    }) };
+    return {
+      snapshot,
+      afterSave: () => clearAllPartials(rootDir),
+      result: JSON.stringify({
+        status: replaceMode ? "replaced" : "created",
+        mode: replaceMode ? "replaced-from-partials" : "fresh",
+        features: Object.keys(features).length,
+        flows: Object.keys(flows).length,
+      }),
+    };
   });
 }
 
@@ -840,10 +880,13 @@ export async function configureProject(
     patterns?: string[];
     alwaysInclude?: string[];
     ignore?: string[];
-  }
+  },
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  const existing = (await readStoreJson(rootDir, ".mason/config.json") ?? {}) as Record<string, unknown>;
+  const existing = ((await readStoreJson(rootDir, ".mason/config.json")) ?? {}) as Record<
+    string,
+    unknown
+  >;
 
   if (config.patterns) existing.patterns = config.patterns;
   if (config.alwaysInclude) existing.alwaysInclude = config.alwaysInclude;
@@ -858,10 +901,7 @@ export async function configureProject(
   });
 }
 
-export async function getImpact(
-  dir: string,
-  files: string[]
-): Promise<string> {
+export async function getImpact(dir: string, files: string[]): Promise<string> {
   const rootDir = path.resolve(dir);
   const { analyzeImpact } = await import("../impact/impact.js");
   const result = await analyzeImpact(rootDir, files);
@@ -877,7 +917,7 @@ const VERIFY_DEFAULT_SAMPLE = 5;
  */
 export async function verifySnapshot(
   dir: string,
-  sample: number = VERIFY_DEFAULT_SAMPLE
+  sample: number = VERIFY_DEFAULT_SAMPLE,
 ): Promise<string> {
   const rootDir = path.resolve(dir);
   const snapshot = await loadSnapshot(rootDir);
@@ -916,13 +956,14 @@ export async function verifySnapshot(
   const picked = entries.slice(0, Math.max(1, sample));
   const toVerify = [];
   for (const entry of picked) {
-    const stored = entry.kind === "feature" ? snapshot.features[entry.name] : snapshot.flows[entry.name];
+    const stored =
+      entry.kind === "feature" ? snapshot.features[entry.name] : snapshot.flows[entry.name];
     toVerify.push({
       name: entry.name,
       kind: entry.kind,
       description: entry.description,
       lastVerified: entry.verifiedAt ?? "never",
-      ...await prepareSnapshotReview(access, entry.kind, entry.name, stored),
+      ...(await prepareSnapshotReview(access, entry.kind, entry.name, stored)),
     });
   }
 
@@ -934,26 +975,45 @@ export async function verifySnapshot(
     neverVerified,
     entries: toVerify,
     instructions:
-      'Judge whether the files implement each claimed feature/flow, then call save_verification with verdicts: {"<entry name>": {"kind": "<feature|flow from the entry>", "reviewToken": "<token from the entry>", "ok": true|false, "note": "<required when ok is false>"}}. Tokens cover the entry and full contents of the previewed files (at most 8), including unavailable-file markers; previews themselves are truncated. This is a spot-check, not proof of unshown files. A conflict requires verify_snapshot and a fresh review; never reuse a verdict for changed content. If a feature and flow share a name, submit their verdicts in separate calls.'
+      'Judge whether the files implement each claimed feature/flow, then call save_verification with verdicts: {"<entry name>": {"kind": "<feature|flow from the entry>", "reviewToken": "<token from the entry>", "ok": true|false, "note": "<required when ok is false>"}}. Tokens cover the entry and full contents of the previewed files (at most 8), including unavailable-file markers; previews themselves are truncated. This is a spot-check, not proof of unshown files. A conflict requires verify_snapshot and a fresh review; never reuse a verdict for changed content. If a feature and flow share a name, submit their verdicts in separate calls.',
   });
 }
 
 export async function saveVerification(
   dir: string,
-  verdicts: Record<string, SnapshotVerdict>
+  verdicts: Record<string, SnapshotVerdict>,
 ): Promise<string> {
   const rootDir = path.resolve(dir);
-  return updateSnapshot(rootDir, async snapshot => {
+  return updateSnapshot(rootDir, async (snapshot) => {
     if (!snapshot) {
-      return { snapshot: null, result: JSON.stringify({ exists: false, stamped: [], hint: "No concept map exists. Build it and run verify_snapshot before recording verdicts." }) };
+      return {
+        snapshot: null,
+        result: JSON.stringify({
+          exists: false,
+          stamped: [],
+          hint: "No concept map exists. Build it and run verify_snapshot before recording verdicts.",
+        }),
+      };
     }
 
-    const stamped: string[] = [], unknown: string[] = [], failed: string[] = [];
-    const conflicts: string[] = [], reviewRequired: string[] = [], invalid: string[] = [];
-    const candidates: Array<{ name: string; verdict: SnapshotVerdict; entry: FeatureEntry | FlowEntry }> = [];
+    const stamped: string[] = [],
+      unknown: string[] = [],
+      failed: string[] = [];
+    const conflicts: string[] = [],
+      reviewRequired: string[] = [],
+      invalid: string[] = [];
+    const candidates: Array<{
+      name: string;
+      verdict: SnapshotVerdict;
+      entry: FeatureEntry | FlowEntry;
+    }> = [];
     let access: Awaited<ReturnType<typeof createFileAccess>> | undefined;
     for (const [name, verdict] of Object.entries(verdicts)) {
-      if (!verdict.kind || !["feature", "flow"].includes(verdict.kind) || !/^[a-f0-9]{64}$/.test(verdict.reviewToken ?? "")) {
+      if (
+        !verdict.kind ||
+        !["feature", "flow"].includes(verdict.kind) ||
+        !/^[a-f0-9]{64}$/.test(verdict.reviewToken ?? "")
+      ) {
         reviewRequired.push(name);
         continue;
       }
@@ -1001,25 +1061,58 @@ export async function saveVerification(
     }
 
     const rejected = conflicts.length + reviewRequired.length + invalid.length;
-    const status = rejected ? (stamped.length ? "partial" : conflicts.length ? "conflict" : reviewRequired.length ? "review_required" : "invalid")
-      : stamped.length ? "saved" : "unchanged";
+    const status = rejected
+      ? stamped.length
+        ? "partial"
+        : conflicts.length
+          ? "conflict"
+          : reviewRequired.length
+            ? "review_required"
+            : "invalid"
+      : stamped.length
+        ? "saved"
+        : "unchanged";
     const hints: string[] = [];
-    if (conflicts.length) hints.push(`Entries [${conflicts.join(", ")}] changed or were deleted after review. Run verify_snapshot and review current evidence before retrying.`);
-    if (reviewRequired.length) hints.push(`Entries [${reviewRequired.join(", ")}] need kind and reviewToken from verify_snapshot. Inspect that evidence before submitting a verdict.`);
-    if (invalid.length) hints.push(`Entries [${invalid.join(", ")}] need a boolean ok and a non-empty note when ok is false.`);
-    if (failed.length) hints.push(`Entries [${failed.join(", ")}] are mis-mapped. Re-map them: read their actual files, correct the entries, and call save_snapshot with only those entries (plus removeFeatures/removeFlows if a concept no longer exists). Then run verify_snapshot for fresh review tokens.`);
-    if (!hints.length) hints.push(stamped.length ? "All submitted entries verified against the reviewed evidence. Re-run verify_snapshot periodically." : "No verdicts submitted; nothing changed.");
+    if (conflicts.length)
+      hints.push(
+        `Entries [${conflicts.join(", ")}] changed or were deleted after review. Run verify_snapshot and review current evidence before retrying.`,
+      );
+    if (reviewRequired.length)
+      hints.push(
+        `Entries [${reviewRequired.join(", ")}] need kind and reviewToken from verify_snapshot. Inspect that evidence before submitting a verdict.`,
+      );
+    if (invalid.length)
+      hints.push(
+        `Entries [${invalid.join(", ")}] need a boolean ok and a non-empty note when ok is false.`,
+      );
+    if (failed.length)
+      hints.push(
+        `Entries [${failed.join(", ")}] are mis-mapped. Re-map them: read their actual files, correct the entries, and call save_snapshot with only those entries (plus removeFeatures/removeFlows if a concept no longer exists). Then run verify_snapshot for fresh review tokens.`,
+      );
+    if (!hints.length)
+      hints.push(
+        stamped.length
+          ? "All submitted entries verified against the reviewed evidence. Re-run verify_snapshot periodically."
+          : "No verdicts submitted; nothing changed.",
+      );
     if (stamped.length) snapshot.updatedAt = now;
-    return { snapshot: stamped.length ? snapshot : null, result: JSON.stringify({
-      status, stamped, unknown, failed, conflicts, reviewRequired, invalid, hint: hints.join(" "),
-    }) };
+    return {
+      snapshot: stamped.length ? snapshot : null,
+      result: JSON.stringify({
+        status,
+        stamped,
+        unknown,
+        failed,
+        conflicts,
+        reviewRequired,
+        invalid,
+        hint: hints.join(" "),
+      }),
+    };
   });
 }
 
-export async function saveDecision(
-  dir: string,
-  input: UpsertDecisionInput
-): Promise<string> {
+export async function saveDecision(dir: string, input: UpsertDecisionInput): Promise<string> {
   const rootDir = path.resolve(dir);
   const { upsertDecision } = await import("../decisions/decisions.js");
   const result = await upsertDecision(rootDir, input);
@@ -1030,11 +1123,7 @@ export async function reviewDecision(dir: string, input: ReviewDecisionInput): P
   return JSON.stringify(await runDecisionReview(path.resolve(dir), input));
 }
 
-export async function getContext(
-  dir: string,
-  task: string,
-  files?: string[]
-): Promise<string> {
+export async function getContext(dir: string, task: string, files?: string[]): Promise<string> {
   const rootDir = path.resolve(dir);
   const { assembleContext } = await import("../context/assemble.js");
   const bundle = await assembleContext(rootDir, task, files);
@@ -1049,12 +1138,21 @@ export async function masonAutomation(dir: string, action: "status" | "check"): 
     const { installedAutomation } = await import("../automation/install.js");
     if (action === "status") {
       const { setupStatus } = await import("../setup/status.js");
-      return JSON.stringify({ ...await automationStatus(dir), configured: await installedAutomation(dir), setup: await setupStatus(dir) });
+      return JSON.stringify({
+        ...(await automationStatus(dir)),
+        configured: await installedAutomation(dir),
+        setup: await setupStatus(dir),
+      });
     }
     if (action !== "check") throw new Error("Expected status or check.");
     const { report } = await automate(dir, { event: "task_end" });
     const { findings, ...summary } = report;
-    return JSON.stringify({ ...summary, findings: findings.slice(0, 5), truncated: findings.length > 5, summary: summarize(report) });
+    return JSON.stringify({
+      ...summary,
+      findings: findings.slice(0, 5),
+      truncated: findings.length > 5,
+      summary: summarize(report),
+    });
   } catch (error) {
     const { automationFailure } = await import("../automation/execution.js");
     const failure = automationFailure(error);
@@ -1062,26 +1160,52 @@ export async function masonAutomation(dir: string, action: "status" | "check"): 
   }
 }
 
-export async function masonReviewAdvisory(dir: string, options: AdvisoryReviewInput): Promise<string> {
-  try { return JSON.stringify(await reviewAdvisory(dir, options), null, 2); }
-  catch (error) { return JSON.stringify({ status: "unavailable", error: error instanceof Error ? error.message : String(error) }); }
-}
-
-export async function masonRepair(dir: string, options: { action: "prepare" | "verify"; baselinePath?: string; checks?: CheckName[] }): Promise<string> {
+export async function masonReviewAdvisory(
+  dir: string,
+  options: AdvisoryReviewInput,
+): Promise<string> {
   try {
-    if (options.action === "verify") {
-      if (!options.baselinePath || options.checks) throw new Error("Verification requires baselinePath and uses the original checks; do not pass checks.");
-      return JSON.stringify(await verifyRepair(dir, options.baselinePath), null, 2);
-    }
-    if (options.action !== "prepare" || options.baselinePath) throw new Error("Preparation accepts checks, not an existing baselinePath.");
-    const result = await prepareRepair(dir, options.checks);
-    return JSON.stringify({ ...result, workOrder: formatFixPrompt(result.report, result.baselinePath) }, null, 2);
+    return JSON.stringify(await reviewAdvisory(dir, options), null, 2);
   } catch (error) {
-    return JSON.stringify({ status: "unavailable", error: error instanceof Error ? error.message : String(error) });
+    return JSON.stringify({
+      status: "unavailable",
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
-export async function masonInit(dir: string, options: { mode?: InitMode; host?: "codex" | "claude"; base?: string; evidence?: string[] } = {}): Promise<string> {
+export async function masonRepair(
+  dir: string,
+  options: { action: "prepare" | "verify"; baselinePath?: string; checks?: CheckName[] },
+): Promise<string> {
+  try {
+    if (options.action === "verify") {
+      if (!options.baselinePath || options.checks)
+        throw new Error(
+          "Verification requires baselinePath and uses the original checks; do not pass checks.",
+        );
+      return JSON.stringify(await verifyRepair(dir, options.baselinePath), null, 2);
+    }
+    if (options.action !== "prepare" || options.baselinePath)
+      throw new Error("Preparation accepts checks, not an existing baselinePath.");
+    const result = await prepareRepair(dir, options.checks);
+    return JSON.stringify(
+      { ...result, workOrder: formatFixPrompt(result.report, result.baselinePath) },
+      null,
+      2,
+    );
+  } catch (error) {
+    return JSON.stringify({
+      status: "unavailable",
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+export async function masonInit(
+  dir: string,
+  options: { mode?: InitMode; host?: "codex" | "claude"; base?: string; evidence?: string[] } = {},
+): Promise<string> {
   if (options.mode === "setup") {
     const { setupProject } = await import("../setup/setup.js");
     return JSON.stringify(await setupProject(dir, options), null, 2);
@@ -1103,13 +1227,13 @@ export async function masonInit(dir: string, options: { mode?: InitMode; host?: 
       playbook: setupPlaybook(mode),
     },
     null,
-    2
+    2,
   );
 }
 
 export async function masonCompleteInit(
   dir: string,
-  options: { confluenceConfigured?: boolean } = {}
+  options: { confluenceConfigured?: boolean } = {},
 ): Promise<string> {
   const rootDir = path.resolve(dir);
   const existing = await loadProjectMarker(rootDir);
@@ -1119,7 +1243,9 @@ export async function masonCompleteInit(
     initializedAt: existing?.initializedAt ?? new Date().toISOString(),
     features: {
       ...features,
-      ...(options.confluenceConfigured === undefined ? {} : { confluence: options.confluenceConfigured }),
+      ...(options.confluenceConfigured === undefined
+        ? {}
+        : { confluence: options.confluenceConfigured }),
     },
   };
   await saveProjectMarker(rootDir, marker);
@@ -1130,7 +1256,7 @@ export async function masonCompleteInit(
       hint: "Assistant setup recorded. Save decisions as you learn, review and commit them, and retrieve them with get_context. A concept map is optional.",
     },
     null,
-    2
+    2,
   );
 }
 
@@ -1210,7 +1336,7 @@ export async function masonSetConfluence(input: {
             : "Ask the user which space to use, then call mason_set_confluence again with the same baseUrl/email/apiToken plus the chosen spaceKey.",
       },
       null,
-      2
+      2,
     );
   }
 
@@ -1235,11 +1361,10 @@ export async function masonSetConfluence(input: {
       status: "saved",
       spaceKey: input.spaceKey,
       spaceName: match.name,
-      hint:
-        "Confluence is configured. The credentials are stored in ~/.mason/config.json. Call export_to_confluence to sync the concept map.",
+      hint: "Confluence is configured. The credentials are stored in ~/.mason/config.json. Call export_to_confluence to sync the concept map.",
     },
     null,
-    2
+    2,
   );
 }
 
@@ -1251,7 +1376,7 @@ export async function exportToConfluenceTool(
     indexPageTitle?: string;
     changelogPageTitle?: string;
     featurePagePrefix?: string;
-  }
+  },
 ): Promise<string> {
   const rootDir = path.resolve(dir);
 
@@ -1262,8 +1387,7 @@ export async function exportToConfluenceTool(
   if (!config?.confluence) {
     return JSON.stringify({
       status: "error",
-      error:
-        'No Confluence credentials configured. Call mason_set_confluence first.',
+      error: "No Confluence credentials configured. Call mason_set_confluence first.",
     });
   }
 

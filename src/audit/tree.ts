@@ -48,10 +48,7 @@ function entryName(afterGlyph: string): string | null {
  * `blockLines` are the fence's content lines; `blockStartLine` is the 1-based
  * doc line number of the first content line.
  */
-export function extractTreeClaims(
-  blockLines: string[],
-  blockStartLine: number
-): PathClaim[] {
+export function extractTreeClaims(blockLines: string[], blockStartLine: number): PathClaim[] {
   const glyphLines = blockLines.filter((l) => glyphIndex(l) !== -1).length;
   if (glyphLines < MIN_GLYPH_LINES) return [];
 
@@ -95,11 +92,7 @@ export function extractTreeClaims(
 
     const isDir = name.endsWith("/");
     const cleanName = name.replace(/\/+$/, "");
-    const segments = [
-      ...(rootPrefix ? [rootPrefix] : []),
-      ...stack.map((s) => s.name),
-      cleanName,
-    ];
+    const segments = [...(rootPrefix ? [rootPrefix] : []), ...stack.map((s) => s.name), cleanName];
     claims.push({
       path: segments.join("/"),
       line: blockStartLine + i,

@@ -25,11 +25,15 @@ async function bump(version: number) {
 }
 
 it("filters general instructions while retaining versionless library lists and runtime requirements", async () => {
-  await write("AGENTS.md", "## Architecture\nKeep remote and local beside data.\nReview changes within the requested scope.\n");
+  await write(
+    "AGENTS.md",
+    "## Architecture\nKeep remote and local beside data.\nReview changes within the requested scope.\n",
+  );
   await write("CLAUDE.md", "Requires JDK 21.\n");
-  await commitAll(root, "instructions"); await bump(2);
+  await commitAll(root, "instructions");
+  await bump(2);
   const report = (await computeAudit(root, { checks: ["deps-changed"] }))!;
-  expect(report.advisories.map(f => f.anchor.doc).sort()).toEqual(["CLAUDE.md", "README.md"]);
+  expect(report.advisories.map((f) => f.anchor.doc).sort()).toEqual(["CLAUDE.md", "README.md"]);
   expect(report.skippedChecks).toEqual([]);
 });
 
@@ -55,7 +59,10 @@ it("uses committed content when a local edit removes the dependency section", as
   expect((await verifyRepair(root, baseline.baselinePath)).findings[0].status).toBe("unverified");
   await commitAll(root, "remove section");
   const checked = await verifyRepair(root, baseline.baselinePath);
-  expect(checked.findings[0]).toMatchObject({ status: "review-required", reason: expect.stringContaining("no longer reports") });
+  expect(checked.findings[0]).toMatchObject({
+    status: "review-required",
+    reason: expect.stringContaining("no longer reports"),
+  });
 });
 
 it("shows current dependency evidence and labels retained historical evidence after a doc commit", async () => {
@@ -80,5 +87,7 @@ it("shows current dependency evidence and labels retained historical evidence af
   expect(summary).toContain("current check no longer reports this condition");
   expect(summary).not.toContain("manifests touched");
   expect(await fs.readFile(path.join(root, initial.baselinePaths[0]))).toEqual(baselineBytes);
-  expect(summarize({ ...historical, diagnostics: ["History unavailable"] })).toContain("Mason: incomplete");
+  expect(summarize({ ...historical, diagnostics: ["History unavailable"] })).toContain(
+    "Mason: incomplete",
+  );
 }, 20000);

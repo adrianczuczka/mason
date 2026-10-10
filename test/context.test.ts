@@ -25,7 +25,7 @@ async function writeSnapshot(
   dir: string,
   gitHash: string,
   features: Record<string, FeatureEntry>,
-  flows: Record<string, FlowEntry> = {}
+  flows: Record<string, FlowEntry> = {},
 ): Promise<void> {
   const now = new Date().toISOString();
   await fs.mkdir(path.join(dir, ".mason"), { recursive: true });
@@ -38,7 +38,7 @@ async function writeSnapshot(
       gitHash,
       features,
       flows,
-    })
+    }),
   );
 }
 
@@ -68,7 +68,8 @@ describe("assembleContext", () => {
     await writeFiles(tmpDir, {
       "src/auth/login.ts": "export function login() {}\n",
       "src/auth/session.ts": "export function session() {}\n",
-      "src/weather/forecast.ts": "import { login } from '../auth/login';\nexport function forecast() {}\n",
+      "src/weather/forecast.ts":
+        "import { login } from '../auth/login';\nexport function forecast() {}\n",
       "src/billing/invoice.ts": "export function invoice() {}\n",
       "test/login.test.ts": "// tests login\n",
     });
@@ -100,7 +101,12 @@ describe("assembleContext", () => {
 
   it("returns an explicit missing-map bundle when no snapshot exists", async () => {
     await seedProject();
-    expect(await assembleContext(tmpDir, "fix the login bug")).toMatchObject({ exists: false, map: { status: "missing" }, decisions: {}, freshness: { stale: null } });
+    expect(await assembleContext(tmpDir, "fix the login bug")).toMatchObject({
+      exists: false,
+      map: { status: "missing" },
+      decisions: {},
+      freshness: { stale: null },
+    });
   });
 
   it("matches features and flows lexically and ranks name hits highest", async () => {
@@ -109,7 +115,7 @@ describe("assembleContext", () => {
 
     const bundle = (await assembleContext(
       tmpDir,
-      "fix a bug in user authentication"
+      "fix a bug in user authentication",
     )) as ContextBundle;
 
     expect(Object.keys(bundle.features)).toContain("user authentication");
@@ -127,7 +133,7 @@ describe("assembleContext", () => {
 
     const bundle = (await assembleContext(
       tmpDir,
-      "the forecast page renders wrong values"
+      "the forecast page renders wrong values",
     )) as ContextBundle;
 
     expect(Object.keys(bundle.features)).toContain("weather forecast");
@@ -151,7 +157,7 @@ describe("assembleContext", () => {
 
     const bundle = (await assembleContext(
       tmpDir,
-      "user authentication is broken"
+      "user authentication is broken",
     )) as ContextBundle;
 
     expect(bundle.relatedTests).toContain("test/login.test.ts");
@@ -161,14 +167,11 @@ describe("assembleContext", () => {
     const hash = await seedProject();
     await writeSnapshot(tmpDir, hash, FEATURES, FLOWS);
 
-    const bundle = (await assembleContext(
-      tmpDir,
-      "zzzquark frobnicate"
-    )) as NoMatchBundle;
+    const bundle = (await assembleContext(tmpDir, "zzzquark frobnicate")) as NoMatchBundle;
 
     expect(bundle.features).toEqual({});
     expect(Object.keys(bundle.availableFeatures)).toEqual(
-      expect.arrayContaining(["user authentication", "weather forecast", "billing"])
+      expect.arrayContaining(["user authentication", "weather forecast", "billing"]),
     );
     expect(bundle.hint).toMatch(/No map entry matched/);
   });
@@ -184,7 +187,7 @@ describe("assembleContext", () => {
 
     const bundle = (await assembleContext(
       tmpDir,
-      "user authentication is broken"
+      "user authentication is broken",
     )) as ContextBundle;
 
     expect(bundle.features["user authentication"].stale).toBe(true);
@@ -199,7 +202,7 @@ describe("assembleContext", () => {
 
     const bundle = (await assembleContext(
       tmpDir,
-      "user authentication is broken"
+      "user authentication is broken",
     )) as ContextBundle;
 
     expect(bundle.impact).not.toBeNull();
