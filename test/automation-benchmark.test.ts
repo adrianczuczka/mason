@@ -30,10 +30,13 @@ it("replays both real adapter binaries through protected grading and final commi
   }
 }, 125000);
 
-it("does not wait for stdin when hook help is requested", async () => {
+it.each([
+  ["hook", "--help"],
+  ["auto", "hook", "--help"],
+])("does not wait for stdin for %j", async (...args) => {
   const { spawn } = await import("node:child_process");
   const binary = fileURLToPath(new URL("../dist/mason.js", import.meta.url));
-  const child = spawn(process.execPath, [binary, "auto", "hook", "--help"], { stdio: "pipe" });
+  const child = spawn(process.execPath, [binary, ...args], { stdio: "pipe" });
   const timer = setTimeout(() => child.kill("SIGKILL"), 3000);
   const code = await new Promise((resolve) => child.once("close", resolve));
   clearTimeout(timer);
