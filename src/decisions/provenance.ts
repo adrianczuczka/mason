@@ -92,6 +92,7 @@ const currentSchema = legacySchema
           inspector: text(200),
           note: text(1500),
           outcome: z.literal("no_contradiction_found"),
+          scope: z.literal("operative").optional(),
           decisionDigest: z.string().regex(/^[a-f0-9]{64}$/),
           headHash: z.string(),
           capture: anchorCaptureSchema,
@@ -311,8 +312,26 @@ export function decisionTrust(record: DecisionRecord, freshness: Freshness) {
 }
 
 /** Inspection identity covers both the proposal and the operative accepted revision. */
-export function decisionInspectionDigest(record: DecisionRecord): string {
+export type InspectionScope = "all" | "operative";
+
+export function decisionInspectionDigest(
+  record: DecisionRecord,
+  scope: InspectionScope = "all",
+): string {
   const effective = effectiveDecision(record);
+  if (scope === "operative")
+    return createHash("sha256")
+      .update(
+        JSON.stringify([
+          "operative",
+          record.status,
+          decisionApproval(effective),
+          effective.version === 2 ? effective.revision : 0,
+          decisionContent(effective),
+          effective.refreshedHash,
+        ]),
+      )
+      .digest("hex");
   return createHash("sha256")
     .update(
       JSON.stringify([
@@ -327,10 +346,14 @@ export function decisionInspectionDigest(record: DecisionRecord): string {
     .digest("hex");
 }
 
-export function latestDecisionInspection(record: DecisionRecord) {
+export function latestDecisionInspection(record: DecisionRecord, scope: InspectionScope = "all") {
   return record.version === 2
     ? record.inspections
-        ?.filter((i) => i.decisionDigest === decisionInspectionDigest(record))
+        ?.filter(
+          (i) =>
+            (scope === "operative" || i.scope !== "operative") &&
+            i.decisionDigest === decisionInspectionDigest(record, i.scope ?? "all"),
+        )
         .at(-1)
     : undefined;
 }
@@ -350,7 +373,10 @@ export function decisionKnowledge(
   proposalFreshness: Freshness = "unknown",
 ) {
   const effective = effectiveDecision(record);
-  const inspection = latestDecisionInspection(record);
+  const inspection = latestDecisionInspection(
+    record,
+    decisionApproval(effective) === "accepted" ? "operative" : "all",
+  );
   return {
     ...revisionKnowledge(effective, freshness),
     ...(inspection
@@ -361,12 +387,20 @@ export function decisionKnowledge(
             inspector: inspection.inspector,
             note: inspection.note,
             outcome: inspection.outcome,
+            scope: inspection.scope ?? "all",
             headHash: inspection.headHash,
           },
         }
       : {}),
     ...(effective !== record
-      ? { pendingProposal: revisionKnowledge(record, proposalFreshness) }
+      ? {
+          pendingProposal: {
+            ...revisionKnowledge(record, proposalFreshness),
+            assessment: latestDecisionInspection(record)
+              ? "no_contradiction_found"
+              : "not_assessed",
+          },
+        }
       : {}),
   };
 }

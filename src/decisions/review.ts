@@ -12,6 +12,7 @@ import {
   decisionProvenance,
   effectiveDecision,
   importLegacy,
+  type InspectionScope,
   type DecisionRecord,
   type ReviewedDecisionRecord,
 } from "./provenance.js";
@@ -24,6 +25,7 @@ const exec = promisify(execFile);
 const requestSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
   action: z.enum(["prepare", "inspect", "accept", "reaffirm", "retire"]).default("prepare"),
+  inspectionScope: z.enum(["all", "operative"]).default("all"),
   inspector: z.string().trim().min(1).max(200).optional(),
   reviewer: z.string().trim().min(1).max(200).optional(),
   note: z.string().trim().min(1).max(1500).optional(),
@@ -34,20 +36,21 @@ const requestSchema = z.object({
 });
 export type ReviewDecisionInput = z.input<typeof requestSchema>;
 
-async function reviewState(root: string, record: DecisionRecord) {
+async function reviewState(root: string, record: DecisionRecord, scope: InspectionScope = "all") {
+  const target = scope === "operative" ? effectiveDecision(record) : record;
   const [headHash, workingTree, changes] = await Promise.all([
     getCurrentGitHash(root),
     getWorkingTree(root),
-    getChangesWithStatus(root, record.refreshedHash),
+    getChangesWithStatus(root, target.refreshedHash),
   ]);
-  const anchors = decisionAnchors(record);
+  const anchors = scope === "operative" ? target.files : decisionAnchors(record);
   const committed = (changes ?? []).filter((c) =>
     [c.path, ...(c.previousPath ? [c.previousPath] : [])].some((file) =>
       anchors.some((anchor) => anchorMatches(anchor, file)),
     ),
   );
   const evidence = {
-    baseHash: record.refreshedHash,
+    baseHash: target.refreshedHash,
     headHash,
     historyAvailable: changes !== null,
     changedFiles: touchedPaths(committed),
@@ -56,7 +59,13 @@ async function reviewState(root: string, record: DecisionRecord) {
   const capture = await captureAnchors(root, anchors);
   const reviewToken = createHash("sha256")
     .update(
-      JSON.stringify({ record, evidence, capture, workingTreeAvailable: workingTree.available }),
+      JSON.stringify({
+        record,
+        evidence,
+        capture,
+        workingTreeAvailable: workingTree.available,
+        ...(scope === "operative" ? { inspectionScope: scope } : {}),
+      }),
     )
     .digest("hex");
   return { reviewToken, evidence, capture, committed, workingTreeAvailable: workingTree.available };
@@ -68,7 +77,7 @@ async function previews(
   state: Awaited<ReturnType<typeof reviewState>>,
 ) {
   const access = await createFileAccess(root);
-  const anchors = decisionAnchors(record);
+  const anchors = state.capture.anchors;
   const candidates = [
     ...new Set([
       ...state.evidence.changedFiles,
@@ -142,6 +151,12 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success) return { status: "error", error: parsed.error.message };
   const request = parsed.data;
+  if (request.inspectionScope === "operative" && !["prepare", "inspect"].includes(request.action))
+    return {
+      status: "error",
+      error:
+        "Operative scope is only for preparation and source inspection, not human verdicts. Prepare with all scope for acceptance, reaffirmation or retirement.",
+    };
   const read = async () => {
     const store = await loadDecisionStore(root);
     return { ...store, record: store.records.find((record) => record.id === request.id) };
@@ -154,17 +169,54 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
         error: `No readable decision with id "${request.id}"`,
         diagnostics,
       };
-    const state = await reviewState(root, record);
+    if (
+      request.inspectionScope === "operative" &&
+      (record.status !== "active" || decisionApproval(effectiveDecision(record)) !== "accepted")
+    )
+      return {
+        status: "error",
+        error:
+          "Operative inspection requires an active accepted revision; inspect proposals or legacy records with all scope.",
+      };
+    const state = await reviewState(root, record, request.inspectionScope);
     const operativeDecision = effectiveDecision(record);
     return {
       status: "prepared",
       record,
-      ...(operativeDecision !== record ? { operativeDecision } : {}),
+      ...(operativeDecision !== record && request.inspectionScope === "all"
+        ? { operativeDecision }
+        : {}),
+      inspectionScope: request.inspectionScope,
+      ...(request.inspectionScope === "operative"
+        ? {
+            inspectionTarget: {
+              ...decisionContent(operativeDecision),
+              approval: decisionApproval(operativeDecision),
+              revision: operativeDecision.version === 2 ? operativeDecision.revision : 0,
+              refreshedHash: operativeDecision.refreshedHash,
+            },
+            ...(operativeDecision !== record
+              ? {
+                  pendingProposal: {
+                    revision: record.version === 2 ? record.revision : 0,
+                    assessment: "not_assessed",
+                  },
+                }
+              : {}),
+          }
+        : {}),
       provenance: decisionProvenance(record),
       ...state,
       diagnostics,
-      previews: await previews(root, record, state),
-      hint: "Inspect the proposed content, operativeDecision, sources, history, and code changes. A pending proposal leaves the prior accepted revision operative; accepting it replaces that revision, and retirement withdraws the entire decision including its proposal. Evidence covers both revisions' anchors. After inspecting the relevant code, action inspect with inspector, note and reviewToken records no_contradiction_found without human approval; it does not accept or reaffirm the decision. Only record acceptance or reaffirmation when the user or cited team review has authorized it. Supply that reviewer's identity, a reason, and this reviewToken. Do not invent identities or infer agreement from unchanged code. Acceptance and reaffirmation require committed anchor changes; retirement is available independently. Missing old history remains visible in the event even if a reviewer establishes a new baseline at HEAD. Saved reviews are local assertions for normal PR review, not authenticated approvals.",
+      previews: await previews(
+        root,
+        request.inspectionScope === "operative" ? operativeDecision : record,
+        state,
+      ),
+      hint:
+        request.inspectionScope === "operative"
+          ? "Inspect only the accepted inspectionTarget against its source and diff. Use the same inspectionScope: operative and token with action inspect. This reports no contradiction for that revision only; pending content remains unassessed and visible. Do not attest to the draft or infer human approval. If the accepted guidance is contradicted or uncertain, explain that instead of recording no contradiction."
+          : "Inspect the proposed content, operativeDecision, sources, history, and code changes. A pending proposal leaves the prior accepted revision operative; accepting it replaces that revision, and retirement withdraws the entire decision including its proposal. Evidence covers both revisions' anchors. After inspecting the relevant code, action inspect with inspector, note and reviewToken records no_contradiction_found without human approval; it does not accept or reaffirm the decision. Only record acceptance or reaffirmation when the user or cited team review has authorized it. Supply that reviewer's identity, a reason, and this reviewToken. Do not invent identities or infer agreement from unchanged code. Acceptance and reaffirmation require committed anchor changes; retirement is available independently. Missing old history remains visible in the event even if a reviewer establishes a new baseline at HEAD. Saved reviews are local assertions for normal PR review, not authenticated approvals.",
     };
   }
   if (
@@ -186,7 +238,7 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
         diagnostics,
       };
     if (!original) return { status: "error", error: `No decision with id "${request.id}"` };
-    const state = await reviewState(root, original);
+    const state = await reviewState(root, original, request.inspectionScope);
     if (state.reviewToken !== request.reviewToken)
       return {
         status: "conflict",
@@ -199,6 +251,11 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
         error: "Archived decisions cannot be reviewed again; create a new proposal.",
       };
     if (request.action === "inspect") {
+      if (
+        request.inspectionScope === "operative" &&
+        decisionApproval(effectiveDecision(original)) !== "accepted"
+      )
+        return { status: "error", error: "Operative inspection requires an accepted revision." };
       if (
         !state.capture.complete ||
         !state.capture.anchors.length ||
@@ -222,11 +279,15 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
         inspector: request.inspector!,
         note: request.note!,
         outcome: "no_contradiction_found" as const,
-        decisionDigest: decisionInspectionDigest(record),
+        decisionDigest: decisionInspectionDigest(record, request.inspectionScope),
+        ...(request.inspectionScope === "operative" ? { scope: "operative" as const } : {}),
         headHash: state.evidence.headHash,
         capture: state.capture,
       };
-      if ((await reviewState(root, original)).reviewToken !== state.reviewToken)
+      if (
+        (await reviewState(root, original, request.inspectionScope)).reviewToken !==
+        state.reviewToken
+      )
         return {
           status: "conflict",
           error: "Anchor content changed during inspection; prepare again.",
@@ -240,6 +301,9 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
         id: record.id,
         inspection,
         approval: record.approval,
+        ...(request.inspectionScope === "operative" && effectiveDecision(record) !== record
+          ? { pendingProposal: { revision: record.revision, assessment: "not_assessed" } }
+          : {}),
         hint: "Inspection recorded locally; no human acceptance or reaffirmation was claimed. Relevant content changes reopen the advisory. Review and commit this record through the project workflow.",
       };
     }

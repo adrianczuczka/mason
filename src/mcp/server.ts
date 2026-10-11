@@ -501,7 +501,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "review_decision",
-    "Prepare a decision review: returns the full record and history, any operative accepted revision, provenance, changes and previews for both sets of anchors, and a reviewToken. After source inspection, record inspect with inspector, note and token to report no contradiction found without human acceptance. Then record accept, reaffirm, or retire with that token, the authorized reviewer, and a reason. Acceptance replaces the operative revision; retirement withdraws the entire record including its proposal. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
+    "Prepare a decision review: returns the full record and history, any operative accepted revision, provenance, changes and previews for both sets of anchors, and a reviewToken. For accepted-guidance inspection use inspectionScope operative on both prepare and inspect; pending proposals remain unassessed. Default all scope covers both revisions. After source inspection, record inspect with inspector, note and token to report no contradiction found without human acceptance. For human review, prepare with all scope, then record accept, reaffirm, or retire with its token, the authorized reviewer, and a reason. Acceptance replaces the operative revision; retirement withdraws the entire record including its proposal. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
     {
       dir: z.string().describe("Absolute path to the project root directory"),
       id: z
@@ -514,6 +514,13 @@ export function createMcpServer(): McpServer {
         .default("prepare")
         .describe(
           "Prepare is read-only. Inspect records an agent assessment without approval; accept, reaffirm and retire require an authorized review.",
+        ),
+      inspectionScope: z
+        .enum(["all", "operative"])
+        .optional()
+        .default("all")
+        .describe(
+          "For prepare/inspect only: all covers the full record and both anchor sets (default); operative covers only an active accepted revision, leaving a pending draft unassessed. Use the same scope when submitting its token.",
         ),
       inspector: z
         .string()

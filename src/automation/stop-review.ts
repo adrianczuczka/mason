@@ -133,7 +133,7 @@ export function decisionStopReview(
       ([id, value]) =>
         `Decision ${JSON.stringify(safe(value.title))} (${safe(id)}): review_decision(action: "prepare", id: ${JSON.stringify(id)}).`,
     ),
-    'Check the claims against the source and diff. If no contradiction is found, record action: "inspect" with the reviewToken, actual inspector, and a note explaining the evidence. "Expected changes" or "my own commits" are not evidence.',
+    'Check the claims against the source and diff. When an accepted revision exists, prepare and inspect with inspectionScope: "operative" to assess it separately; a contradictory pending draft remains unassessed and must not be promoted. For proposal-only or legacy records use the default all scope. If no contradiction is found in the selected scope, record action: "inspect" with the reviewToken, actual inspector, and a note explaining the evidence. "Expected changes" or "my own commits" are not evidence.',
     "If contradicted or uncertain, explain the mismatch to the user and request direction. Do not accept, reaffirm, or retire a decision without authorized human review. A revised proposal leaves the accepted revision operative until reviewed.",
     `Evidence: ${report.reportPath}. Concurrent changes can contribute; captures do not prove authorship. This reminder does not resolve the finding.`,
   ].join("\n");

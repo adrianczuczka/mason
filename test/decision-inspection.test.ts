@@ -302,4 +302,161 @@ describe("captured anchors and separate source inspections", () => {
     expect(result.status).toBe("updated");
     expect((await inspect(id)).status).toBe("error");
   });
+  describe("operative inspection scope", () => {
+    async function acceptedWithDraft(files = ["src/client.ts"]) {
+      const id = await create({
+        owner: "Client team",
+        sources: [{ kind: "document", reference: "README.md" }],
+      });
+      const prepared = await reviewDecision(root, { id });
+      expect(
+        (
+          await reviewDecision(root, {
+            id,
+            action: "accept",
+            reviewer: "Fixture reviewer",
+            note: "Reviewed bounded retries",
+            reviewToken: prepared.reviewToken,
+          })
+        ).status,
+      ).toBe("accepted");
+      await upsertDecision(root, { ...input, id, files, body: "Remove every retry bound." });
+      return id;
+    }
+    async function inspectOperative(id: string) {
+      const prepared = await reviewDecision(root, { id, inspectionScope: "operative" });
+      expect(prepared.status).toBe("prepared");
+      return reviewDecision(root, {
+        id,
+        action: "inspect",
+        inspectionScope: "operative",
+        inspector: "Codex",
+        note: "The implementation still bounds retries; the pending draft contradicts that constraint and is unassessed.",
+        reviewToken: prepared.reviewToken,
+      });
+    }
+    it("inspects accepted guidance without attesting to a contradictory pending draft", async () => {
+      const id = await acceptedWithDraft();
+      await write("src/client.ts", "export const retries = 2;\n");
+      const before = await get();
+      expect(await inspectOperative(id)).toMatchObject({
+        status: "inspected",
+        inspection: { scope: "operative" },
+        pendingProposal: { assessment: "not_assessed" },
+      });
+      expect((await get()).history).toEqual(before.history);
+      expect((await get()).approval).toBe("proposed");
+      expect(decisionKnowledge(await get())).toMatchObject({
+        approval: "accepted",
+        inspection: { scope: "operative" },
+        pendingProposal: { body: "Remove every retry bound.", assessment: "not_assessed" },
+      });
+      expect(await computeDecisionDrift(root)).toMatchObject({
+        freshness: { [id]: "current" },
+        pendingProposals: { [id]: { freshness: "changed" } },
+      });
+    });
+    it("does not clear retained pending-draft drift when scopes differ", async () => {
+      await write("src/draft.ts", "export const draft = 1;\n");
+      await commitAll(root, "draft source");
+      const id = await acceptedWithDraft(["src/draft.ts"]);
+      await write("src/client.ts", "export const retries = 2;\n");
+      await write("src/draft.ts", "export const draft = 2;\n");
+      await commitAll(root, "changed both scopes");
+      const baseline = await prepareRepair(root, ["decision-anchor-drift"]);
+      expect((await inspectOperative(id)).status).toBe("inspected");
+      const verified = await verifyRepair(root, baseline.baselinePath);
+      const findings = verified.findings.filter((f) => f.original.type === "decision-anchor-drift");
+      expect(
+        findings.some(
+          (f) =>
+            f.status === "resolved" &&
+            f.original.evidence.kind === "decision-anchor" &&
+            f.original.evidence.provenance?.approval === "accepted",
+        ),
+      ).toBe(true);
+      expect(
+        findings.some(
+          (f) =>
+            f.status !== "resolved" &&
+            f.original.evidence.kind === "decision-anchor" &&
+            f.original.evidence.provenance?.approval === "proposed",
+        ),
+      ).toBe(true);
+    });
+    it("keeps operative inspection through draft edits but reopens changed accepted evidence", async () => {
+      const id = await acceptedWithDraft();
+      expect((await inspectOperative(id)).status).toBe("inspected");
+      await upsertDecision(root, { ...input, id, body: "Remove bounds only on Mondays." });
+      expect(decisionKnowledge(await get()).inspection).toMatchObject({ scope: "operative" });
+      await write("src/client.ts", "export const retries = 3;\n");
+      expect((await computeDecisionDrift(root)).freshness?.[id]).toBe("changed");
+      await commitAll(root, "changed implementation");
+      const prepared = await reviewDecision(root, { id });
+      expect(
+        (
+          await reviewDecision(root, {
+            id,
+            action: "accept",
+            reviewer: "Fixture reviewer",
+            note: "Fixture accepts replacement",
+            reviewToken: prepared.reviewToken,
+          })
+        ).status,
+      ).toBe("accepted");
+      expect(decisionKnowledge(await get()).inspection).toBeUndefined();
+    });
+    it("prepares only accepted anchors even when the draft names excluded evidence", async () => {
+      await write(".gitignore", ".env\n");
+      await write(".env", "EXCLUDED=placeholder\n");
+      const id = await acceptedWithDraft([".env"]);
+      expect((await inspectOperative(id)).status).toBe("inspected");
+      expect((await inspect(id)).status).toBe("error");
+    });
+    it("rejects scope mismatches, proposal-only operative requests and scoped human verdicts", async () => {
+      const proposal = await create();
+      expect(
+        (await reviewDecision(root, { id: proposal, inspectionScope: "operative" })).status,
+      ).toBe("error");
+      await fs.unlink(path.join(root, `.mason/decisions/${proposal}.json`));
+      const id = await acceptedWithDraft();
+      const prepared = await reviewDecision(root, { id, inspectionScope: "operative" });
+      expect(
+        (
+          await reviewDecision(root, {
+            id,
+            action: "inspect",
+            inspector: "Codex",
+            note: "Scope mismatch",
+            reviewToken: prepared.reviewToken,
+          })
+        ).status,
+      ).toBe("conflict");
+      expect(
+        (
+          await reviewDecision(root, {
+            id,
+            action: "accept",
+            inspectionScope: "operative",
+            reviewer: "Fixture reviewer",
+            note: "Wrong scope",
+            reviewToken: prepared.reviewToken,
+          })
+        ).status,
+      ).toBe("error");
+      await upsertDecision(root, { ...input, id, body: "Another draft" });
+      expect(
+        (
+          await reviewDecision(root, {
+            id,
+            action: "inspect",
+            inspectionScope: "operative",
+            inspector: "Codex",
+            note: "Stale token",
+            reviewToken: prepared.reviewToken,
+          })
+        ).status,
+      ).toBe("conflict");
+    });
+  });
 });

@@ -237,7 +237,10 @@ async function decisionAssessment(
     );
   const record = store.records.find((record) => record.id === evidence.decisionId);
   if (!record || record.version !== 2) return null;
-  const inspection = latestDecisionInspection(record);
+  const inspection = latestDecisionInspection(
+    record,
+    evidence.provenance?.approval === "accepted" ? "operative" : "all",
+  );
   if (inspection && record.status === "active") {
     const capture = await captureAnchors(root, inspection.capture.anchors);
     let ancestor = true;

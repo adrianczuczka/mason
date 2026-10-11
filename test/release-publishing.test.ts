@@ -120,7 +120,14 @@ it("advertises the runtime decision inspection flow in the published bundle tool
       (entry: { name: string }) => entry.name === "review_decision",
     );
     expect(declared.description).toBe(tool.description);
-    for (const field of ["action", "inspector", "reviewer", "note", "reviewToken"]) {
+    for (const field of [
+      "action",
+      "inspectionScope",
+      "inspector",
+      "reviewer",
+      "note",
+      "reviewToken",
+    ]) {
       expect(declared.inputSchema.properties[field]).toMatchObject(
         tool.inputSchema.properties![field],
       );

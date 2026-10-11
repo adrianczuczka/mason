@@ -7,7 +7,7 @@ import type { StoreDiagnostic } from "../utils/storage.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { loadDecisionStore } from "./decisions.js";
 import type { DecisionRecord } from "./decisions.js";
-import { effectiveDecision, latestDecisionInspection } from "./provenance.js";
+import { decisionApproval, effectiveDecision, latestDecisionInspection } from "./provenance.js";
 
 /**
  * Deliberately separate from DriftReport: mason-drift's exit codes and
@@ -54,11 +54,18 @@ export async function computeDecisionDrift(
   const baselines = store.records
     .filter((record) => record.status === "active")
     .flatMap((record) => {
-      const inspection = latestDecisionInspection(record);
-      if (inspection) return [inspection.capture];
-      return [...new Set([effectiveDecision(record), record])].flatMap((candidate) =>
-        candidate.version === 2 && candidate.capture ? [candidate.capture] : [],
-      );
+      const effective = effectiveDecision(record);
+      return [...new Set([effective, record])].flatMap((candidate) => {
+        const inspection = latestDecisionInspection(
+          record,
+          candidate === effective && decisionApproval(effective) === "accepted"
+            ? "operative"
+            : "all",
+        );
+        const capture =
+          inspection?.capture ?? (candidate.version === 2 ? candidate.capture : undefined);
+        return capture ? [capture] : [];
+      });
     });
   const captures = await captureAnchorScopes(
     resolvedRoot,
@@ -109,12 +116,18 @@ export async function computeDecisionDrift(
   for (const record of store.records) {
     if (record.status !== "active") continue;
     const effective = effectiveDecision(record);
-    const inspection = latestDecisionInspection(record);
+    const inspection = latestDecisionInspection(
+      record,
+      decisionApproval(effective) === "accepted" ? "operative" : "all",
+    );
     const state = await inspect(effective, inspection?.capture);
     report.freshness![record.id] = state.freshness;
     if (state.changedFiles.length) report.staleDecisions[record.id] = state.changedFiles;
     if (effective !== record)
-      (report.pendingProposals ??= {})[record.id] = await inspect(record, inspection?.capture);
+      (report.pendingProposals ??= {})[record.id] = await inspect(
+        record,
+        latestDecisionInspection(record)?.capture,
+      );
   }
   return report;
 }
