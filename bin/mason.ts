@@ -15,7 +15,9 @@ Usage: mason <command> [options]
   teardown [--host codex|claude] Disconnect project integrations; retain knowledge
   status                     Show configuration, observed use and verification
   stats                      Show local stats and feedback
-  auto                       Configure and run lifecycle hooks
+  install --host codex|claude  Install lifecycle hooks
+  config                     Configure lifecycle hooks and Stop behavior
+  hook --host codex|claude    Process an assistant lifecycle event
   check                      Resume and verify retained documentation findings
   audit                      Audit project instructions
   review --base <ref>         Review committed changes
@@ -30,18 +32,22 @@ Usage: mason <command> [options]
 Use mason <command> --help for options. npm users can also use
 mason-audit, mason-review, mason-drift, mason-hook and mason-mcp.`;
 
+// Bare hook and --print-config retain the standalone decision injector.
+const lifecycleHook =
+  (command === "auto" && isHookCommand(args)) ||
+  (command === "hook" && !args.includes("--print-config") && (managedLaunch || args.length > 0));
 let progress: Progress | undefined;
 try {
   if (managedLaunch) {
     if (
       !setupHost ||
       !["codex", "claude"].includes(setupHost) ||
-      !["mcp", "auto"].includes(command)
+      !(["mcp", "auto"].includes(command) || lifecycleHook)
     )
       throw new Error("Invalid setup invocation.");
     // Hook setup is checked against the parsed payload's checkout, after stdin
     // is read. MCP can explain missing setup over the protocol in a fresh clone.
-    if (!(command === "auto" && isHookCommand(args))) {
+    if (!lifecycleHook) {
       const { prepareLaunch } = await import("../src/setup/launcher.js");
       await prepareLaunch(setupHost as "codex" | "claude", { allowInactive: command === "mcp" });
     }
@@ -173,7 +179,12 @@ try {
             ". Project configuration and knowledge were retained. Reinstall Mason to use its integrations.",
         );
     }
-  } else if (["setup", "teardown", "status", "check", "stats", "auto"].includes(command)) {
+  } else if (
+    ["setup", "teardown", "status", "check", "stats", "install", "config", "auto"].includes(
+      command,
+    ) ||
+    lifecycleHook
+  ) {
     const forwarded = command === "auto" ? args : [command, ...args];
     let input = "";
     if (isHookCommand(forwarded) && !process.stdin.isTTY)
@@ -199,7 +210,7 @@ try {
 } catch (error) {
   progress?.stop(false);
   const message = "Mason: " + (error instanceof Error ? error.message : String(error));
-  if (command === "auto" && isHookCommand(args)) {
+  if (lifecycleHook) {
     console.log(JSON.stringify({ systemMessage: message + " Verification was not established." }));
     process.exitCode = 0;
   } else {

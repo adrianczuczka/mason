@@ -17,7 +17,7 @@ export function globalCommand(args: string[], platform = process.platform) {
     : { command: "mason", args };
 }
 export const mcpCommand = (host: Host) => globalCommand(["--setup-host", host, "mcp"]);
-export const hookCommand = (host: Host) => `mason --setup-host ${host} auto`;
+export const hookCommand = (host: Host) => `mason --setup-host ${host}`;
 
 /** Probe the same PATH command the host will use; never download during setup. */
 export async function installedCommand() {

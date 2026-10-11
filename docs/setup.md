@@ -114,8 +114,8 @@ Unified setup already installs these hooks. For manual npm hook installation (av
 
 ```bash
 npm install -D mason-context@0.16.2
-mason auto install --host claude   # Claude Code
-mason auto install --host codex    # Codex; review/trust the hooks using /hooks
+mason install --host claude   # Claude Code
+mason install --host codex    # Codex; review/trust the hooks using /hooks
 mason status
 ```
 
@@ -138,12 +138,12 @@ The reminder names each decision and asks the assistant to run `review_decision(
 The same decision revision and observed content block only once; repeat Stops and `stop_hook_active: true` return advisory context. Delivery does not resolve a finding. Inspection, authorized review, or a check confirming resolution clears covered drift; later observed edits can prompt again, including another edit to the same dirty file. An unrelated commit or external edit to another anchor does not repeat the block. Codex retains advisory behavior. This is a bounded inspection reminder, not proof of correctness or a guarantee of human approval.
 
 ```sh
-mason auto config --stop-block off   # Disable Claude Stop review blocking in this checkout
-mason auto config --stop-block drift # Restore the default
-mason auto status                   # Shows stopBlock, including before hooks run
+mason config --stop-block off   # Disable Claude Stop review blocking in this checkout
+mason config --stop-block drift # Restore the default
+mason status                   # Shows stopBlock, including before hooks run
 ```
 
-The local preference and session receipts live under `.mason/reports/automation/`. Host hook generation with `mason auto config --host claude|codex` remains read-only and separate. Body-length warnings remain advisory.
+The local preference and session receipts live under `.mason/reports/automation/`. Host hook generation with `mason config --host claude|codex` remains read-only and separate. Body-length warnings remain advisory.
 
 Run `mason check` to see all outstanding findings, including the quiet backlog. Exit codes are 0 for verified checks, 1 for outstanding issues, and 2 for incomplete or unavailable verification. A quiet completion notice does not mean the audit passed.
 
@@ -169,7 +169,7 @@ The equivalent MCP operation is `mason_automation(action: "check")`. Its respons
 
 `status` includes a bounded history of the latest 32 execution attempts, their duration after lock acquisition, and the number of older receipts omitted. A completed attempt includes its verification outcome. A started attempt without a matching live local lock owner is unknown, and a failed or unfinished latest attempt prevents an older report from being presented as current verification. Storage exhaustion can prevent even a failure receipt from being saved; the caller reports that explicitly. Receipts contain no prompts or tool arguments. The existing `mason-hook` decision injector keeps its previous behavior.
 
-Evidence is local to the worktree and branch. Switching assistants in that worktree resumes the same repair; another worktree or branch has separate state. Detached-HEAD commits retain evidence; moving that checkout to a different history requires inspection. Hooks select the active checkout from the event payload’s working directory, including subdirectories and linked worktrees. A linked worktree without a local setup record can inherit host activation from the primary checkout identified by Git’s common directory; it never borrows the primary checkout’s audit evidence or ownership records. Status includes `activationRoot` when setup is present. If Git cannot identify a primary checkout (for example, a bare repository or separately stored metadata without a recorded checkout location), run setup in the linked worktree explicitly. If a tool changes checkouts between its pre- and post-hooks, pairing remains unknown and the diagnostic says so; this does not prevent subsequent worktree checks. For managed hooks installed by setup, an event outside Git can use the launch directory or Claude's `CLAUDE_PROJECT_DIR` as a fallback only when there is one unambiguous checkout. Conflicting roots, unavailable project history, or multiple worktrees remain unverified: return to the intended checkout and run `mason check`. Standalone `mason auto hook` calls retain their explicit payload directory. Claude's project environment variable stays at the original checkout after entering a worktree, so it cannot safely override the payload. See the [Claude hook directory contract](https://code.claude.com/docs/en/hooks).
+Evidence is local to the worktree and branch. Switching assistants in that worktree resumes the same repair; another worktree or branch has separate state. Detached-HEAD commits retain evidence; moving that checkout to a different history requires inspection. Hooks select the active checkout from the event payload’s working directory, including subdirectories and linked worktrees. A linked worktree without a local setup record can inherit host activation from the primary checkout identified by Git’s common directory; it never borrows the primary checkout’s audit evidence or ownership records. Status includes `activationRoot` when setup is present. If Git cannot identify a primary checkout (for example, a bare repository or separately stored metadata without a recorded checkout location), run setup in the linked worktree explicitly. If a tool changes checkouts between its pre- and post-hooks, pairing remains unknown and the diagnostic says so; this does not prevent subsequent worktree checks. For managed hooks installed by setup, an event outside Git can use the launch directory or Claude's `CLAUDE_PROJECT_DIR` as a fallback only when there is one unambiguous checkout. Conflicting roots, unavailable project history, or multiple worktrees remain unverified: return to the intended checkout and run `mason check`. Standalone `mason hook` calls retain their explicit payload directory. Claude's project environment variable stays at the original checkout after entering a worktree, so it cannot safely override the payload. See the [Claude hook directory contract](https://code.claude.com/docs/en/hooks).
 
 Reports are not automatically transferred to CI. CI can call `mason check` on retained local artifacts, or `mason-audit --verify-repair <baseline>` after restoring the original artifacts at their recorded root. A fresh checkout cannot reconstruct missing pre-edit evidence. Audits discover README and instruction files at any depth, preserving filename case and respecting exclusions; see [audit scope](checks.md#context-file-audit). Setup continues to write only its host instruction entry points. References into `.git/` are reported as skipped Git metadata, whose layout varies between checkouts; they do not abort setup or count as verified repository references.
 
@@ -285,4 +285,4 @@ The pre-v0.4.0 LLM-driven CLI workflows were removed. MCP tools handle assistant
 | `mason impact File.kt` | Ask your assistant: *"what would changing File.kt affect?"* — it calls `get_impact`. |
 | `mason snapshot --install-hook` | Removed. The map auto-refreshes when the assistant detects stale state. |
 
-Use `mason` for `setup`, `teardown`, `status`, `check`, `stats`, `audit`, `review`, `drift`, and `mcp`. Hook configuration and execution use `mason auto`. The package also provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-hook`, and `mason-review`. The removed pre-0.4 workflows stay removed.
+Use `mason` for `setup`, `teardown`, `status`, `check`, `stats`, `audit`, `review`, `drift`, and `mcp`. Hook configuration and execution use `mason install`, `mason config`, and `mason hook --host claude|codex`. Existing `mason auto …` commands remain compatibility aliases. Bare `mason hook` and `mason hook --print-config` retain the standalone decision injector; `mason hook --help` describes lifecycle hooks. The package also provides `mason-mcp`, `mason-drift`, `mason-audit`, `mason-hook`, and `mason-review`. The removed pre-0.4 workflows stay removed.

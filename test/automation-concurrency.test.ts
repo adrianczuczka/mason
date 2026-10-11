@@ -102,7 +102,7 @@ it("preserves separate process receipts and pre/post pairs during a hook burst",
     new Promise<string>((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        [path.resolve("dist/mason.js"), "auto", "hook", "--host", "claude"],
+        [path.resolve("dist/mason.js"), "hook", "--host", "claude"],
         { cwd: root, stdio: ["pipe", "pipe", "pipe"] },
       );
       let stdout = "",

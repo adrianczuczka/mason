@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Deliver file-scoped decision knowledge through standard Claude hooks after `Read` and before `Edit`/`Write`, reusing the existing injector and session deduplication. Confine delivery to the active checkout, retain approval/freshness labels and audit diagnostics, and preserve the standalone PostToolUse contract. Shell commands and Codex remain outside direct lesson injection.
+- Flatten hook commands to `mason install`, `mason config`, and `mason hook --host claude|codex`. Generate shorter hook handlers and migrate existing configurations without duplicates. Retain `mason auto …` aliases and the standalone decision injector for compatibility.
 
 ## 0.21.0 — 2026-10-10
 

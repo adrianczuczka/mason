@@ -42,7 +42,7 @@ Show aggregate local observations, or inspect one session.
 
 No uploads. Observed resolution does not establish causation.`;
 
-const USAGE = `Usage: mason auto <setup|teardown|install|config|status|check|hook|stats> [options]
+const USAGE = `Usage: mason <setup|teardown|install|config|status|check|hook|stats> [options]
 
   setup [--host claude|codex]  Connect MCP, instructions and hooks to mason on PATH; retain the initial audit
   teardown [--host claude|codex] Disconnect one host or all project hosts; retain knowledge and evidence

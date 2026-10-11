@@ -171,16 +171,21 @@ export const HOOK_EVENTS = [
   "Stop",
 ] as const;
 /** Only guard Mason's generated launch, never interpret a custom command prefix. */
-export function managedHookCommand(host: Host, platform = process.platform) {
-  const command = `mason --setup-host ${host} auto hook --host ${host}`;
+export function managedHookCommand(host: Host, platform = process.platform, legacy = false) {
+  const command = `mason --setup-host ${host}${legacy ? " auto" : ""} hook --host ${host}`;
   return platform === "win32"
     ? `cmd.exe /d /s /c "where mason >nul 2>nul & if errorlevel 1 (exit /b 0) else (${command})"`
     : `if command -v mason >/dev/null 2>&1; then ${command}; fi`;
 }
 export function knownManagedHookCommands(host: Host) {
   return [
+    "npx --no-install --package mason-context mason auto hook --host " + host,
+    "npx --no-install --package mason-context mason hook --host " + host,
     managedHookCommand(host, "linux"),
     managedHookCommand(host, "win32"),
+    managedHookCommand(host, "linux", true),
+    managedHookCommand(host, "win32", true),
+    `mason --setup-host ${host} hook --host ${host}`,
     `mason --setup-host ${host} auto hook --host ${host}`,
   ];
 }
@@ -188,19 +193,17 @@ export function knownManagedHookCommands(host: Host) {
 export function compatibleManagedHookCommands(host: Host, platform = process.platform) {
   return [
     managedHookCommand(host, platform),
+    managedHookCommand(host, platform, true),
+    `mason --setup-host ${host} hook --host ${host}`,
     `mason --setup-host ${host} auto hook --host ${host}`,
   ];
 }
-export function hookConfig(
-  host: Host,
-  command = "npx --no-install --package mason-context mason auto",
-) {
+export function hookConfig(host: Host, command = "npx --no-install --package mason-context mason") {
   const handler = {
     type: "command",
-    command:
-      command === `mason --setup-host ${host} auto`
-        ? managedHookCommand(host)
-        : command + " hook --host " + host,
+    command: [`mason --setup-host ${host}`, `mason --setup-host ${host} auto`].includes(command)
+      ? managedHookCommand(host)
+      : command + " hook --host " + host,
     timeout: 30,
   };
   return {

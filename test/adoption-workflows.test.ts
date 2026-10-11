@@ -64,7 +64,7 @@ function hook(
   return new Promise<string>((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      [binary, ...(managed ? ["--setup-host", host] : []), "auto", "hook", "--host", host],
+      [binary, ...(managed ? ["--setup-host", host] : []), "hook", "--host", host],
       { cwd: launchCwd, env: { ...env(), CLAUDE_PROJECT_DIR: root } },
     );
     let output = "",
@@ -344,34 +344,39 @@ describe("adoption workflows", { timeout: 30000 }, () => {
     },
   );
 
-  it("distinguishes compatible older hooks from disabled, narrowed, or wrong-platform hooks without rewriting them", async () => {
-    await setupProject(root, { host: "claude" });
-    const file = path.join(root, ".claude/settings.json");
-    const config = JSON.parse(await fs.readFile(file, "utf8"));
-    for (const groups of Object.values(config.hooks) as any[])
-      for (const group of groups)
-        for (const handler of group.hooks)
-          handler.command = "mason --setup-host claude auto hook --host claude";
-    const text = JSON.stringify(config);
-    await fs.writeFile(file, text);
-    const compatible = (await setupStatus(root)).hosts.claude;
-    expect(compatible.hookConfiguration).toBe("compatible");
-    expect(compatible.status).toBe("pending");
-    expect(compatible.updates).toHaveLength(1);
-    expect(await fs.readFile(file, "utf8")).toBe(text);
-    config.disableAllHooks = true;
-    await fs.writeFile(file, JSON.stringify(config));
-    expect((await setupStatus(root)).hosts.claude.hookConfiguration).toBe("disabled-or-changed");
-    delete config.disableAllHooks;
-    config.hooks.PreToolUse[0].matcher = "Edit";
-    await fs.writeFile(file, JSON.stringify(config));
-    expect((await setupStatus(root)).hosts.claude.hookConfiguration).toBe("disabled-or-changed");
-    config.hooks.PreToolUse[0].matcher = ".*";
-    config.hooks.Stop[0].hooks[0].command = managedHookCommand(
-      "claude",
-      process.platform === "win32" ? "linux" : "win32",
-    );
-    await fs.writeFile(file, JSON.stringify(config));
-    expect((await setupStatus(root)).hosts.claude.hookConfiguration).toBe("disabled-or-changed");
-  });
+  it.each([
+    "mason --setup-host claude auto hook --host claude",
+    managedHookCommand("claude", process.platform, true),
+  ])(
+    "distinguishes compatible older hooks (%s) from disabled, narrowed, or wrong-platform hooks without rewriting them",
+    async (legacyCommand) => {
+      await setupProject(root, { host: "claude" });
+      const file = path.join(root, ".claude/settings.json");
+      const config = JSON.parse(await fs.readFile(file, "utf8"));
+      for (const groups of Object.values(config.hooks) as any[])
+        for (const group of groups)
+          for (const handler of group.hooks) handler.command = legacyCommand;
+      const text = JSON.stringify(config);
+      await fs.writeFile(file, text);
+      const compatible = (await setupStatus(root)).hosts.claude;
+      expect(compatible.hookConfiguration).toBe("compatible");
+      expect(compatible.status).toBe("pending");
+      expect(compatible.updates).toHaveLength(1);
+      expect(await fs.readFile(file, "utf8")).toBe(text);
+      config.disableAllHooks = true;
+      await fs.writeFile(file, JSON.stringify(config));
+      expect((await setupStatus(root)).hosts.claude.hookConfiguration).toBe("disabled-or-changed");
+      delete config.disableAllHooks;
+      config.hooks.PreToolUse[0].matcher = "Edit";
+      await fs.writeFile(file, JSON.stringify(config));
+      expect((await setupStatus(root)).hosts.claude.hookConfiguration).toBe("disabled-or-changed");
+      config.hooks.PreToolUse[0].matcher = ".*";
+      config.hooks.Stop[0].hooks[0].command = managedHookCommand(
+        "claude",
+        process.platform === "win32" ? "linux" : "win32",
+      );
+      await fs.writeFile(file, JSON.stringify(config));
+      expect((await setupStatus(root)).hosts.claude.hookConfiguration).toBe("disabled-or-changed");
+    },
+  );
 });

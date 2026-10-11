@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 const [binary, receipt, ...args] = process.argv.slice(2);
 const input = fs.readFileSync(0, 'utf8');
 const startedAt = new Date().toISOString();
-const result = spawnSync(process.execPath, [binary, "auto", ...args], { input, encoding: 'utf8', timeout: 35000, maxBuffer: 1024 * 1024 });
+const result = spawnSync(process.execPath, [binary, ...args], { input, encoding: 'utf8', timeout: 35000, maxBuffer: 1024 * 1024 });
 let request = {}, output = null;
 try { request = JSON.parse(input); } catch { /* record failed input without changing adapter behavior */ }
 try { output = JSON.parse(result.stdout); } catch { /* empty output is normal */ }

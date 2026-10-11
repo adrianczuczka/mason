@@ -26,11 +26,9 @@ const binary = path.resolve("dist/mason.js");
 const networkGuard = path.resolve("test/support/deny-network.mjs");
 function managedHook(host: string, cwd: string) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      [binary, "--setup-host", host, "auto", "hook", "--host", host],
-      { cwd },
-    );
+    const child = spawn(process.execPath, [binary, "--setup-host", host, "hook", "--host", host], {
+      cwd,
+    });
     let stdout = "",
       stderr = "";
     child.stdout.on("data", (data) => {
@@ -80,8 +78,8 @@ it.each(["claude", "codex"] as const)(
           ].join(path.delimiter)
         : empty,
     };
-    const command = hookConfig(host, `mason --setup-host ${host} auto`).hooks.SessionStart[0]
-      .hooks[0].command;
+    const command = hookConfig(host, `mason --setup-host ${host}`).hooks.SessionStart[0].hooks[0]
+      .command;
     const output = await exec(
       windows ? "cmd.exe" : "/bin/sh",
       windows ? ["/d", "/s", "/c", `"${command}"`] : ["-c", command],
@@ -124,7 +122,7 @@ it("replaces known generated hook variants in a clone while preserving custom ho
       },
     }),
   );
-  const plan = await planAutomationInstall(root, "claude", "mason --setup-host claude auto");
+  const plan = await planAutomationInstall(root, "claude", "mason --setup-host claude");
   expect(
     plan.config.hooks.Stop.flatMap((group) => group.hooks.map((handler) => handler.command)),
   ).toEqual(["echo custom", plan.newCommand]);
@@ -312,7 +310,7 @@ it("runs core CLI/MCP workflows with network denied and discards raw hook conten
     await new Promise<void>((resolve, reject) => {
       const child = spawn(
         runner.command,
-        [...runner.args, "--import", networkGuard, binary, "auto", "hook", "--host", "claude"],
+        [...runner.args, "--import", networkGuard, binary, "hook", "--host", "claude"],
         { cwd: root, env },
       );
       let output = "";
