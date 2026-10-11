@@ -2,9 +2,9 @@
 
 # Mason
 
-### Your agents are creating tech debt. Mason helps you prevent it.
+### Reviewed engineering guidance for your coding agents.
 
-**Remember why decisions were made · Catch outdated guidance · Find what else needs updating**
+**Record the reason · Review the lesson · Surface applicable guidance · Reconsider it as code changes**
 
 [![npm version](https://img.shields.io/npm/v/mason-context?style=flat-square&labelColor=334155&color=2563eb)](https://www.npmjs.com/package/mason-context)
 [![CI](https://img.shields.io/github/actions/workflow/status/adrianczuczka/mason/ci.yml?branch=main&style=flat-square&labelColor=334155&label=CI)](https://github.com/adrianczuczka/mason/actions/workflows/ci.yml)
@@ -71,13 +71,15 @@ The audit checks claims in README and agent instruction files throughout the rep
 | Old decisions lose their context. | Retrieving recorded rationale and review status, and flagging changes to the code they apply to. |
 | A repair gets interrupted. | Retaining the original findings and verifying them through the final documentation commit. |
 
-After resolving an incident or settling a constraint, ask your agent to record the reason with Mason. Later tasks can retrieve it. Proposals and accepted decisions stay distinct.
+After resolving an incident or settling a constraint, ask your agent to record a sourced proposal with Mason. Review it before accepting it as project guidance. Later tasks can retrieve the operative accepted revision while proposed replacements remain distinct, and changes to referenced code can prompt inspection, revision or retirement.
 
 Mason complements tests, linters, and code review. Findings are evidence to inspect; unavailable checks stay explicit.
 
 ## Evidence so far
 
 Earlier read-only decision-retrieval evaluations scored **9.0/10 with Mason vs 7.0/10 without**. The initial ten-task patch comparison tied at **10/10 for both**. Improved patch outcomes remain to be demonstrated. [Results, methodology, and limitations](docs/benchmarks.md)
+
+Maintained notes also succeeded in the reuse trials. Recent hook experiments verified supported file delivery, with additional context cost and no demonstrated correctness gain; direct delivery for ordinary Bash workflows remains open. Preventing repeat mistakes is the product hypothesis being evaluated. [Current evidence and next experiment](ROADMAP.md#current-evidence-and-boundaries)
 
 ## Documentation
 

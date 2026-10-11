@@ -1,0 +1,166 @@
+{
+  "version": 2,
+  "id": "scope-source-inspections-without-clearing-pending-draft",
+  "title": "Scope source inspections without clearing pending draft evidence",
+  "body": "The C1 lifecycle trial implemented accepted cleanup guidance correctly but a contradictory pending replacement made a combined no-contradiction inspection ambiguous. Use opt-in operative inspection to attest only to the active accepted revision; keep default combined inspection for compatibility. Pending draft content, freshness and unresolved advisories must remain visible and independent. Preparation tokens bind the requested scope and current full record; operative receipts bind accepted content/revision and source captures, so draft-only edits do not invalidate them but accepted content or source changes do. Reject operative requests without accepted guidance and reject scoped human verdicts. Inspection never accepts, reaffirms or retires guidance. Retaining combined inspection with clearer wording was considered, but would keep the ambiguous attestation; automatically clearing the draft or removing Stop review would hide unresolved evidence. The bounded implementation now passes focused regressions and a real MCP replay; this remains an unaccepted proposal, not demonstrated comparative benefit. Reconsider if callers cannot distinguish scopes, migrations lose existing receipts, or separate assessments add more effort than they save.",
+  "category": "decision",
+  "files": [
+    "src/decisions/review.ts",
+    "src/decisions/provenance.ts",
+    "src/decisions/drift.ts",
+    "src/audit/advisory-review.ts",
+    "src/automation/stop-review.ts"
+  ],
+  "createdAt": "2026-10-11T10:57:08.914Z",
+  "updatedAt": "2026-10-11T11:05:12.895Z",
+  "refreshedHash": "c8ddc2eea46d9c5e3f7842abfcab9b0c65b13b4e",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 2,
+  "sources": [
+    {
+      "kind": "document",
+      "reference": "bench/harness/knowledge/CANCELLATION_LIFECYCLE_RESULTS.md",
+      "note": "Observed pending-draft inspection friction; coordinating-agent trial, not independent review."
+    },
+    {
+      "kind": "document",
+      "reference": "ROADMAP.md",
+      "note": "Frozen scoped inspection contract, 2026-10-11."
+    },
+    {
+      "kind": "discussion",
+      "reference": "Maintainer conversation, 2026-10-11: authorize bounded inspection-state implementation",
+      "note": "Authorization to implement is not acceptance of this knowledge record."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-10-11T10:57:08.914Z",
+      "actor": "Codex",
+      "revision": 1,
+      "content": {
+        "title": "Scope source inspections without clearing pending draft evidence",
+        "body": "The C1 lifecycle trial implemented accepted cleanup guidance correctly but a contradictory pending replacement made a combined no-contradiction inspection ambiguous. Use opt-in operative inspection to attest only to the active accepted revision; keep default combined inspection for compatibility. Pending draft content, freshness and unresolved advisories must remain visible and independent. Preparation tokens bind the requested scope and current full record; operative receipts bind accepted content/revision and source captures, so draft-only edits do not invalidate them but accepted content or source changes do. Reject operative requests without accepted guidance and reject scoped human verdicts. Inspection never accepts, reaffirms or retires guidance. Retaining combined inspection with clearer wording was considered, but would keep the ambiguous attestation; automatically clearing the draft or removing Stop review would hide unresolved evidence. Implementation and tests are in progress; this is an unaccepted proposal, not demonstrated comparative benefit. Reconsider if callers cannot distinguish scopes, migrations lose existing receipts, or separate assessments add more effort than they save.",
+        "category": "decision",
+        "files": [
+          "src/decisions/review.ts",
+          "src/decisions/provenance.ts",
+          "src/decisions/drift.ts",
+          "src/audit/advisory-review.ts",
+          "src/automation/stop-review.ts"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": "bench/harness/knowledge/CANCELLATION_LIFECYCLE_RESULTS.md",
+            "note": "Observed pending-draft inspection friction; coordinating-agent trial, not independent review."
+          },
+          {
+            "kind": "document",
+            "reference": "ROADMAP.md",
+            "note": "Frozen scoped inspection contract, 2026-10-11."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-10-11: authorize bounded inspection-state implementation",
+            "note": "Authorization to implement is not acceptance of this knowledge record."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "c8ddc2eea46d9c5e3f7842abfcab9b0c65b13b4e",
+      "capture": {
+        "anchors": [
+          "src/audit/advisory-review.ts",
+          "src/automation/stop-review.ts",
+          "src/decisions/drift.ts",
+          "src/decisions/provenance.ts",
+          "src/decisions/review.ts"
+        ],
+        "files": {
+          "src/audit/advisory-review.ts": "88861e9de82796c2aae84a14d7c18dd9ee01f8306e6f992124ef4092eed6fed2",
+          "src/automation/stop-review.ts": "4a38af676bbd44a94c2f943f4c28c2c10ac03ffd9cc83753032db3c5b97d3003",
+          "src/decisions/drift.ts": "3c57702cbdcf857b26967a3ad18ac114ac24f48055bbf74c6b9cab79e2a296c5",
+          "src/decisions/provenance.ts": "4687929351a81664a6687d6bf2607b744dd78651b5281619ce7eeea024f72068",
+          "src/decisions/review.ts": "2c8c81819d66e02078ceaae2524f8d78b9a6caff53ef19fa802d057f3f0aea8a"
+        },
+        "complete": true
+      }
+    },
+    {
+      "kind": "revised",
+      "at": "2026-10-11T11:05:12.895Z",
+      "actor": "Codex",
+      "revision": 2,
+      "content": {
+        "title": "Scope source inspections without clearing pending draft evidence",
+        "body": "The C1 lifecycle trial implemented accepted cleanup guidance correctly but a contradictory pending replacement made a combined no-contradiction inspection ambiguous. Use opt-in operative inspection to attest only to the active accepted revision; keep default combined inspection for compatibility. Pending draft content, freshness and unresolved advisories must remain visible and independent. Preparation tokens bind the requested scope and current full record; operative receipts bind accepted content/revision and source captures, so draft-only edits do not invalidate them but accepted content or source changes do. Reject operative requests without accepted guidance and reject scoped human verdicts. Inspection never accepts, reaffirms or retires guidance. Retaining combined inspection with clearer wording was considered, but would keep the ambiguous attestation; automatically clearing the draft or removing Stop review would hide unresolved evidence. The bounded implementation now passes focused regressions and a real MCP replay; this remains an unaccepted proposal, not demonstrated comparative benefit. Reconsider if callers cannot distinguish scopes, migrations lose existing receipts, or separate assessments add more effort than they save.",
+        "category": "decision",
+        "files": [
+          "src/decisions/review.ts",
+          "src/decisions/provenance.ts",
+          "src/decisions/drift.ts",
+          "src/audit/advisory-review.ts",
+          "src/automation/stop-review.ts"
+        ],
+        "sources": [
+          {
+            "kind": "document",
+            "reference": "bench/harness/knowledge/CANCELLATION_LIFECYCLE_RESULTS.md",
+            "note": "Observed pending-draft inspection friction; coordinating-agent trial, not independent review."
+          },
+          {
+            "kind": "document",
+            "reference": "ROADMAP.md",
+            "note": "Frozen scoped inspection contract, 2026-10-11."
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer conversation, 2026-10-11: authorize bounded inspection-state implementation",
+            "note": "Authorization to implement is not acceptance of this knowledge record."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "c8ddc2eea46d9c5e3f7842abfcab9b0c65b13b4e",
+      "capture": {
+        "anchors": [
+          "src/audit/advisory-review.ts",
+          "src/automation/stop-review.ts",
+          "src/decisions/drift.ts",
+          "src/decisions/provenance.ts",
+          "src/decisions/review.ts"
+        ],
+        "files": {
+          "src/audit/advisory-review.ts": "88861e9de82796c2aae84a14d7c18dd9ee01f8306e6f992124ef4092eed6fed2",
+          "src/automation/stop-review.ts": "4a38af676bbd44a94c2f943f4c28c2c10ac03ffd9cc83753032db3c5b97d3003",
+          "src/decisions/drift.ts": "3c57702cbdcf857b26967a3ad18ac114ac24f48055bbf74c6b9cab79e2a296c5",
+          "src/decisions/provenance.ts": "4687929351a81664a6687d6bf2607b744dd78651b5281619ce7eeea024f72068",
+          "src/decisions/review.ts": "0a095820c62a86c7a040508fd5224697e12722dcf6c52937220d59c0fbfb5da4"
+        },
+        "complete": true
+      }
+    }
+  ],
+  "capture": {
+    "anchors": [
+      "src/audit/advisory-review.ts",
+      "src/automation/stop-review.ts",
+      "src/decisions/drift.ts",
+      "src/decisions/provenance.ts",
+      "src/decisions/review.ts"
+    ],
+    "files": {
+      "src/audit/advisory-review.ts": "88861e9de82796c2aae84a14d7c18dd9ee01f8306e6f992124ef4092eed6fed2",
+      "src/automation/stop-review.ts": "4a38af676bbd44a94c2f943f4c28c2c10ac03ffd9cc83753032db3c5b97d3003",
+      "src/decisions/drift.ts": "3c57702cbdcf857b26967a3ad18ac114ac24f48055bbf74c6b9cab79e2a296c5",
+      "src/decisions/provenance.ts": "4687929351a81664a6687d6bf2607b744dd78651b5281619ce7eeea024f72068",
+      "src/decisions/review.ts": "0a095820c62a86c7a040508fd5224697e12722dcf6c52937220d59c0fbfb5da4"
+    },
+    "complete": true
+  }
+}

@@ -126,3 +126,45 @@ it("allows witnessed appended source inspections but rejects approval changes an
   expect(knowledgePreserved([old], [{ ...updated, body: "New policy" }], events)).toBe(false);
   expect(knowledgePreserved([old], [{ ...updated, approval: "proposed" }], events)).toBe(false);
 });
+
+it("matches reordered inspection receipts by value while rejecting scope, capture and history mutations", () => {
+  const old = { id: "lesson", approval: "proposed", history: [{ kind: "accepted", revision: 1 }] };
+  const receipt = {
+    outcome: "no_contradiction_found",
+    decisionDigest: "digest",
+    scope: "operative",
+    capture: { anchors: ["a", "b"], files: { a: "aaa", b: "bbb" }, complete: true },
+  };
+  const stored = {
+    capture: { complete: true, files: { b: "bbb", a: "aaa" }, anchors: ["a", "b"] },
+    scope: "operative",
+    decisionDigest: "digest",
+    outcome: "no_contradiction_found",
+  };
+  const events = [
+    {
+      event: "result",
+      name: "review_decision",
+      result: {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ status: "inspected", id: old.id, inspection: receipt }),
+          },
+        ],
+      },
+    },
+  ];
+  expect(knowledgePreserved([old], [{ ...old, inspections: [stored] }], events)).toBe(true);
+  for (const changed of [
+    { ...stored, scope: "all" },
+    { ...stored, decisionDigest: "different" },
+    { ...stored, capture: { ...stored.capture, anchors: ["b", "a"] } },
+    { ...stored, capture: { ...stored.capture, files: { ...stored.capture.files, a: "forged" } } },
+  ])
+    expect(knowledgePreserved([old], [{ ...old, inspections: [changed] }], events)).toBe(false);
+  expect(knowledgePreserved([old], [{ ...old, history: [], inspections: [stored] }], events)).toBe(
+    false,
+  );
+  expect(knowledgePreserved([old], [{ ...old, inspections: [stored] }], [])).toBe(false);
+});

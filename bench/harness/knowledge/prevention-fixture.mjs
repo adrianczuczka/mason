@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { isDeepStrictEqual } from 'node:util';
 import { fixture as startupFixture, snapshot, initialApp, appText, referenceRules, integrity } from './startup-fixture.mjs';
 import { write, git, records, digest } from './fixture.mjs';
 import { withMason, call, payload } from './mcp.mjs';
@@ -77,11 +78,11 @@ export function knowledgePreserved(before, after, events = []) {
     if (!current) return false;
     const { inspections: previous = [], ...oldContent } = old;
     const { inspections: inspected = [], ...newContent } = current;
-    if (digest(JSON.stringify(oldContent)) !== digest(JSON.stringify(newContent)) || inspected.length < previous.length || digest(JSON.stringify(inspected.slice(0, previous.length))) !== digest(JSON.stringify(previous))) return false;
+    if (!isDeepStrictEqual(oldContent, newContent) || inspected.length < previous.length || !isDeepStrictEqual(inspected.slice(0, previous.length), previous)) return false;
     return inspected.slice(previous.length).every(inspection => events.some(e => {
       if (e.event !== 'result' || e.name !== 'review_decision' || e.result?.isError) return false;
       const result = payload(e.result);
-      return result.status === 'inspected' && result.id === old.id && digest(JSON.stringify(result.inspection)) === digest(JSON.stringify(inspection));
+      return result.status === 'inspected' && result.id === old.id && isDeepStrictEqual(result.inspection, inspection);
     }));
   });
 }

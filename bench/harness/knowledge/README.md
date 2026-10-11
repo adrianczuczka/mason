@@ -6,7 +6,9 @@ The [development smoke results](SMOKE_RESULTS.md) record the completed two-host 
 
 The [conditional lifecycle case](LIFECYCLE.md) extends this through changed requirements, a second independent review, and another fresh session. It uses a reduced R8 startup reproduction drawn from a real removal/reintroduction incident, with an ordinary-notes comparison and a no-capture control.
 
-The [repeat-mistake prevention experiment](PREVENTION_EXPERIMENT.md) defines the next product evaluation, including capture and existing-lesson paths, grading gates, cost diagnostics, and the hook/conflict controls that the current lifecycle runner does not yet cover.
+The [reasoning-loop pilot in the roadmap](../../../ROADMAP.md#reasoning-loop-pilot-preparation-and-acceptance-gates) is the current next evaluation: select real capture and historical-recovery cases, review recovered reasoning, and test fresh-session reuse against strong documents and separately verified native memory. The [selected preparation cases](../../../ROADMAP.md#selected-preparation-cases--2026-10-11) pair exposed Requests history with Mason’s upcoming inspection-state decision. A genuine lost-rationale example, frozen case-specific protocol and runner support remain pending.
+
+The earlier [repeat-mistake prevention experiment](PREVENTION_EXPERIMENT.md) defines delivery-oriented evaluation, including capture and existing-lesson paths, grading gates, cost diagnostics, and the hook/conflict controls that the current lifecycle runner does not yet cover.
 
 The [2026-10-10 prevention baseline](PREVENTION_BASELINE_RESULTS.md) completed eight live Codex sessions. Both current Mason and notes passed; Mason reported higher token usage. That baseline disabled hooks; the subsequent delivery comparison is described below.
 
@@ -14,7 +16,13 @@ The subsequent [seeded standard-hook protocol](HOOK_PREVENTION_EXPERIMENT.md) an
 
 The [standard delivery candidate protocol](STANDARD_DELIVERY_EXPERIMENT.md) and [sixteen-session results](STANDARD_DELIVERY_RESULTS.md) compare saved baseline binaries with integrated file-scoped injection. The candidate delivered one full lesson after a supported read before a later edit, without duplicate or unrelated hook lessons. Ordinary Bash workflows remained uncovered, and correctness matched baseline hooks. PreToolUse context does not replan an already requested tool call.
 
-The next [task-start delivery experiment](TASK_START_EXPERIMENT.md) scopes UserPromptSubmit selection for Bash workflows, cross-channel duplication and unrelated-task noise. A delivery stage precedes an outcome comparison on new incident families; neither stage has been implemented or run.
+The previously scoped [task-start delivery experiment](TASK_START_EXPERIMENT.md) scopes UserPromptSubmit selection for Bash workflows, cross-channel duplication and unrelated-task noise. The [harness-only probe](TASK_START_PROBE_RESULTS.md) verified synthetic consumption but found a weak-overlap false positive; no production adapter or Stage A/B comparison has run. The [incident candidate manifest](INCIDENT_CANDIDATES.md) tracks C1’s completed lifecycle pilot, C2’s recovery preparation and C3’s unvalidated candidate; independent maintainer review remains pending. Sourcegraph is a planned comparator contingent on verified access.
+
+The [24-task competing-lesson grid](SELECTION_GRID_RESULTS.md) compares three small selection rules; none clears the noise/coverage gate. The [C1 cancellation checker](CANCELLATION_CASE.md) pins an upstream correction and rejects a constructed cleanup violation while accepting two alternatives; its subsequent lifecycle pilot is below.
+
+The subsequent [C1 lifecycle protocol](CANCELLATION_LIFECYCLE_EXPERIMENT.md) and [eight-session results](CANCELLATION_LIFECYCLE_RESULTS.md) compare current Mason with equally informed maintained documents through pending, accepted, retired and unrelated tasks. Both passed all four mechanical tasks; Mason added cost and a pending-proposal review continuation. Reviews were synthetic and unblinded, with no independent maintainer or Sourcegraph comparison.
+
+The [focused operative-inspection follow-up](../../../ROADMAP.md#focused-live-inspection-results--2026-10-11) reran only the pending case in four fresh sessions. Both Mason agents used the new scope truthfully; the draft remained unresolved, notes also succeeded, and Mason cost more. Original grader failures caused by receipt key order remain preserved; a tested value-equality correction passes separate retained-artifact replay without new model calls. Runner: `node bench/harness/run-operative-inspection.mjs --validate` or `--live`; live defaults to four $1/180-second sessions. Freeze its protocol and hashes before any new run; repetition of this exposed case is not independent product proof.
 
 The [interrupted-upload probe](UPLOAD.md) tests maintenance of deliberately seeded, reviewed knowledge under a changed retention assumption, with a local publishing simulator, fresh-session reuse and a first-upload control. It measures maintenance rather than original capture.
 
