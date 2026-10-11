@@ -36,12 +36,12 @@
   "tools": [
     {
       "name": "mason_init",
-      "description": "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart and map modes are read-only and deterministic. Explicit mode: setup configures MCP, instructions and lifecycle hooks to use mason on PATH while retaining original audit evidence; use it only when the user requests setup. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. mode: map returns the full Map-Reduce build workflow. Repeat calls refresh findings even after setup.",
+      "description": "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart is read-only and deterministic. Explicit mode: setup configures MCP, instructions and lifecycle hooks to use mason on PATH while retaining original audit evidence; use it only when the user requests setup. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. Repeat calls refresh findings even after setup.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "mode": { "type": "string", "enum": ["quickstart", "map", "setup"], "default": "quickstart", "description": "Read-only quickstart checks, architecture map workflow, or explicit configuration of MCP, instructions and hooks using mason on PATH" },
+          "mode": { "type": "string", "enum": ["quickstart", "setup"], "default": "quickstart", "description": "Read-only quickstart checks or explicit configuration of MCP, instructions and hooks using mason on PATH" },
           "host": { "type": "string", "enum": ["codex", "claude"], "description": "Assistant to configure in setup mode; inferred only when unambiguous" },
           "base": { "type": "string", "description": "Git ref for committed-diff review; defaults to an available main branch ref" },
           "evidence": { "type": "array", "items": { "type": "string" }, "maxItems": 10, "description": "Repository-local CI evidence manifests to include in the review. Imports Vitest JSON, SARIF, and native-validator mason-check-json results without executing check commands." }
@@ -121,50 +121,18 @@
     },
     {
       "name": "mason_complete_init",
-      "description": "Record assistant instruction setup locally in ignored .mason/local/project.json, with feature settings in shared .mason/config.json. Other tools work without this marker. Repeated calls preserve the original setup time and existing settings; pass confluenceConfigured only to change that setting.",
+      "description": "Record assistant instruction setup locally in ignored .mason/local/project.json, with feature settings in shared .mason/config.json. Other tools work without this marker. Repeated calls preserve the original setup time and existing settings.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "confluenceConfigured": { "type": "boolean", "description": "Set the Confluence setup status; omit to preserve the existing value" }
-        },
-        "required": ["dir"]
-      }
-    },
-    {
-      "name": "mason_set_confluence",
-      "description": "Configure Confluence credentials. Without `spaceKey`: validates credentials and returns available spaces for the assistant to relay. With `spaceKey`: persists to ~/.mason/config.json. Warn the user that the API token will be visible in chat history before they paste it.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "baseUrl": { "type": "string", "description": "Confluence base URL. Accepts `acme`, `acme.atlassian.net`, or `https://acme.atlassian.net`." },
-          "email": { "type": "string", "description": "Atlassian account email" },
-          "apiToken": { "type": "string", "description": "API token from id.atlassian.com" },
-          "spaceKey": { "type": "string", "description": "Confluence space key. Omit on the first call to list spaces." },
-          "parentPageId": { "type": "string", "description": "Optional parent page ID under which Mason's index page is created" }
-        },
-        "required": ["baseUrl", "email", "apiToken"]
-      }
-    },
-    {
-      "name": "export_to_confluence",
-      "description": "Sync the concept map to Confluence as product-readable wiki pages: index page, one page per feature, and a changelog. Mason replaces managed page bodies, including manual edits. Requires mason_set_confluence.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "spaceKey": { "type": "string", "description": "Override the configured space key" },
-          "parentPageId": { "type": "string", "description": "Override the configured parent page ID" },
-          "indexPageTitle": { "type": "string", "description": "Title of the index page" },
-          "changelogPageTitle": { "type": "string", "description": "Title of the changelog page" },
-          "featurePagePrefix": { "type": "string", "description": "Prefix for each feature page title" }
+          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
         },
         "required": ["dir"]
       }
     },
     {
       "name": "get_snapshot",
-      "description": "Return the optional feature-to-file architecture map with drift and trust evidence. Map verification is rechecked against sampled source contents; stale or unknown verification requires a fresh review, and recordedVerdict preserves the historical verdict. If no map exists, returns exists:false plus project structure, Git signals, and test pairs. Decision capture, get_context, and get_impact still work. No initialization required.",
+      "description": "Return the optional feature-to-file architecture map with drift and trust evidence. Map verification is rechecked against sampled source contents; stale or unknown verification requires a fresh review, and recordedVerdict preserves the historical verdict. If no map exists, returns exists:false and points to decision context. Decision capture, get_context, and get_impact still work. No initialization required.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -188,71 +156,6 @@
           }
         },
         "required": ["dir", "task"]
-      }
-    },
-    {
-      "name": "generate_snapshot_batch",
-      "description": "Map step of the concept-map build. Returns one batch of source files (skeletons of every file in the batch plus a few deeper-read bodies for grounding) and a system prompt instructing you to derive features and flows for ONLY this batch. Call repeatedly with the returned `nextOffset` until it is null, calling `save_partial_snapshot` between calls.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "offset": { "type": "number", "description": "0-indexed file offset to start the batch at. Omit on the first call." },
-          "batchSize": { "type": "number", "description": "Files per batch. Defaults to 50." },
-          "files": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Scope the batch walk to this explicit file list (e.g. the drift set from mason_check_drift). Pass the same list on every batch call of one refresh run; reduce_snapshot then merges into the existing map instead of rebuilding."
-          }
-        },
-        "required": ["dir"]
-      }
-    },
-    {
-      "name": "save_partial_snapshot",
-      "description": "Persist the partial concept map you derived for one batch. Call once per batch with the `batchId` from `generate_snapshot_batch`.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "batchId": { "type": "string", "description": "The batchId returned by generate_snapshot_batch" },
-          "offset": { "type": "number", "description": "The offset returned by generate_snapshot_batch" },
-          "features": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "object",
-              "properties": {
-                "description": { "type": "string" },
-                "files": { "type": "array", "items": { "type": "string" } },
-                "tests": { "type": "array", "items": { "type": "string" } }
-              },
-              "required": ["description", "files"]
-            }
-          },
-          "flows": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "object",
-              "properties": {
-                "description": { "type": "string" },
-                "chain": { "type": "array", "items": { "type": "string" } }
-              },
-              "required": ["description", "chain"]
-            }
-          }
-        },
-        "required": ["dir", "batchId", "offset", "features", "flows"]
-      }
-    },
-    {
-      "name": "reduce_snapshot",
-      "description": "Reduce step of the concept-map build. Returns every partial snapshot plus a system prompt asking you to merge them into one project-wide map. After producing the unified map, call save_snapshot.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
-        },
-        "required": ["dir"]
       }
     },
     {
@@ -408,40 +311,6 @@
           }
         },
         "required": ["dir", "files"]
-      }
-    },
-    {
-      "name": "analyze_project",
-      "description": "Git history analysis: commit conventions, stale directories, frequently changed (hot) files.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
-        },
-        "required": ["dir"]
-      }
-    },
-    {
-      "name": "full_analysis",
-      "description": "One-shot orientation for a project WITHOUT a concept map: git stats, project structure, curated code samples, and test-to-source mapping. On a mapped project, prefer get_snapshot.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" }
-        },
-        "required": ["dir"]
-      }
-    },
-    {
-      "name": "get_code_samples",
-      "description": "Get previews (~60 lines) of representative source files: entry points, config, hot files, test examples, and one file per directory.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "count": { "type": "number", "description": "Maximum number of files to sample", "default": 15 }
-        },
-        "required": ["dir"]
       }
     }
   ],

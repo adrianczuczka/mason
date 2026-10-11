@@ -62,19 +62,13 @@ async function main() {
   };
 
   const setup = {};
+  // Validate the historical map prerequisite before spending on /init.
+  if (args.arms.includes("mason")) setup.snapshot = await ensureSnapshot(repoDir);
   const claudeMd = await ensureClaudeMd(repoDir, args.model);
   setup.claudeMd = claudeMd;
   if (claudeMd.generated) console.log(`generated CLAUDE.md ($${claudeMd.costUsd?.toFixed(2)})`);
 
-  if (args.arms.includes("mason")) {
-    const snap = await ensureSnapshot(repoDir, masonMcpConfig, args.model);
-    setup.snapshot = snap;
-    if (snap.generated) {
-      console.log(
-        `built snapshot: $${snap.costUsd?.toFixed(2)}, ${snap.numTurns} turns, ${Math.round(snap.durationMs / 1000)}s`
-      );
-    }
-  }
+
 
   if (args.checkout) {
     execFileSync("git", ["checkout", "--quiet", args.checkout], { cwd: repoDir });

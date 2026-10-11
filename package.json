@@ -48,7 +48,6 @@
     "code-analysis",
     "concept-map",
     "snapshot",
-    "confluence",
     "ai"
   ],
   "author": "Adrian Czuczka",
@@ -68,12 +67,10 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@sigstore/bundle": "4.0.0",
     "fast-glob": "^3.3.3",
     "markdown-it": "14.3.1",
-    "openai": "^6.33.0",
     "sigstore": "4.1.1",
     "smol-toml": "1.8.0",
     "zod": "^3.25.76"

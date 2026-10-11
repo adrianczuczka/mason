@@ -4,8 +4,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { initGitRepo, commitAll, git } from "./helpers.js";
-import { prepareSnapshotBatch } from "../src/snapshot/snapshot.js";
-import { readFullFile } from "../src/mcp/sampler.js";
+import { listSourceFiles } from "../src/snapshot/snapshot.js";
+import { createFileAccess } from "../src/utils/files.js";
 import { getContext, getSnapshot, saveSnapshotData, saveVerification } from "../src/mcp/tools.js";
 import { computeDrift } from "../src/drift/drift.js";
 import { computeDecisionDrift } from "../src/decisions/drift.js";
@@ -15,7 +15,6 @@ import { writeStoreJson, readStoreJson } from "../src/utils/storage.js";
 import { MAX_SOURCE_BYTES } from "../src/utils/files.js";
 import { runHook } from "../src/hook/hook.js";
 import { runDriftCli } from "../src/drift/cli.js";
-import { savePartial } from "../src/snapshot/partials.js";
 
 describe("reliability across tools", () => {
   let tmp: string;
@@ -38,18 +37,17 @@ describe("reliability across tools", () => {
     await fs.rm(tmp, { recursive: true, force: true });
   });
 
-  it("keeps ignored files and escaping symlinks out of batches and direct reads", async () => {
+  it("keeps ignored files and escaping symlinks out of source inventories and direct reads", async () => {
     await fs.mkdir(path.join(tmp, "repo-extra"));
     await fs.writeFile(path.join(tmp, "repo-extra/private.ts"), "synthetic outside marker");
     await fs.writeFile(path.join(repo, ".gitignore"), "local/\n");
     await fs.mkdir(path.join(repo, "local"));
     await fs.writeFile(path.join(repo, "local/private.ts"), "synthetic ignored marker");
     await fs.symlink(path.join(tmp, "repo-extra/private.ts"), path.join(repo, "src/link.ts"));
-    const batch = await prepareSnapshotBatch(repo, 0);
-    expect(batch.skeletons.map((f) => f.path)).toEqual(["src/auth.ts"]);
-    expect(await readFullFile(repo, "../repo-extra/private.ts")).toBeNull();
-    expect(await readFullFile(repo, "local/private.ts")).toBeNull();
-    expect(await readFullFile(repo, "src/link.ts")).toBeNull();
+    expect(await listSourceFiles(repo)).toEqual(["src/auth.ts"]);
+    expect(await (await createFileAccess(repo)).read("../repo-extra/private.ts")).toBeNull();
+    expect(await (await createFileAccess(repo)).read("local/private.ts")).toBeNull();
+    expect(await (await createFileAccess(repo)).read("src/link.ts")).toBeNull();
   });
 
   it("carries failed verification through both primary reading tools", async () => {
@@ -150,26 +148,19 @@ describe("reliability across tools", () => {
       path.join(repo, ".mason/config.json"),
       JSON.stringify({ ignore: ["src/auth.ts"] }),
     );
-    expect((await prepareSnapshotBatch(repo, 0)).skeletons).toEqual([]);
-    expect(await readFullFile(repo, "src/auth.ts")).toBeNull();
+    expect(await listSourceFiles(repo)).toEqual([]);
+    expect(await (await createFileAccess(repo)).read("src/auth.ts")).toBeNull();
     await fs.writeFile(path.join(repo, "large.ts"), "x".repeat(MAX_SOURCE_BYTES + 1));
-    expect(await readFullFile(repo, "large.ts")).toBeNull();
+    expect(await (await createFileAccess(repo)).read("large.ts")).toBeNull();
     await fs.writeFile(path.join(repo, "credentials.ts"), "synthetic secret");
-    expect(await readFullFile(repo, "credentials.ts")).toBeNull();
+    expect(await (await createFileAccess(repo)).read("credentials.ts")).toBeNull();
   });
 
-  it("does not erase a failed verdict when a scoped refresh copies an entry", async () => {
+  it("does not erase a failed verdict when a direct save copies an entry", async () => {
     await saveVerification(
       repo,
       await prepareVerdicts(repo, { auth: { ok: false, note: "Wrong implementation" } }),
     );
-    await savePartial(repo, {
-      batchId: "batch-0",
-      offset: 0,
-      features: {},
-      flows: {},
-      savedAt: new Date().toISOString(),
-    });
     await saveSnapshotData(repo, structuredClone(features), {});
     const result = JSON.parse(await getSnapshot(repo));
     expect(result.trust.features.auth.verification).toBe("failed");
@@ -315,6 +306,6 @@ describe("reliability across tools", () => {
 
   it("fails closed when configured file exclusions are malformed", async () => {
     await fs.writeFile(path.join(repo, ".mason/config.json"), '{"ignore":"src/**"}');
-    await expect(prepareSnapshotBatch(repo, 0)).rejects.toThrow(/file policy/);
+    await expect(listSourceFiles(repo)).rejects.toThrow(/file policy/);
   });
 });

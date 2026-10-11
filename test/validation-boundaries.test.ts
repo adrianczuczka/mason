@@ -5,14 +5,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { resolveCountSource } from "../src/audit/checks/stale-count.js";
 import { matchDependencyChanges } from "../src/audit/dependency-claims.js";
 import { initGitRepo, commitAll } from "./helpers.js";
-import { loadConfig } from "../src/llm/config.js";
 import { loadProjectConfig } from "../src/utils/files.js";
-import { loadSyncState } from "../src/confluence/diff.js";
-import { rewriteForProduct } from "../src/confluence/rewrite.js";
 import { runHook } from "../src/hook/hook.js";
 import { withStoreLock } from "../src/utils/store-lock.js";
 import { retrievedDecisions } from "../src/automation/usefulness.js";
-import type { Snapshot } from "../src/snapshot/snapshot.js";
 
 let root: string;
 beforeEach(async () => {
@@ -24,18 +20,6 @@ afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
-it.each([
-  null,
-  [],
-  { provider: "unknown" },
-  { provider: "claude", model: 42 },
-  { provider: "claude", confluence: { baseUrl: 42 } },
-])("treats malformed user configuration %j as unavailable", async (value) => {
-  vi.spyOn(os, "homedir").mockReturnValue(root);
-  await fs.writeFile(path.join(root, ".mason/config.json"), JSON.stringify(value));
-  expect(await loadConfig()).toBeNull();
-});
-
 it.each([{ patterns: ["src/**", 42] }, { audit: { include: [42] } }, { audit: { exclude: [] } }])(
   "rejects malformed project policy %j",
   async (value) => {
@@ -43,44 +27,6 @@ it.each([{ patterns: ["src/**", 42] }, { audit: { include: [42] } }, { audit: { 
     await expect(loadProjectConfig(root)).rejects.toThrow("Cannot apply project file policy");
   },
 );
-
-const validSyncState = {
-  version: 2,
-  syncedAt: "2026-10-07T00:00:00Z",
-  pageIds: { features: {} },
-  lastSnapshot: { features: {}, flows: {} },
-  changelogSections: [],
-  rewriteCache: { features: {}, flows: {} },
-};
-it.each([
-  null,
-  [],
-  { version: 2 },
-  { ...validSyncState, lastSnapshot: { features: { Checkout: { description: 42 } }, flows: {} } },
-  { ...validSyncState, rewriteCache: { features: [], flows: {} } },
-])("treats malformed sync state %j as absent", async (value) => {
-  await fs.writeFile(path.join(root, ".mason/confluence-sync.json"), JSON.stringify(value));
-  expect(await loadSyncState(root)).toBeNull();
-});
-
-it("loads valid configuration with all optional provider and Confluence settings", async () => {
-  vi.spyOn(os, "homedir").mockReturnValue(root);
-  const config = {
-    provider: "claude",
-    apiKey: "test-key",
-    model: "test-model",
-    ollamaHost: "http://localhost:11434",
-    confluence: {
-      baseUrl: "https://wiki.invalid",
-      email: "test@example.invalid",
-      apiToken: "test-token",
-      spaceKey: "TEST",
-      parentPageId: "123",
-    },
-  };
-  await fs.writeFile(path.join(root, ".mason/config.json"), JSON.stringify(config));
-  expect(await loadConfig()).toEqual(config);
-});
 
 it.each([
   { workspaces: ["packages/*", 42] },
@@ -146,33 +92,4 @@ it("ignores malformed MCP blocks while recognizing a valid text response", () =>
     }),
   ).toEqual(["accepted-id"]);
   expect(retrievedDecisions(tool, { decisions: [] })).toBeUndefined();
-});
-
-it("falls back on invalid model descriptions while preserving valid prose", async () => {
-  const snapshot = {
-    features: {
-      Checkout: { description: "Engineering checkout description", files: [] },
-      Search: { description: "Engineering search description", files: [] },
-    },
-    flows: {},
-  } as unknown as Snapshot;
-  const result = await rewriteForProduct(
-    snapshot,
-    { provider: "claude" },
-    {
-      llm: async () => ({
-        type: "response",
-        text: JSON.stringify({
-          features: { Checkout: ["invalid"], Search: "People can search." },
-          flows: [],
-        }),
-      }),
-    },
-  );
-  expect(result.features).toEqual({
-    Checkout: "Engineering checkout description",
-    Search: "People can search.",
-  });
-  expect(result.cache.features.Checkout.fallback).toBe(true);
-  expect(result.cache.features.Search.fallback).toBeUndefined();
 });

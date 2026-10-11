@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Remove managed architecture-map creation (`generate_snapshot_batch`, `save_partial_snapshot`, `reduce_snapshot`, and `mason_init` map mode) and general orientation (`full_analysis`, `analyze_project`, `get_code_samples`). Remove batch prompts, partial-store management, the orientation analyzer and sampler. Keep existing map reading, direct saving, drift and verification; direct saves merge supported updates and no longer consume or clear old partials. Missing maps return a short decision-context pointer. Refresh instructions use the agent's source tools and direct saving. Keep 0.21.0 for the old managed build workflow and rerun setup after upgrading to refresh project instructions.
+
+- Remove Confluence publishing (`mason_set_confluence`, `export_to_confluence`) and its standalone LLM provider/configuration layer to focus maintenance on engineering reasoning. Remove the Anthropic/OpenAI SDK dependencies. Existing wiki pages, legacy feature settings, and user credentials are left untouched; Mason no longer reads or updates them. `mason_complete_init` no longer accepts `confluenceConfigured` or advertises Confluence status. Users needing wiki publishing should keep 0.21.0 until they migrate that workflow to a separate publisher.
+
 - Deliver file-scoped decision knowledge through standard Claude hooks after `Read` and before `Edit`/`Write`, reusing the existing injector and session deduplication. Confine delivery to the active checkout, retain approval/freshness labels and audit diagnostics, and preserve the standalone PostToolUse contract. Shell commands and Codex remain outside direct lesson injection.
 - Flatten hook commands to `mason install`, `mason config`, and `mason hook --host claude|codex`. Generate shorter hook handlers and migrate existing configurations without duplicates. Retain `mason auto …` aliases and the standalone decision injector for compatibility.
 

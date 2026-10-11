@@ -151,18 +151,14 @@ export function formatRefreshPrompt(
   );
   lines.push("");
 
-  const scopedFiles = [...report.changedFiles, ...report.unmappedFiles];
-  if (!report.historyAvailable || report.recommendation === "full-rebuild") {
+  lines.push(
+    "PROCEDURE (scoped refresh): inspect the changed and unmapped files with your own source tools. Use get_snapshot to read the existing map, then save_snapshot with only evidence-supported corrected features/flows. Remove deleted entries with removeFeatures/removeFlows. Managed batch creation and reduction have been removed.",
+  );
+  if (!report.historyAvailable || report.recommendation === "full-rebuild")
     lines.push(
-      "PROCEDURE (full rebuild): run the complete Map-Reduce build. Call generate_snapshot_batch repeatedly (follow nextOffset until null), calling save_partial_snapshot after each batch, then reduce_snapshot, then save_snapshot once with the unified map. Derive features ONLY from files shown in each batch prompt — never invent paths.",
+      "History or coverage is insufficient for a bounded refresh. Inspect all affected entries directly; do not claim freshness for entries you have not checked.",
     );
-  } else {
-    lines.push(
-      "PROCEDURE (scoped refresh): call generate_snapshot_batch with the files list below — the SAME list on every call — following nextOffset until null, calling save_partial_snapshot after each batch. Then call reduce_snapshot (it merges into the existing map, preserving untouched entries) and save_snapshot once. Use save_snapshot's removeFeatures/removeFlows for features that no longer exist (see ghostFiles/renames). Derive features ONLY from files shown in each batch prompt — never invent paths.",
-    );
-    lines.push("");
-    lines.push(`files: ${JSON.stringify(scopedFiles)}`);
-  }
+  lines.push(`files: ${JSON.stringify([...report.changedFiles, ...report.unmappedFiles])}`);
 
   const staleDecisionIds = Object.keys(decisionDrift.staleDecisions);
   if (staleDecisionIds.length > 0) {
@@ -219,7 +215,7 @@ export async function runDriftCli(
 
   if (!report) {
     io.err(
-      `No Mason snapshot found at ${path.join(rootDir, ".mason", "snapshot.json")}. Build one via the Mason MCP server first.`,
+      `No Mason snapshot found at ${path.join(rootDir, ".mason", "snapshot.json")}. Managed map creation has been removed; decisions and context work without a map.`,
     );
     return 2;
   }

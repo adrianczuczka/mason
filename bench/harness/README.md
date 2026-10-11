@@ -40,9 +40,7 @@ Per question × arm, from the session's stream-json:
 - **recall@K** — fraction of ground-truth files found within the first K reads
 - **mason calls** — which Mason tools were actually invoked
 
-Setup costs are recorded, not hidden: snapshot build cost (a real headless
-session running the Map-Reduce playbook) and CLAUDE.md generation cost land in
-the results JSON as cost-of-ownership numbers.
+The historical map arm now requires an existing snapshot and checks that prerequisite before paid `/init` calls. Managed Map-Reduce creation is removed from the current candidate. Snapshot reuse costs zero for this invocation; its original construction cost remains unknown unless recorded separately. CLAUDE.md generation cost is still recorded. Earlier reports retain their measured build costs.
 
 ## Run
 

@@ -18,6 +18,23 @@ The maintainer requested that this direction be recorded and later asked to comb
 
 The maintainer requested that the product discussion and all five bets be preserved here. The maintainer also authorized reconciling this plan with the earlier strategy. This section is the authoritative delivery sequence; recording it does not approve every implementation or establish its outcomes. The earlier priorities, requirements, and evidence remain below as supporting context. The linked Mason memory predates this proposal; consult this section for the latest delivery recommendation.
 
+### Simplification scope — 2026-10-11
+
+The maintainer authorized simplifying Mason after reviewing repository growth and Sourcegraph's overlap. Preserve the smallest workflow for consequential reasoning: capture or recover supported rationale → separate review → retrieve applicable accepted guidance → reconsider changed evidence. Favor removing responsibilities over adding configuration, orchestration or experiment runners.
+
+| Area | Decision | Reason |
+|---|---|---|
+| Decision records, provenance, accepted/proposed revisions, source inspection | Keep | These preserve supported reasoning and its review boundaries. |
+| Task retrieval and existing host delivery | Keep; reduce noise and cost within existing mechanisms | Relevant reuse is required; additional automation still needs outcome evidence. |
+| Local installation and host setup | Keep | Users must be able to run the core workflow reliably. |
+| Confluence publishing and its model-provider layer | Remove in the current unreleased candidate | Wiki publication is a separate responsibility with credentials, remote writes and generated content; it is unnecessary for the core loop. |
+| Managed architecture map creation and general orientation | Remove in the current unreleased candidate | Remove batching, partial storage, reduction, orientation analysis and source sampling. Preserve map reads, direct saves, drift and verification as a bounded compatibility surface; direct saves can still create maps. |
+| General documentation audits, repair baselines and advisory workflow | Retain for now; assess separately | These are coupled to setup and completion checks. Their current footprint is not evidence of value to the reasoning workflow. |
+| Cross-repository orchestration, team queues, new integrations and delivery engines | Defer | No comparative outcome evidence currently justifies adding these responsibilities. |
+| Evaluation tooling | Reuse existing runners; pause new frameworks | Preserve results and failures without growing another product inside the repository. |
+
+The Confluence removal changes the exposed tool contract. Existing Confluence pages, user-level credentials and old feature settings are not deleted or migrated; the candidate no longer reads or publishes them. The published 0.21.0 remains available for existing publishing workflows. Historical strategy and experiment evidence below are retained as history; this scope decision governs new investment. These cuts do not complete repository simplification or demonstrate a product advantage.
+
 ### Competitive focus and investment gate — 2026-10-11
 
 The maintainer agreed to narrow positioning after comparing Mason with Sourcegraph. Sourcegraph documents task-based Code Finder, code navigation, commit/diff search and Deep Search across repositories, including reuse of prior answers. These capabilities overlap substantially with broad agent-context discovery. This documentation comparison does not establish head-to-head superiority, and the reviewed documentation does not establish an equivalent accepted-decision lifecycle. Rationale can exist in documents and history that Sourcegraph retrieves; “Mason knows why” is insufficient differentiation. [Sourcegraph MCP documentation](https://sourcegraph.com/docs/api/mcp)

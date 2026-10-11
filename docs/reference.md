@@ -8,7 +8,6 @@
 - [Documentation checks and validation evidence](checks.md)
 - [Change impact](#change-impact)
 - [Drift detection](#drift-detection)
-- [Confluence sync](#confluence-sync)
 - [Language support](#language-support)
 - [Security](#security)
 
@@ -72,17 +71,12 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 
 | Tool | Purpose |
 |---|---|
-| `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence` (Vitest, SARIF, or native-validator JSON), and `mode: "map"`. `mode: "setup", host: "codex"` (or `"claude"`) configures MCP, instructions, and hooks using `mason` on PATH using the shared setup engine. |
+| `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence` (Vitest, SARIF, or native-validator JSON). `mode: "setup", host: "codex"` (or `"claude"`) configures MCP, instructions, and hooks using `mason` on PATH using the shared setup engine. |
 | `mason_repair` | Prepare an audit repair baseline; verify the same original findings after edits. Reports unresolved advisories and unavailable checks. |
 | `review_advisory` | Prepare an original advisory's evidence, then record an authorized assessment. Dependency advisories also support one-step `dismiss` with `reasonCode` and `note`; `no-dependency-claims` tracks document content, while `unrelated-manifest-change` also tracks scoped manifests. Decision findings route to `review_decision`. |
 | `mason_automation` | Inspect configured hooks, observed events, pending proposals and notification baselines, or check all retained findings without consuming pending notifications. |
 | `mason_complete_init` | Records assistant instruction setup in ignored local state, with feature settings in shared configuration; preserves prior settings on repeated calls. |
-| `generate_snapshot_batch` | Map step — returns one batch of files for the assistant to summarize. |
-| `save_partial_snapshot` | Persists the partial map for one batch. |
-| `reduce_snapshot` | Reduce step — returns every partial + instructions to merge into a unified map. |
-| `save_snapshot` | Persist the final unified map. Clears partials. |
-| `mason_set_confluence` | Configure Confluence credentials — two-step: list spaces, then persist. |
-| `export_to_confluence` | Sync the concept map to Confluence as PM-readable wiki pages. |
+| `save_snapshot` | Directly save or update a legacy map; the managed build workflow is removed. |
 | `get_snapshot` | Architecture navigation when a map is available. Loads the concept map — feature → file lookup — in one LLM-free call. |
 | `get_context` | Decisions with approval, provenance, file impact, tests, and trust for a task; adds features/flows when a map exists. No setup required. |
 | `save_decision` | Capture supported lessons promptly as proposals; keep unimplemented remedies tentative. Revise a matching lesson with its existing `id` when its assumptions, scope, or recommendation change; create separate records for distinct lessons. Preserve rationale, anchors, attribution, and history. Aim for 1,500 body characters; up to 2,500 is accepted with a warning above the target. Prior accepted revisions remain operative while drafts are reviewed. |
@@ -91,11 +85,8 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 | `verify_snapshot` | Spot-check map correctness — sampled entries, file previews, and review tokens, least-recently-verified first. |
 | `save_verification` | Record verdicts against reviewed entry/source tokens; stale reviews return conflicts and failures flag entries for re-mapping. |
 | `get_impact` | **Call before editing a file.** Traces what's affected — co-change history + references + related tests. |
-| `analyze_project` | Git stats — hot files, stale dirs, commit conventions. |
-| `full_analysis` | One-shot orientation for unmapped projects: structure + samples + tests + git. |
-| `get_code_samples` | Smart file previews selected by architectural role. |
 
-Tools operate on the data they need; none require the initialization marker. Decision capture and impact need no concept map. Map verification and drift require a map; Confluence export requires credentials and a map.
+Tools operate on the data they need; none require the initialization marker. Decision capture and impact need no concept map. Map verification and drift require a map.
 
 Setup adds host-appropriate project instructions that route assistants to decisions and impact, with map navigation when available. The [setup guide](setup.md#unified-project-setup) explains instruction files, native imports, and observed activation.
 
@@ -113,34 +104,11 @@ Claude Stop hooks can request one continuation to inspect outstanding drift over
 
 Inspection can cover uncommitted anchor content. Commit the inspection record through the normal project workflow when it should be shared. Inspection is an assessment by its named inspector, not a deterministic proof of consistency. `accept`, `reaffirm` and `retire` still require an authorized reviewer; a proposal must be accepted before it can be reaffirmed.
 
-### How the concept map is built
+### Legacy architecture maps
 
-An optional concept map connects feature names and flows to their implementing files:
+Existing version 2 maps remain readable through `get_snapshot` and `get_context`, with the same drift and verification evidence. Direct `save_snapshot` updates and `verify_snapshot` / `save_verification` remain available for maintenance. Direct saving can still create a map; this compatibility surface is not the managed creation workflow.
 
-```json
-{
-  "features": {
-    "home screen": {
-      "files": ["HomeScreen.kt", "HomeViewModel.kt", "GetWeatherDataUseCase.kt"]
-    }
-  },
-  "flows": {
-    "weather fetch": {
-      "chain": ["HomeViewModel.kt", "WeatherRepositoryImpl.kt", "WeatherServiceImpl.kt"]
-    }
-  }
-}
-```
-
-Your assistant creates the map from source evidence surfaced by Mason. Mason stores it, checks for drift, and provides file previews for correctness spot-checks. Inspect source when the available context leaves questions unanswered.
-
-Map builds use a **Map-Reduce** workflow with bounded source batches:
-
-- **Map**: `generate_snapshot_batch` returns ~50 files at a time (skeletons of every file in the batch plus a few deeper-read bodies for grounding). Your assistant produces a partial concept map for that batch and persists it with `save_partial_snapshot`. Repeat until every file in the project has been visited.
-- **Reduce**: `reduce_snapshot` returns all the partials plus instructions to merge them into one product-shaped catalog — combining platform variants ("home Android" + "home iOS" → "home screen"), deduplicating, and ensuring no file is dropped.
-- **Save**: `save_snapshot` persists the unified map and cleans up the partials.
-
-The goal is complete source coverage. Drift checking reports eligible committed source files omitted from the snapshot, including omissions from a map saved at HEAD. A 200-file project takes ~5 batches; a 1000-file monorepo takes ~20.
+The managed batch build, partial storage, reduction, and `mason_init(mode: "map")` have been removed. Mason no longer provides general orientation or representative source sampling. Use the connected agent's source and Git tools to investigate architecture. A missing map returns a short pointer to decision context rather than triggering a repository survey. Old partial files are left untouched and never consumed by direct saves.
 
 ## Change impact
 
@@ -158,13 +126,11 @@ Compact `get_context` results omit name-only candidates and report `referenceCan
 
 ## Drift detection
 
-A concept map that silently goes stale is worse than no map — your assistant confidently jumps to files that no longer do what the map says. `mason_check_drift` compares the map against HEAD (pure git + filesystem, no LLM call) and reports drift at the **feature level**: which features are stale and which files changed under them, new source files not yet mapped, ghost files the map still references, and renames. It ends with a recommendation — `up-to-date`, `incremental` (re-map just the stale entries), or `full-rebuild` (re-run the Map-Reduce playbook).
+A concept map that silently goes stale is worse than no map — your assistant confidently jumps to files that no longer do what the map says. `mason_check_drift` compares the map against HEAD (pure git + filesystem, no LLM call) and reports drift at the **feature level**: which features are stale and which files changed under them, new source files not yet mapped, ghost files the map still references, and renames. It ends with a recommendation — `up-to-date`, `incremental` (re-map just the stale entries), or `full-rebuild` (broad source review required).
 
 Ask your assistant *"is the concept map still fresh?"* — and if it isn't, the same report tells it exactly which entries to regenerate. `get_snapshot` includes the same drift report whenever it detects a stale map, so the assistant can inspect and refresh affected entries.
 
 Incremental refreshes are safe against partial updates: every entry a refresh touches is stamped with the commit it was verified against, so entries skipped in one refresh keep reporting as stale instead of silently riding along on the map's new hash. Features that disappear from the codebase can be deleted from the map with `save_snapshot`'s `removeFeatures`/`removeFlows` — renames stop leaving zombie entries behind.
-
-When a lot of files drifted at once, the assistant runs a **scoped refresh** instead of a full rebuild: `generate_snapshot_batch` accepts a `files` list, so the Map-Reduce loop walks only the drifted files and the reduce step merges the result into the existing map. 60 drifted files in a 1000-file monorepo means ~2 batches, not 20.
 
 ### Reading trust signals
 
@@ -186,7 +152,7 @@ Freshness and correctness are separate. `get_context` returns a `trust` object f
 
 Git commit distance is informational: unrelated commits and committing the refreshed map do not make the map stale. `mason-drift` exit codes still describe **committed map drift**; working-tree changes, decision warnings, and verification results are reported separately. A clean drift exit is not a correctness approval.
 
-Snapshot, decision, and partial stores are validated on load and replaced atomically on save. Invalid snapshots produce errors. Invalid decision records appear in diagnostics while valid records remain available; repair the invalid records before writing more decisions.
+Snapshot and decision stores are validated on load and replaced atomically on save. Invalid snapshots produce errors. Invalid decision records appear in diagnostics while valid records remain available; repair the invalid records before writing more decisions.
 
 ### Drift checks in CI
 
@@ -232,14 +198,6 @@ jobs:
 
 Omit `agent-command` for detect-only mode: free, no credentials, fails the check when the map goes stale.
 
-## Confluence sync
-
-Keep a Confluence wiki in sync with the concept map, in plain product language that PMs and designers can read. Each sync rewrites the snapshot through your assistant into PM-friendly descriptions, pushes one page per feature, and posts a "what changed since last sync" entry to a changelog page. Mason owns these pages and overwrites each one on every sync, so edit the code, not the page — manual edits to a page body are replaced. Re-running a sync with no code change is a no-op: it makes no Confluence edits at all.
-
-Configure this separately by asking your assistant *"set up Confluence for this project."* The assistant walks you through the Atlassian site URL, your account email, and an API token from id.atlassian.com, then lets you pick which space to use. To sync, ask *"sync the wiki to Confluence."*
-
-> ⚠️ **Token in chat history.** The API token is pasted into your assistant chat, not a terminal. It will appear in your chat history. If that's not acceptable, skip Confluence sync.
-
 ## Language support
 
 Language-agnostic. Mason works from file naming patterns and git history rather than language-specific parsing, so it runs on any project with a git repo — TypeScript, Kotlin, Python, Go, Rust, Swift, Java, C#, Dart, and more.
@@ -249,7 +207,7 @@ Language-agnostic. Mason works from file naming patterns and git history rather 
 - **The snapshot stores:** assistant-authored feature names, relative file paths, descriptions, and verification metadata. Review that prose before committing it; do not record secrets.
 - **Shared file policy:** mapping, sampling, verification, impact analysis, and test discovery respect Git ignores and `.mason/config.json` exclusions. Sensitive filenames are denied, and source reads are limited to 1 MiB.
 - **Path protection:** source reads check canonical paths and reject symlinks escaping the project root. Metadata paths reject symlinks, including parent directories.
-- **Mapping is local:** source previews go to the connected assistant through MCP. Mason itself makes no model API calls for mapping. Optional Confluence sync uses network access and can call a configured model provider.
+- **Map verification is local:** sampled evidence goes to the connected assistant through MCP. Mason itself makes no model API calls.
 
 ## Snapshot repairs and verification
 

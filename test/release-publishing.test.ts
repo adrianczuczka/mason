@@ -112,10 +112,23 @@ it("advertises the runtime decision inspection flow in the published bundle tool
   try {
     await server.connect(a);
     await client.connect(b);
-    const tool = (await client.listTools()).tools.find((tool) => tool.name === "review_decision")!;
+    const tools = (await client.listTools()).tools;
+    const tool = tools.find((tool) => tool.name === "review_decision")!;
     const manifest = JSON.parse(
       await fs.readFile(new URL("../manifest.json", import.meta.url), "utf8"),
     );
+    // Published bundles must expose the same tools as the server after scope reductions.
+    expect(manifest.tools.map((entry: { name: string }) => entry.name).sort()).toEqual(
+      tools.map((entry) => entry.name).sort(),
+    );
+    const init = tools.find((entry) => entry.name === "mason_init")!;
+    const declaredInit = manifest.tools.find(
+      (entry: { name: string }) => entry.name === "mason_init",
+    );
+    expect(init.inputSchema.properties!.mode).toMatchObject({ enum: ["quickstart", "setup"] });
+    expect(declaredInit.inputSchema.properties.mode.enum).toEqual(["quickstart", "setup"]);
+    const completeInit = tools.find((entry) => entry.name === "mason_complete_init")!;
+    expect(completeInit.inputSchema.properties).not.toHaveProperty("confluenceConfigured");
     const declared = manifest.tools.find(
       (entry: { name: string }) => entry.name === "review_decision",
     );

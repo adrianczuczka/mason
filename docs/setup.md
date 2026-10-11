@@ -40,7 +40,7 @@ The setup CLI shows progress while checking configuration, retaining the origina
 
 Existing project guidance is preserved outside marked Mason blocks. Codex receives an `AGENTS.md` entry point; Claude Code receives or reuses a `CLAUDE.md` entry point, using a native `@AGENTS.md` import when that is the shared document (or `@../AGENTS.md` from `.claude/CLAUDE.md`). See [Claude Code memory imports](https://code.claude.com/docs/en/memory#agentsmd). Setup merges the named Mason MCP server and its recorded hooks while retaining unrelated settings and explicit disable options. It refuses malformed or ambiguous configuration and concurrent edits. Repeating setup resumes interrupted configuration without replacing the retained original audit.
 
-Commit assistant instructions, `.gitignore`, the selected host's configuration (`.codex/config.toml` and `.codex/hooks.json`, or `.mcp.json` and `.claude/settings.json`), and any shared `.mason/config.json`, decisions, or optional snapshot. Setup receipts and hook ownership live in ignored `.mason/local/`; repair evidence and observed activation remain in ignored `.mason/reports/`. Setup does not create a top-level `.mason/project.json` marker. Explicit `mason_complete_init` records its timestamp locally and saves the Confluence feature flag in shared configuration.
+Commit assistant instructions, `.gitignore`, the selected host's configuration (`.codex/config.toml` and `.codex/hooks.json`, or `.mcp.json` and `.claude/settings.json`), and any shared `.mason/config.json`, decisions, or optional snapshot. Setup receipts and hook ownership live in ignored `.mason/local/`; repair evidence and observed activation remain in ignored `.mason/reports/`. Setup does not create a top-level `.mason/project.json` marker. Explicit `mason_complete_init` records its timestamp locally and preserves existing shared feature settings.
 
 A fresh clone with Mason installed and its MCP configuration trusted can connect and retrieve context before local setup. MCP instructions and `get_context` explain how to run setup; automatic hooks remain inactive and no local setup or activation is created by connecting. A linked worktree can inherit activation through Git’s common directory; its audit baselines, observations, and reports still belong to that worktree and branch. A local setup record takes precedence, including a record left by teardown to keep the worktree disconnected. All projects use the installed Mason version on their next launch. After upgrading, restart running assistants; setup is needed again only to change or repair project configuration. This layout replaces the earlier generated launchers and per-project runtime pins; there is no automatic migration from those setups. Remove the earlier Mason host entries and generated setup files before setting up again, preserving decisions and repair evidence.
 
@@ -270,7 +270,7 @@ Add to your VS Code settings (`settings.json`):
 
 **0.10.1 decision fix:** Accepted constraints remain visible while replacement revisions are proposed. Clients sharing a decision store should use a version containing this fix. See the [release notes](../CHANGELOG.md#0101--2026-09-05).
 
-**From 0.9.x:** Update every client sharing decision records and refresh the marker-delimited project instructions. New decisions are version 2 proposals; legacy records remain unreviewed until explicitly reviewed. Saving unchanged content does not refresh its evidence. Map builds require `mode: "map"`. See the [migration notes](../CHANGELOG.md#upgrading-from-090).
+**From 0.9.x:** Update every client sharing decision records and refresh the marker-delimited project instructions. New decisions are version 2 proposals; legacy records remain unreviewed until explicitly reviewed. Saving unchanged content does not refresh its evidence. Managed map creation is removed in the current candidate; existing maps remain readable. See the [migration notes](../CHANGELOG.md#upgrading-from-090).
 
 ## 0.4.0 migration
 
@@ -279,9 +279,9 @@ The pre-v0.4.0 LLM-driven CLI workflows were removed. MCP tools handle assistant
 | Old CLI | New flow |
 |---|---|
 | `mason set-llm <provider>` | Not needed — your assistant *is* the LLM. |
-| `mason snapshot` | Ask your assistant: *"build a Mason concept map"* → `mason_init` with `mode: "map"` → the Map-Reduce workflow. |
+| `mason snapshot` | Managed map creation is removed. Existing maps remain readable and can be maintained directly through MCP. |
 | `mason generate` (CLAUDE.md) | Removed. Use your assistant directly. |
-| `mason analyze` | Ask your assistant: *"give me git stats for this repo"* — it calls `analyze_project`. |
+| `mason analyze` | Removed. Use the connected agent’s source and Git tools. |
 | `mason impact File.kt` | Ask your assistant: *"what would changing File.kt affect?"* — it calls `get_impact`. |
 | `mason snapshot --install-hook` | Removed. The map auto-refreshes when the assistant detects stale state. |
 

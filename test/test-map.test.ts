@@ -1,14 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { getTestMap } from "../src/mcp/tools.js";
+import { buildTestMap } from "../src/test-map.js";
 import { fixturePath } from "./helpers.js";
 
-async function parseTestMap(fixture: string) {
-  const raw = await getTestMap(fixturePath(fixture));
-  return JSON.parse(raw) as {
-    totalTestFiles: number;
-    paired: Array<{ test: string; source: string | null; confidence: string }>;
-    unmatched: string[];
-  };
+function parseTestMap(fixture: string) {
+  return buildTestMap(fixturePath(fixture));
 }
 
 describe("test map", () => {

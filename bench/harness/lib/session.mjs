@@ -49,7 +49,7 @@ export function runSession({
     args.push("--setting-sources", "", "--no-session-persistence", "--disable-slash-commands",
       "--settings", JSON.stringify({ disableAllHooks: true, autoMemoryEnabled: false }),
       "--tools", "Read,Write,Edit,Glob,Grep,Bash",
-      "--disallowedTools", "mcp__mason__save_snapshot,mcp__mason__save_partial_snapshot,mcp__mason__save_decision,mcp__mason__save_verification,mcp__mason__generate_snapshot_batch,mcp__mason__mason_complete_init,mcp__mason__mason_set_confluence,mcp__mason__sync_confluence");
+      "--disallowedTools", "mcp__mason__save_snapshot,mcp__mason__save_decision,mcp__mason__save_verification,mcp__mason__mason_complete_init");
   }
 
   return new Promise((resolve) => {

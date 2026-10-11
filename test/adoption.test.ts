@@ -240,12 +240,12 @@ describe("Mason without a concept map", () => {
     expect(started.review.status).toBe("unavailable");
   });
 
-  it("still offers the full map build when explicitly requested", async () => {
-    const started = JSON.parse(await masonInit(repo, { mode: "map" }));
-    expect(started.mode).toBe("map");
-    expect(started.playbook).toMatch(/generate_snapshot_batch/);
-    expect(started.playbook).toMatch(/reduce_snapshot/);
-    expect(started.playbook).not.toMatch(/Want to set.*Confluence/i);
+  it("rejects the retired map mode without writing setup or partials", async () => {
+    await expect(masonInit(repo, { mode: "map" as "quickstart" })).rejects.toThrow(
+      "Managed map creation has been removed",
+    );
+    await expect(fs.access(path.join(repo, ".mason/local/project.json"))).rejects.toThrow();
+    await expect(fs.access(path.join(repo, ".mason/partial-snapshots"))).rejects.toThrow();
   });
 
   it("preserves prior settings and initialization time on repeated setup", async () => {
@@ -257,8 +257,8 @@ describe("Mason without a concept map", () => {
     };
     await fs.writeFile(path.join(repo, ".mason/config.json"), JSON.stringify(config));
     // Shared options work in a clone before a local initialization receipt exists.
-    expect(JSON.parse(await masonInit(repo)).confluenceConfigured).toBe(true);
-    const first = JSON.parse(await masonCompleteInit(repo, { confluenceConfigured: true }));
+    expect(JSON.parse(await masonInit(repo)).confluenceConfigured).toBeUndefined();
+    const first = JSON.parse(await masonCompleteInit(repo));
     const second = JSON.parse(await masonCompleteInit(repo));
     expect(second.marker.initializedAt).toBe(first.marker.initializedAt);
     expect(second.marker.features.confluence).toBe(true);

@@ -5,7 +5,6 @@ import path from "node:path";
 import * as storage from "../src/utils/storage.js";
 import { saveSnapshotData, saveVerification, verifySnapshot } from "../src/mcp/tools.js";
 import { withSnapshotWrite } from "../src/snapshot/lock.js";
-import { savePartial, loadAllPartials } from "../src/snapshot/partials.js";
 import type { Snapshot } from "../src/snapshot/snapshot.js";
 import { initGitRepo, commitAll } from "./helpers.js";
 
@@ -89,56 +88,6 @@ describe("snapshot writer isolation", () => {
     expect(saved.flows).toEqual({});
     // A content edit after verification correctly invalidates that verdict.
     expect(saved.features.greeting.verifiedAt).toBeUndefined();
-  });
-
-  it("keeps a partial submitted during consolidation after the old partials are cleared", async () => {
-    await savePartial(repo, {
-      batchId: "old",
-      offset: 0,
-      features: {},
-      flows: {},
-      savedAt: new Date().toISOString(),
-    });
-    const ready = deferred(),
-      resume = deferred(),
-      contended = deferred();
-    const write = storage.writeStoreJson;
-    vi.spyOn(storage, "writeStoreJson").mockImplementation(async (root, relative, value) => {
-      if (relative === ".mason/snapshot.json") {
-        ready.resolve();
-        await resume.promise;
-      }
-      return write(root, relative, value);
-    });
-    const consolidation = saveSnapshotData(
-      repo,
-      { greeting: { description: "CONSOLIDATED", files: ["src/a.js"] } },
-      {},
-    );
-    await ready.promise;
-    const open = fs.open;
-    vi.spyOn(fs, "open").mockImplementation((...args: Parameters<typeof fs.open>) => {
-      if (
-        path.basename(String(args[0])) === "lock" &&
-        path.basename(path.dirname(String(args[0]))) === "snapshot-write"
-      )
-        contended.resolve();
-      return open(...args);
-    });
-    const incoming = savePartial(repo, {
-      batchId: "new",
-      offset: 50,
-      features: {},
-      flows: {},
-      savedAt: new Date().toISOString(),
-    });
-    try {
-      await contended.promise;
-    } finally {
-      resume.resolve();
-    }
-    await Promise.all([consolidation, incoming]);
-    expect((await loadAllPartials(repo)).map((partial) => partial.batchId)).toEqual(["new"]);
   });
 
   it("leaves a complete snapshot and releases the lock after a write failure", async () => {

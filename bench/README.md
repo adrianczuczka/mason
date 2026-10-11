@@ -1,5 +1,7 @@
 # Mason Benchmark
 
+Historical architecture-map evaluation. The current unreleased candidate removes managed map creation and general orientation; retained self-repository rubrics describe the earlier implementation and must not be used unchanged to grade the simplified candidate. Preserve earlier results as historical evidence. Existing snapshots remain readable.
+
 Uses [deepeval](https://github.com/confident-ai/deepeval) to measure Mason's token savings and answer quality.
 
 ## What it does

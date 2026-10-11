@@ -17,7 +17,7 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   splitting: false,
-  external: ["@anthropic-ai/sdk", "openai", "sigstore", "@sigstore/bundle"],
+  external: ["sigstore", "@sigstore/bundle"],
   define: {
     PKG_VERSION: JSON.stringify(pkg.version),
   },
