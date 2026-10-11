@@ -14,6 +14,8 @@ The subsequent [seeded standard-hook protocol](HOOK_PREVENTION_EXPERIMENT.md) an
 
 The [standard delivery candidate protocol](STANDARD_DELIVERY_EXPERIMENT.md) and [sixteen-session results](STANDARD_DELIVERY_RESULTS.md) compare saved baseline binaries with integrated file-scoped injection. The candidate delivered one full lesson after a supported read before a later edit, without duplicate or unrelated hook lessons. Ordinary Bash workflows remained uncovered, and correctness matched baseline hooks. PreToolUse context does not replan an already requested tool call.
 
+The next [task-start delivery experiment](TASK_START_EXPERIMENT.md) scopes UserPromptSubmit selection for Bash workflows, cross-channel duplication and unrelated-task noise. A delivery stage precedes an outcome comparison on new incident families; neither stage has been implemented or run.
+
 The [interrupted-upload probe](UPLOAD.md) tests maintenance of deliberately seeded, reviewed knowledge under a changed retention assumption, with a local publishing simulator, fresh-session reuse and a first-upload control. It measures maintenance rather than original capture.
 
 ```sh

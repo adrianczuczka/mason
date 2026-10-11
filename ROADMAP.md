@@ -50,6 +50,8 @@ Acceptance criteria:
 
 ### Immediate work and evaluation
 
+The next scoped slice is the [task-start delivery experiment](bench/harness/knowledge/TASK_START_EXPERIMENT.md): first evaluate prompt-based selection and delivery for Bash workflows, including weak matches and duplication with MCP; then compare outcomes on at least three new incident families. UserPromptSubmit is the initial Claude candidate. The protocol is recorded; implementation, live runs and independent incident review remain pending.
+
 1. Use the [repeat-mistake experiment spec](bench/harness/knowledge/PREVENTION_EXPERIMENT.md), recorded on 2026-10-10, to freeze representative tasks, matched evidence, grading and host coverage before model calls. It sets development gates and a provisional 25% paired latency/token overhead diagnostic; population and broader review-effort targets remain to be established with pilots. Existing-runner coverage and missing seeded/hook/conflict controls are explicit.
 2. Run and retain a baseline using current Mason and ordinary notes, with both seeded-lesson and ordinary-correction paths, fresh sessions, changed-assumption, conflicting-guidance, and unrelated-task controls. Diagnose whether misses come from capture, retrieval, delivery, understanding, maintenance, or validation.
 3. Build the smallest prevention slice combining existing capture and maintained reuse with the first three bets, then repeat the same experiment. Retain failures and valid alternatives as well as successes.
