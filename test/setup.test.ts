@@ -16,6 +16,8 @@ import * as launcher from "../src/setup/launcher.js";
 import * as setupFiles from "../src/setup/files.js";
 import { runAutomationHook } from "../src/automation/adapters.js";
 import { automate } from "../src/automation/runtime.js";
+import * as automation from "../src/automation/runtime.js";
+import * as onboarding from "../src/mcp/onboarding.js";
 import { workspace } from "../src/automation/evidence.js";
 import { runAutomationCli, isHookCommand } from "../src/automation/cli.js";
 import { masonInit, getContext } from "../src/mcp/tools.js";
@@ -71,8 +73,8 @@ describe("unified setup", { timeout: 20000 }, () => {
     for (const host of ["codex", "claude"] as const) {
       const result = await setupProject(root, { host });
       expect(result.status).toBe("configured");
-      expect(result.stats.enabled).toBeNull();
-      expect(summarizeSetup(result)).toContain("Local stats unavailable");
+      expect(result).not.toHaveProperty("stats");
+      expect(summarizeSetup(result)).not.toContain("stats");
       expect(result.activation.status).not.toBe("attention");
       expect(
         await fs.readFile(path.join(root, ".mason/local/usefulness/config.json"), "utf8"),
@@ -80,18 +82,55 @@ describe("unified setup", { timeout: 20000 }, () => {
     }
   });
 
-  it("enables local stats during setup and preserves an explicit disable across hosts and repeated setup", async () => {
+  it("leaves stats disabled by default and preserves explicit preferences across hosts", async () => {
     expect((await usefulnessStatus(root)).enabled).toBe(false);
-    const result = await setupProject(root, { host: "codex" });
-    expect(result.stats.enabled).toBe(true);
-    expect(summarizeSetup(result)).toContain("Local stats enabled");
-    expect(summarizeSetup(result)).toContain("nothing is uploaded");
-    expect((await usefulnessStatus(root)).sessions).toEqual([]);
+    await setupProject(root, { host: "codex" });
+    expect((await usefulnessStatus(root)).enabled).toBe(false);
+    await configureUsefulness(root, true);
+    await setupProject(root, { host: "claude" });
+    expect((await usefulnessStatus(root)).enabled).toBe(true);
     await configureUsefulness(root, false);
-    const repeated = await setupProject(root, { host: "claude" });
-    expect(repeated.stats.enabled).toBe(false);
-    expect(summarizeSetup(repeated)).toContain("remain disabled");
-    expect((await setupProject(root, { host: "codex" })).stats.enabled).toBe(false);
+    await setupProject(root, { host: "codex" });
+    expect((await usefulnessStatus(root)).enabled).toBe(false);
+  });
+
+  it("configures both hosts without running audits, reviewing diffs or creating repair state", async () => {
+    const audit = vi
+      .spyOn(automation, "automate")
+      .mockRejectedValue(new Error("audit unavailable"));
+    const inspect = vi
+      .spyOn(onboarding, "inspectOnboarding")
+      .mockRejectedValue(new Error("review unavailable"));
+    for (const host of ["codex", "claude"] as const) {
+      const result = await setupProject(root, { host });
+      expect(result.status).toBe("configured");
+      expect(result).not.toHaveProperty("findings");
+      expect(result).not.toHaveProperty("reportPath");
+      const receipt = JSON.parse(await fs.readFile(path.join(root, result.receiptPath), "utf8"));
+      expect(receipt).not.toHaveProperty("initialReportPath");
+    }
+    expect(audit).not.toHaveBeenCalled();
+    expect(inspect).not.toHaveBeenCalled();
+    await expect(fs.access(path.join(root, ".mason/reports/repairs"))).rejects.toThrow();
+  });
+
+  it("preserves legacy receipt pointers and damaged audit artifacts across repeated setup", async () => {
+    const first = await setupProject(root, { host: "codex" });
+    const receipt = JSON.parse(await fs.readFile(path.join(root, first.receiptPath), "utf8"));
+    await write(".mason/reports/old-check.json", "damaged audit artifact");
+    receipt.initialReportPath = ".mason/reports/old-check.json";
+    receipt.initialBaselinePaths = [".mason/reports/missing-baseline.json"];
+    await write(first.receiptPath, JSON.stringify(receipt));
+    await setupProject(root, { host: "codex" });
+    expect(JSON.parse(await fs.readFile(path.join(root, first.receiptPath), "utf8"))).toMatchObject(
+      {
+        initialReportPath: receipt.initialReportPath,
+        initialBaselinePaths: receipt.initialBaselinePaths,
+      },
+    );
+    expect(await fs.readFile(path.join(root, receipt.initialReportPath), "utf8")).toBe(
+      "damaged audit artifact",
+    );
   });
 
   it("sets up with over 100,000 ignored generated paths and retains evidence for a later source change", async () => {
@@ -102,8 +141,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     const original = await fs.readFile(path.join(root, baseline));
     const artifacts = path.join(root, "artifacts");
     await fs.mkdir(artifacts);
-    // Real files exercise Git pruning and the complete setup path, including
-    // the second capture after instruction/configuration edits.
+    // Real files exercise Git pruning during setup and subsequent explicit checks.
     const count = 100001;
     await Promise.all(
       Array.from({ length: 64 }, async (_, worker) => {
@@ -115,7 +153,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect((await fs.readdir(artifacts)).length).toBe(count);
     const result = await setupProject(root, { host: "codex" });
     expect(result.status).toBe("configured");
-    expect(result.findings.audit.issues).toEqual([]);
+    expect(result).not.toHaveProperty("findings");
     const configured = await automate(root, { event: "task_end" });
     expect(configured.report.baselinePaths).toContain(baseline);
     await write("new-feature/main.kt", "fun feature() = true\n");
@@ -137,7 +175,7 @@ describe("unified setup", { timeout: 20000 }, () => {
   }, 120000);
 
   it.each(["codex", "claude"] as const)(
-    "sets up %s in a non-npm repo and retains original evidence before instruction edits",
+    "sets up %s in a non-npm repo without auditing or changing existing guidance",
     async (host) => {
       const original = "The `src/missing.kt` entry point.\n";
       await write("AGENTS.md", original);
@@ -150,15 +188,8 @@ describe("unified setup", { timeout: 20000 }, () => {
       expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toContain(original);
       await expect(fs.access(path.join(root, "package.json"))).rejects.toThrow();
       await expect(fs.access(path.join(root, ".mason/decisions"))).rejects.toThrow();
-      const before = JSON.parse(
-        await fs.readFile(path.join(root, result.initialReportPath), "utf8"),
-      );
-      expect(before.findings.some((f) => f.original.type === "deleted-reference")).toBe(true);
-      expect(before.baselinePaths.length).toBeGreaterThan(0);
-      const baseline = JSON.parse(
-        await fs.readFile(path.join(root, before.baselinePaths[0]), "utf8"),
-      );
-      expect(baseline.report.docs[0].dirty).toBe(false);
+      expect(result).not.toHaveProperty("initialReportPath");
+      await expect(fs.access(path.join(root, ".mason/reports/repairs"))).rejects.toThrow();
       expect(await git(["status", "--porcelain"], root)).not.toContain("runtime/");
       expect(await git(["check-ignore", ".mason/reports/example.json"], root)).toBe(
         ".mason/reports/example.json",
@@ -195,7 +226,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     const second = await setupProject(root, { host: "codex" });
     expect(second.changedFiles).toEqual([]);
     expect(JSON.stringify(await loadSetup(root))).toBe(config);
-    expect(second.initialReportPath).toBe(first.initialReportPath);
+    expect(second.receiptPath).toBe(first.receiptPath);
     expect(await fs.readFile(path.join(root, "CLAUDE.md"), "utf8")).toBe(before);
     expect(before.startsWith("Keep these project conventions exactly.\r\n")).toBe(true);
     const hooks = JSON.parse(await fs.readFile(path.join(root, ".codex/hooks.json"), "utf8"));
@@ -217,11 +248,12 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(first.activation.hosts.codex.instructions).toBe("current");
   });
 
-  it("adds guidance and a first baseline when no instruction files exist", async () => {
+  it("adds guidance without creating a baseline when no instruction files exist", async () => {
     await fs.rm(path.join(root, "AGENTS.md"));
     await commitAll(root, "remove instructions");
     const result = await setupProject(root, { host: "codex" });
-    expect(result.findings.audit.status).toBe("no-context-files");
+    expect(result).not.toHaveProperty("findings");
+    await expect(fs.access(path.join(root, ".mason/reports/repairs"))).rejects.toThrow();
     const after = await automate(root, { event: "task_end" });
     expect(after.report.baselinePaths.length).toBeGreaterThan(0);
     expect((await setupStatus(root)).hosts.codex.observedEvents).toEqual([]);
@@ -325,7 +357,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toBe(docs);
   });
 
-  it("resumes an interrupted configuration write with the original pre-edit audit intact", async () => {
+  it("resumes an interrupted configuration write without audit state", async () => {
     const apply = setupFiles.applyEdit;
     vi.spyOn(setupFiles, "applyEdit").mockImplementation(async (dir, edit) => {
       if (edit.path === ".codex/config.toml") throw new Error("disk full");
@@ -335,12 +367,8 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect((await setupStatus(root)).status).toBe("incomplete");
     vi.mocked(setupFiles.applyEdit).mockImplementation(apply);
     const done = await setupProject(root, { host: "codex" });
-    const original = JSON.parse(await fs.readFile(path.join(root, done.initialReportPath), "utf8"));
-    expect(original.baselinePaths).toHaveLength(1);
-    const baseline = JSON.parse(
-      await fs.readFile(path.join(root, original.baselinePaths[0]), "utf8"),
-    );
-    expect(baseline.report.docs[0].dirty).toBe(false);
+    expect(done).not.toHaveProperty("initialReportPath");
+    await expect(fs.access(path.join(root, ".mason/reports/repairs"))).rejects.toThrow();
     expect(done.activation.status).toBe("pending");
   });
 
@@ -376,6 +404,12 @@ describe("unified setup", { timeout: 20000 }, () => {
   });
 
   it("uses the same setup engine through MCP mode and CLI, keeping inspection read-only", async () => {
+    await expect(masonInit(root, { mode: "setup", host: "codex", base: "main" })).rejects.toThrow(
+      "quickstart",
+    );
+    await expect(masonInit(root, { mode: "setup", host: "codex", evidence: [] })).rejects.toThrow(
+      "quickstart",
+    );
     expect(JSON.parse(await masonInit(root)).mode).toBe("quickstart");
     await expect(fs.access(path.join(root, ".mason"))).rejects.toThrow();
     const setup = JSON.parse(await masonInit(root, { mode: "setup", host: "codex" }));
@@ -396,7 +430,7 @@ describe("unified setup", { timeout: 20000 }, () => {
       err: string[] = [];
     const apply = setupFiles.applyEdit;
     vi.spyOn(setupFiles, "applyEdit").mockImplementation(async (dir, edit) => {
-      expect(err.join("\n")).toContain("preserving original findings");
+      expect(err.join("\n")).not.toContain("Auditing");
       expect(err.join("\n")).toContain("Configuring Claude Code integration");
       expect(out).toEqual([]);
       return apply(dir, edit);
@@ -410,7 +444,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(out).toHaveLength(1);
     expect(out[0]).toContain("Mason configured for claude.");
     expect(out[0]).toContain("Activation: pending");
-    expect(err.join("\n")).toContain("Checking configuration and retained findings");
+    expect(err.join("\n")).toContain("Checking agent configuration");
     expect(err.join("\n")).not.toContain("\u001b");
   });
 

@@ -127,7 +127,8 @@ describe("adoption workflows", { timeout: 30000 }, () => {
     await git(["worktree", "add", "-b", "linked", worktree], root);
     const result = await setupProject(worktree, { host: "claude" });
     expect(result.status).toBe("configured");
-    expect(result.findings.audit.skippedChecks).toEqual(
+    const audit = (await computeAudit(worktree))!;
+    expect(audit.skippedChecks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           check: "deleted-reference",
@@ -135,10 +136,8 @@ describe("adoption workflows", { timeout: 30000 }, () => {
         }),
       ]),
     );
-    expect(result.findings.audit.issues).toEqual([]);
-    expect(result.findings.audit.advisories.filter((f) => f.type === "deleted-reference")).toEqual(
-      [],
-    );
+    expect(audit.issues).toEqual([]);
+    expect(audit.advisories.filter((f) => f.type === "deleted-reference")).toEqual([]);
     await expect(readInputs(worktree)).resolves.toHaveProperty("fingerprint");
     await commitAll(worktree, "configure worktree");
     expect((await setupProject(worktree, { host: "claude" })).changedFiles).toEqual([]);
@@ -192,9 +191,9 @@ describe("adoption workflows", { timeout: 30000 }, () => {
   );
 
   it("uses payload checkout and an unambiguous project fallback while preserving pre-edit evidence", async () => {
-    const setup = await setupProject(root, { host: "claude" });
-    const baseline = JSON.parse(await fs.readFile(path.join(root, setup.initialReportPath), "utf8"))
-      .baselinePaths[0];
+    const initial = await automate(root, { event: "turn_start" });
+    const baseline = initial.report.baselinePaths[0];
+    await setupProject(root, { host: "claude" });
     const original = await fs.readFile(path.join(root, baseline));
     expect(await hook(path.join(root, "src"), outside)).toBe("");
     expect(
@@ -250,11 +249,11 @@ describe("adoption workflows", { timeout: 30000 }, () => {
     await setupProject(root, { host: "claude" });
     const ws = await workspace(root),
       statePath = path.join(root, ws.directory, "state.json");
-    const before = await fs.readFile(statePath);
+    await expect(fs.access(statePath)).rejects.toMatchObject({ code: "ENOENT" });
     expect(await hook(outside, root, "claude", { hook_event_name: "Stop" }, false)).toContain(
       "unavailable",
     );
-    expect(await fs.readFile(statePath)).toEqual(before);
+    await expect(fs.access(statePath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(fs.access(path.join(outside, ".mason"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 

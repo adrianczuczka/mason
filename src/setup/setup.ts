@@ -1,9 +1,6 @@
-import { configureUsefulness } from "../automation/usefulness.js";
 import { randomUUID } from "node:crypto";
 import { hash, workspace } from "../automation/evidence.js";
 import { withLock, type Host } from "../automation/store.js";
-import { automate } from "../automation/runtime.js";
-import { inspectOnboarding } from "../mcp/onboarding.js";
 import { writeStoreJson } from "../utils/storage.js";
 import { applyEdit, readText } from "./files.js";
 import {
@@ -41,7 +38,7 @@ export async function selectHost(root: string, explicit?: Host): Promise<Host> {
 
 export async function setupProject(
   dir: string,
-  options: { host?: Host; base?: string; evidence?: string[]; progress?: Progress } = {},
+  options: { host?: Host; progress?: Progress } = {},
 ) {
   options.progress?.step("Checking project configuration");
   const ws = await workspace(dir);
@@ -83,23 +80,20 @@ export async function setupProject(
       instructions: instructions.map((e) => e.path),
     };
 
-    // Capture through the ordinary automation engine so later hooks resume the
-    // same immutable baselines. This must precede instruction and ignore edits.
-    options.progress?.step("Auditing documentation and preserving original findings");
-    const initial = await automate(ws.root, { event: "turn_start" });
-    options.progress?.step("Reviewing project context and committed changes");
-    const findings = await inspectOnboarding(ws.root, options.base, options.evidence);
     const receiptPath = ws.directory + "/setup-" + host + ".json";
-    const initialReportPath = previousReceipt?.initialReportPath ?? initial.report.reportPath;
-    const initialBaselinePaths =
-      previousReceipt?.initialBaselinePaths ?? initial.report.baselinePaths;
+    // Preserve legacy audit pointers without reading or verifying their artifacts.
+    const legacyEvidence = previousReceipt?.initialReportPath
+      ? {
+          initialReportPath: previousReceipt.initialReportPath,
+          initialBaselinePaths: previousReceipt.initialBaselinePaths ?? [],
+        }
+      : {};
     options.progress?.step(`Configuring ${host === "codex" ? "Codex" : "Claude Code"} integration`);
     await writeStoreJson(ws.root, receiptPath, {
       version: 1,
       host,
       status: "installing",
-      initialReportPath,
-      initialBaselinePaths,
+      ...legacyEvidence,
       root: ws.root,
       revision,
     });
@@ -122,21 +116,13 @@ export async function setupProject(
       !changedFiles.includes(ownership.path)
     )
       changedFiles.push(ownership.path);
-    // Ensure a repo that initially had no instructions now has a baseline too.
-    options.progress?.step("Checking configuration and retained findings");
-    const checked = await automate(ws.root, { event: "turn_start" });
+    options.progress?.step("Checking agent configuration");
     const configured = await inspectHostConfig(ws.root, host, undefined);
-    const stats = await configureUsefulness(ws.root, true, { onlyIfUnset: true }).catch(() => ({
-      enabled: null,
-      storage: ".mason/local/usefulness",
-      note: "Local stats unavailable. Inspect mason stats --json, or use mason stats --disable to reset the preference. Existing observations were retained.",
-    }));
     await writeStoreJson(ws.root, receiptPath, {
       version: 1,
       host,
       status: "configured",
-      initialReportPath,
-      initialBaselinePaths,
+      ...legacyEvidence,
       root: ws.root,
       revision,
       configuredAt: new Date().toISOString(),
@@ -149,11 +135,8 @@ export async function setupProject(
       root: ws.root,
       runtime: { kind: "global", command: "mason", version: installed.version },
       changedFiles,
-      initialReportPath,
-      findings,
-      reportPath: checked.report.reportPath,
+      receiptPath,
       activation: await setupStatus(ws.root),
-      stats,
       next:
         configured.disabled || configured.mcpDisabled
           ? "Mason hooks or MCP are disabled in project configuration. Review that setting before activation."
@@ -165,20 +148,11 @@ export async function setupProject(
 }
 
 export function summarizeSetup(result: Awaited<ReturnType<typeof setupProject>>): string {
-  const audit = result.findings.audit;
   return [
     `Mason configured for ${result.host}.`,
     "  MCP server and lifecycle hooks use mason from PATH.",
-    "  Project instructions updated; original audit evidence retained.",
+    "  Project instructions explain how to preserve and consult engineering reasoning.",
     `  ${result.changedFiles.length} files changed.`,
-    result.stats.enabled === null
-      ? result.stats.note
-      : result.stats.enabled
-        ? "Local stats enabled: metadata stays in .mason/local/usefulness/; nothing is uploaded. View with mason stats; disable with mason stats --disable."
-        : "Local stats remain disabled by your saved preference. Enable with mason stats --enable.",
-    `Initial audit: ${audit.status}${"counts" in audit ? `; ${audit.counts.issues} issues, ${audit.counts.advisories + audit.counts.suppressedAdvisories} advisories` : ""}.`,
-    ...("issues" in audit ? audit.issues.slice(0, 3).map((f) => "  " + f.message) : []),
-    `Original evidence: ${result.initialReportPath}`,
     "Activation: " + result.activation.status + ".",
     result.next,
     "If the assistant cannot find mason, restart the desktop app so it picks up PATH.",

@@ -676,6 +676,10 @@ export async function masonInit(
   if (options.mode && options.mode !== "quickstart" && options.mode !== "setup")
     throw new Error("Managed map creation has been removed; use quickstart or setup.");
   if (options.mode === "setup") {
+    if (options.base !== undefined || options.evidence !== undefined)
+      throw new Error(
+        "base and evidence apply only to quickstart inspection; setup does not run a review.",
+      );
     const { setupProject } = await import("../setup/setup.js");
     return JSON.stringify(await setupProject(dir, options), null, 2);
   }

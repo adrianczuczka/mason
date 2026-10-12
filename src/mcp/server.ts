@@ -43,14 +43,16 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "mason_init",
-    "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart is read-only and deterministic. Explicit mode: setup configures MCP, instructions and lifecycle hooks to use mason on PATH while retaining original audit evidence; use it only when the user requests setup. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. Repeat calls refresh findings even after setup.",
+    "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart is read-only and deterministic. Explicit mode: setup configures MCP, instructions and lifecycle hooks to use mason on PATH without running audits or preparing repairs; use it only when the user requests setup. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. Repeat calls refresh findings even after setup.",
     {
       dir: z.string().describe("Absolute path to the project root directory"),
       mode: z
         .enum(["quickstart", "setup"])
         .optional()
         .default("quickstart")
-        .describe("Quickstart inspects without edits; setup installs the shared onboarding flow."),
+        .describe(
+          "Quickstart inspects without edits; setup configures the agent connection, reasoning instructions and decision hooks.",
+        ),
       host: z
         .enum(["codex", "claude"])
         .optional()
@@ -59,14 +61,14 @@ export function createMcpServer(): McpServer {
         .string()
         .optional()
         .describe(
-          "Git ref for committed-diff review. Defaults to the first available main branch ref.",
+          "Quickstart only: Git ref for committed-diff review. Defaults to the first available main branch ref.",
         ),
       evidence: z
         .array(z.string())
         .max(10)
         .optional()
         .describe(
-          "Repository-local CI evidence manifests to include in the review. Imports Vitest JSON, SARIF, and native-validator mason-check-json results without executing check commands.",
+          "Quickstart only: repository-local CI evidence manifests to include in the review. Imports Vitest JSON, SARIF, and native-validator mason-check-json results without executing check commands.",
         ),
     },
     async ({ dir, mode, host, base, evidence }) => {

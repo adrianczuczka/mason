@@ -54,7 +54,7 @@ it.each(["claude", "codex"] as const)(
     });
     await commitAll(root, "configure");
     await git(["worktree", "add", "-b", "linked", linked], root);
-    const mainReport = await fs.readFile(path.join(root, setup.initialReportPath));
+    const mainReceipt = await fs.readFile(path.join(root, setup.receiptPath));
     const invoke = (name: string, extra = {}) =>
       runAutomationHook(
         host,
@@ -87,7 +87,7 @@ it.each(["claude", "codex"] as const)(
     expect(report.counts.unresolved).toBe(0);
     expect(report.baselinePaths).toEqual([]);
     expect(await loadSetup(linked)).toBeNull();
-    expect(await fs.readFile(path.join(root, setup.initialReportPath))).toEqual(mainReport);
+    expect(await fs.readFile(path.join(root, setup.receiptPath))).toEqual(mainReceipt);
     for (const baseline of status.baselinePaths) {
       expect(JSON.parse(await fs.readFile(path.join(linked, baseline), "utf8")).report.root).toBe(
         linked,

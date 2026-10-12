@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { runAutomationHook } from "../src/automation/adapters.js";
+import { automate } from "../src/automation/runtime.js";
 import { workspace } from "../src/automation/evidence.js";
 import { setupProject } from "../src/setup/setup.js";
 import { upsertDecision } from "../src/decisions/decisions.js";
@@ -88,6 +89,7 @@ afterEach(async () => {
 });
 
 it("delivers after a supported read without advancing audit evidence and deduplicates before edits", async () => {
+  await automate(root, { event: "turn_start" });
   const ws = await workspace(root);
   const before = await fs.readFile(path.join(root, ws.directory, "execution.json"), "utf8");
   expect(context(await invoke("PreToolUse"))).not.toContain(body);

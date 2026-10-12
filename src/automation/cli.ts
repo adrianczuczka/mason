@@ -44,7 +44,7 @@ No uploads. Observed resolution does not establish causation.`;
 
 const USAGE = `Usage: mason <setup|teardown|install|config|status|check|hook|stats> [options]
 
-  setup [--host claude|codex]  Connect MCP, instructions and hooks to mason on PATH; retain the initial audit
+  setup [--host claude|codex]  Connect MCP, reasoning instructions and decision hooks to mason on PATH
   teardown [--host claude|codex] Disconnect one host or all project hosts; retain knowledge and evidence
   install --host claude|codex  Merge lifecycle hooks into this project's host config
   config --host claude|codex   Print the host config without writing
@@ -263,7 +263,7 @@ export async function runAutomationCli(
       action === "setup"
         ? "Mason setup incomplete: " +
           automationFailure(error).message +
-          ". Rerun the same setup command to resume; retained audit evidence is preserved."
+          ". Rerun the same setup command to resume configuration."
         : action === "teardown"
           ? "Mason teardown incomplete: " +
             automationFailure(error).message +

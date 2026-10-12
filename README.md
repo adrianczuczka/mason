@@ -2,7 +2,7 @@
 
 # Mason
 
-### Reviewed engineering guidance for your coding agents.
+### Preserve why your code was built this way.
 
 **Record the reason · Review the lesson · Surface applicable guidance · Reconsider it as code changes**
 
@@ -17,6 +17,8 @@
 [![Supported platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-64748b?style=flat-square&labelColor=334155)](https://github.com/adrianczuczka/mason/blob/main/docs/distribution.md)
 
 </div>
+
+Mason preserves reviewed engineering reasoning with your repository, so future maintainers and coding agents can retrieve the evidence behind consequential decisions. Record workarounds, rejected approaches and constraints while their reasons are available; revisit them when the underlying code changes.
 
 ## Get started
 
@@ -79,7 +81,7 @@ Mason complements tests, linters, and code review. Findings are evidence to insp
 
 Earlier read-only decision-retrieval evaluations scored **9.0/10 with Mason vs 7.0/10 without**. The initial ten-task patch comparison tied at **10/10 for both**. Improved patch outcomes remain to be demonstrated. [Results, methodology, and limitations](docs/benchmarks.md)
 
-Maintained notes also succeeded in the reuse trials. Recent hook experiments verified supported file delivery, with additional context cost and no demonstrated correctness gain; direct delivery for ordinary Bash workflows remains open. Preventing repeat mistakes is the product hypothesis being evaluated. [Current evidence and next experiment](ROADMAP.md#current-evidence-and-boundaries)
+Maintained notes also succeeded in the reuse trials. Recent hook experiments verified supported file delivery, with additional context cost and no demonstrated correctness gain; direct delivery for ordinary Bash workflows remains open. The current focus is useful preservation and reuse of engineering reasoning during ordinary work, with capture and maintenance effort that feels worthwhile. Preventing repeat mistakes is one intended benefit; comparative superiority remains unestablished. [Positioning and validation plan](ROADMAP.md#historical-context-focus--2026-10-12) · [Current evidence](ROADMAP.md#current-evidence-and-boundaries)
 
 ## Documentation
 
