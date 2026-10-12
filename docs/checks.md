@@ -56,7 +56,7 @@ Issues drive the exit code; **advisories never do**. Specific historical depende
 
 ### Track a repair through verification
 
-Ask your assistant: *"Use Mason to prepare a repair, fix the documented issues within scope, and verify against the original findings."* The assistant runs `mason audit --prepare-repair --json`, makes grounded edits, then runs `mason audit --verify-repair <baselinePath> --json` against the returned original baseline. Setup alone only installs assistant instructions; repairing existing claims needs to be part of your request.
+Ask your assistant: *"Use Mason to prepare a repair, fix the documented issues within scope, and verify against the original findings."* The assistant runs `mason audit --prepare-repair --json`, makes grounded edits, then runs `mason audit --verify-repair <baselinePath> --json` against the returned original baseline. Initialization only prepares assistant configuration and setup only activates it; repairing existing claims needs to be part of your request.
 
 The CLI provides the same workflow:
 
@@ -102,7 +102,7 @@ mason audit review --baseline .mason/reports/repairs/<id>.json --finding <findin
 
 No preparation, token or named reviewer is required. Choose `no-dependency-claims` when the document makes no such claims: the dismissal binds to the committed document content and survives manifest-only changes, including uncommitted manifest edits. Choose `unrelated-manifest-change` when the inspected manifest changes do not affect the guidance: later changes to the document or scoped manifests reopen it. The relevant scope must be committed before dismissing. Dismissals take effect locally; commit their records to share them. A dismissal records a reasoned disposition, not approval or a proof of correctness. Other advisory types retain the prepared assessment workflow.
 
-Decision findings route to `review_decision`. Acceptance, reaffirmation or retirement must cover the original finding and retain usable history; proposals alone never close it. An advisory assessment cannot approve an engineering decision. Recorded reviewer identities and dispositions are assertions for normal project review, not authenticated approvals or proof of correctness. Missing, malformed, skipped or conflicting evidence remains unverified. If setup previously ignored all `.mason/` data, rerun setup to allow versioning `.mason/reviews/`.
+Decision findings route to `review_decision`. Acceptance, reaffirmation or retirement must cover the original finding and retain usable history; proposals alone never close it. An advisory assessment cannot approve an engineering decision. Recorded reviewer identities and dispositions are assertions for normal project review, not authenticated approvals or proof of correctness. Missing, malformed, skipped or conflicting evidence remains unverified. If setup previously ignored all `.mason/` data, run `mason init` to allow versioning `.mason/reviews/`.
 
 ### Repair pull requests in CI
 

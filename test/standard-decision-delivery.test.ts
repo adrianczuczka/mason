@@ -1,3 +1,4 @@
+import { configureProject } from "./helpers.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -6,7 +7,6 @@ import { randomUUID } from "node:crypto";
 import { runAutomationHook } from "../src/automation/adapters.js";
 import { automate } from "../src/automation/runtime.js";
 import { workspace } from "../src/automation/evidence.js";
-import { setupProject } from "../src/setup/setup.js";
 import { upsertDecision } from "../src/decisions/decisions.js";
 import { reviewDecision } from "../src/decisions/review.js";
 import * as launcher from "../src/setup/launcher.js";
@@ -77,8 +77,8 @@ beforeEach(async () => {
   });
   for (const key of ["MASON_SETUP_ROOT", "MASON_SETUP_HOST", "MASON_SETUP_REVISION"])
     vi.stubEnv(key, undefined);
-  await setupProject(root, { host: "claude" });
-  await setupProject(root, { host: "codex" });
+  await configureProject(root, { host: "claude" });
+  await configureProject(root, { host: "codex" });
   await commitAll(root, "setup");
 });
 afterEach(async () => {

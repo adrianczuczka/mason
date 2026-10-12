@@ -11,6 +11,7 @@ macOS or Linux:
 ```sh
 curl -fsSL https://github.com/adrianczuczka/mason/releases/latest/download/install.sh | sh
 # Open a new terminal if prompted, then run in your Git repository:
+mason init --host codex    # Skip when shared configuration already exists
 mason setup --host codex
 # Use --host claude for Claude Code.
 mason status
@@ -21,6 +22,7 @@ Windows PowerShell:
 ```powershell
 irm https://github.com/adrianczuczka/mason/releases/latest/download/install.ps1 | iex
 # If prompted, close and reopen your terminal application, then run in your Git repository:
+mason init --host codex    # Skip when shared configuration already exists
 mason setup --host codex
 # Use --host claude for Claude Code.
 mason status
@@ -75,7 +77,7 @@ mason updates unpin     # Resume following stable releases if enabled
 mason updates --json    # Inspect policy and the last attempt as JSON
 ```
 
-MCP startup and successful `mason setup` can launch a separate background worker. Long-running MCP servers also check whether a worker is due hourly. The worker attempts a release check at most once every 24 hours, including after a failure. It downloads only newer stable releases published at least 24 hours earlier. Releases must pass the six-platform distribution checks before publication. Network failures leave the installed command working and are recorded in `mason updates`; the next automatic attempt is on a later day. Hook, audit, review, drift, status, and version commands never initiate update requests.
+MCP startup can launch a separate background worker. Long-running MCP servers also check whether a worker is due hourly. The worker attempts a release check at most once every 24 hours, including after a failure. It downloads only newer stable releases published at least 24 hours earlier. Releases must pass the six-platform distribution checks before publication. Network failures leave the installed command working and are recorded in `mason updates`; the next automatic attempt is on a later day. Init, setup, teardown, hook, audit, review, drift, status, and version commands never initiate update requests.
 
 Downloads are staged in a separate version directory and must pass signature, archive and file checksum verification plus a version startup check. A pending update activates on the first subsequent MCP launch when no other Mason MCP servers are running for that installation. MCP process leases and activation share the installation lock, so concurrent new servers select the same version. If standalone process tracking cannot be established, startup reports an error; it never runs an untracked server that another process could mistake for idle. Existing MCP servers and hooks keep using the current global version until activation. Close all assistants using Mason and restart one to activate a pending update. A hook-only installation needs an MCP launch or an explicit `mason upgrade` to activate an update; host sessions without a running Mason MCP server are not tracked. No updater daemon or OS scheduled task is installed.
 

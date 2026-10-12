@@ -34,6 +34,12 @@ Useful records explain the original problem or failure, supporting evidence, the
 
 **Development criterion:** demonstrated usefulness in real work, with capture and maintenance effort the maintainer considers worthwhile. A concrete explanation recovered or an investigation avoided can justify a bounded improvement even when the final patch is unchanged. Repeated friction, irrelevant guidance or simpler documents doing the same job should lead to simplification. Broader responsibilities still need recurring demand. Statistical proof that preserving knowledge improves correctness is not a development gate. Public claims of better correctness, lower cost or superiority still require appropriate comparative evidence; earlier ties and context costs remain recorded. The existing simplification scope and deferred investments below still apply.
 
+### CLI contract — 2026-10-12
+
+The maintainer agreed to separate repository configuration, local activation and execution. `mason init` prepares shared integration for normal repository review; `mason setup` activates compatible committed configuration without editing shared files. `mason status` is read-only and distinguishes compatibility, optional template updates and observed use. Default teardown disconnects locally; `--project` explicitly removes shared integration. Init and teardown have no-write previews. Installation/upgrades remain separate, and activation checks supported integration behavior rather than exact generated prose or JSON formatting. CLI/MCP entry points share the same functions. This replaces the unshipped `setup --prepare` proposal.
+
+Use documented command scopes, idempotent operations, machine-readable output, stable exit semantics and actionable errors. Reuse current storage and configuration machinery; avoid a new command framework. Broader normalization of legacy audit, stats and distribution surfaces can follow specific needs. The implementation contract and team workflow are maintained in [setup documentation](docs/setup.md#unified-project-setup).
+
 ### Simplification scope — 2026-10-11
 
 The maintainer authorized simplifying Mason after reviewing repository growth and Sourcegraph's overlap. Preserve the smallest workflow for consequential reasoning: capture or recover supported rationale → separate review → retrieve applicable accepted guidance → reconsider changed evidence. Favor removing responsibilities over adding configuration, orchestration or experiment runners.

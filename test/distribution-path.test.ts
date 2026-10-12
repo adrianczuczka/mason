@@ -50,8 +50,8 @@ describe("standalone PATH ownership", () => {
     expect(manual.message).toContain(`Add ${bin} to your PATH`);
     for (const result of [fresh, ready, manual]) {
       expect(result.message).toContain("inside its directory");
-      expect(result.message).toContain("Codex:       mason setup --host codex");
-      expect(result.message).toContain("Claude Code: mason setup --host claude");
+      expect(result.message).toContain("Codex:       mason init --host codex");
+      expect(result.message).toContain("Claude Code: mason init --host claude");
       expect(result.message).not.toContain("Run: mason setup --host codex");
     }
   });

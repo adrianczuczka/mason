@@ -71,7 +71,7 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 
 | Tool | Purpose |
 |---|---|
-| `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence` (Vitest, SARIF, or native-validator JSON). `mode: "setup", host: "codex"` (or `"claude"`) configures MCP, instructions, and hooks using `mason` on PATH using the shared setup engine. |
+| `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence` (Vitest, SARIF, or native-validator JSON). `mode: "init"` prepares shared integration; `dryRun: true` previews it. `mode: "setup"` activates compatible configuration locally. Both accept `host: "codex"` or `"claude"`. |
 | `mason_automation` | Inspect configured hooks, observed events, pending proposals and notification baselines, or check all retained findings without consuming pending notifications. |
 | `mason_complete_init` | Records assistant instruction setup in ignored local state, with feature settings in shared configuration; preserves prior settings on repeated calls. |
 | `save_snapshot` | Directly save or update a legacy map; the managed build workflow is removed. |
@@ -86,7 +86,7 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 
 Tools operate on the data they need; none require the initialization marker. Decision capture and impact need no concept map. Map verification and drift require a map.
 
-Setup adds host-appropriate project instructions that route assistants to decisions and impact, with map navigation when available. The [setup guide](setup.md#unified-project-setup) explains instruction files, native imports, and observed activation.
+Initialization adds host-appropriate project instructions that route assistants to decisions and impact, with map navigation when available. The [setup guide](setup.md#unified-project-setup) explains instruction files, native imports, and observed activation.
 
 ### Decision capture and inspection
 

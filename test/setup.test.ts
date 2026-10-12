@@ -1,3 +1,4 @@
+import { configureProject } from "./helpers.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -6,7 +7,7 @@ import { parse } from "smol-toml";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { configureUsefulness, usefulnessStatus } from "../src/automation/usefulness.js";
-import { setupProject, summarizeSetup } from "../src/setup/setup.js";
+import { initializeProject, setupProject, summarizeSetup } from "../src/setup/setup.js";
 import { setupStatus } from "../src/setup/status.js";
 import { observeActivation, observationPath } from "../src/setup/observations.js";
 import { loadSetup } from "../src/setup/model.js";
@@ -68,10 +69,56 @@ afterEach(async () => {
 }, 120000);
 
 describe("unified setup", { timeout: 20000 }, () => {
+  it.each(["claude", "codex"] as const)(
+    "activates %s in a fresh clone without shared edits",
+    async (host) => {
+      await configureProject(root, { host });
+      await commitAll(root, "prepare team configuration");
+      const clone = path.join(root, "clone");
+      await git(["clone", root, clone], root);
+      try {
+        const apply = setupFiles.applyEdit;
+        vi.spyOn(setupFiles, "applyEdit").mockImplementation(async (dir, edit) => {
+          expect(edit.path.startsWith(".mason/local/")).toBe(true);
+          return apply(dir, edit);
+        });
+        const result = await setupProject(clone, { host });
+        expect(result.mode).toBe("activate");
+        expect(result.activation.status).toBe("pending");
+        expect(await git(["status", "--porcelain"], clone)).toBe("");
+        expect((await setupProject(clone, { host })).changedFiles).toEqual([]);
+      } finally {
+        await fs.rm(clone, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("refuses missing or stale shared configuration without modifying it or activating", async () => {
+    const original = await fs.readFile(path.join(root, "AGENTS.md"));
+    await expect(setupProject(root, { host: "codex" })).rejects.toThrow("mason init");
+    expect(await fs.readFile(path.join(root, "AGENTS.md"))).toEqual(original);
+    expect(await loadSetup(root)).toBeNull();
+    await configureProject(root, { host: "codex" });
+    await write("AGENTS.md", "Changed project instructions\n");
+    const before = await git(["diff"], root);
+    const local = await fs.readFile(path.join(root, ".mason/local/setup.json"));
+    await expect(setupProject(root, { host: "codex" })).rejects.toThrow("incompatible");
+    expect(await git(["diff"], root)).toBe(before);
+    expect(await fs.readFile(path.join(root, ".mason/local/setup.json"))).toEqual(local);
+  });
+
+  it("refuses to write activation state when local files are tracked", async () => {
+    await configureProject(root, { host: "codex" });
+    await git(["add", "-f", ".mason/local/setup.json"], root);
+    const before = await fs.readFile(path.join(root, ".mason/local/setup.json"));
+    await expect(setupProject(root, { host: "codex" })).rejects.toThrow("must be untracked");
+    expect(await fs.readFile(path.join(root, ".mason/local/setup.json"))).toEqual(before);
+  });
+
   it("completes setup and retries when optional stats configuration is corrupt", async () => {
     await write(".mason/local/usefulness/config.json", "broken-json");
     for (const host of ["codex", "claude"] as const) {
-      const result = await setupProject(root, { host });
+      const result = await configureProject(root, { host });
       expect(result.status).toBe("configured");
       expect(result).not.toHaveProperty("stats");
       expect(summarizeSetup(result)).not.toContain("stats");
@@ -84,13 +131,13 @@ describe("unified setup", { timeout: 20000 }, () => {
 
   it("leaves stats disabled by default and preserves explicit preferences across hosts", async () => {
     expect((await usefulnessStatus(root)).enabled).toBe(false);
-    await setupProject(root, { host: "codex" });
+    await configureProject(root, { host: "codex" });
     expect((await usefulnessStatus(root)).enabled).toBe(false);
     await configureUsefulness(root, true);
-    await setupProject(root, { host: "claude" });
+    await configureProject(root, { host: "claude" });
     expect((await usefulnessStatus(root)).enabled).toBe(true);
     await configureUsefulness(root, false);
-    await setupProject(root, { host: "codex" });
+    await configureProject(root, { host: "codex" });
     expect((await usefulnessStatus(root)).enabled).toBe(false);
   });
 
@@ -102,7 +149,7 @@ describe("unified setup", { timeout: 20000 }, () => {
       .spyOn(onboarding, "inspectOnboarding")
       .mockRejectedValue(new Error("review unavailable"));
     for (const host of ["codex", "claude"] as const) {
-      const result = await setupProject(root, { host });
+      const result = await configureProject(root, { host });
       expect(result.status).toBe("configured");
       expect(result).not.toHaveProperty("findings");
       expect(result).not.toHaveProperty("reportPath");
@@ -115,13 +162,13 @@ describe("unified setup", { timeout: 20000 }, () => {
   });
 
   it("preserves legacy receipt pointers and damaged audit artifacts across repeated setup", async () => {
-    const first = await setupProject(root, { host: "codex" });
+    const first = await configureProject(root, { host: "codex" });
     const receipt = JSON.parse(await fs.readFile(path.join(root, first.receiptPath), "utf8"));
     await write(".mason/reports/old-check.json", "damaged audit artifact");
     receipt.initialReportPath = ".mason/reports/old-check.json";
     receipt.initialBaselinePaths = [".mason/reports/missing-baseline.json"];
     await write(first.receiptPath, JSON.stringify(receipt));
-    await setupProject(root, { host: "codex" });
+    await configureProject(root, { host: "codex" });
     expect(JSON.parse(await fs.readFile(path.join(root, first.receiptPath), "utf8"))).toMatchObject(
       {
         initialReportPath: receipt.initialReportPath,
@@ -151,7 +198,7 @@ describe("unified setup", { timeout: 20000 }, () => {
       }),
     );
     expect((await fs.readdir(artifacts)).length).toBe(count);
-    const result = await setupProject(root, { host: "codex" });
+    const result = await configureProject(root, { host: "codex" });
     expect(result.status).toBe("configured");
     expect(result).not.toHaveProperty("findings");
     const configured = await automate(root, { event: "task_end" });
@@ -180,7 +227,7 @@ describe("unified setup", { timeout: 20000 }, () => {
       const original = "The `src/missing.kt` entry point.\n";
       await write("AGENTS.md", original);
       await commitAll(root, "outdated instructions");
-      const result = await setupProject(root, { host });
+      const result = await configureProject(root, { host });
       expect(result.status).toBe("configured");
       expect(result.activation.status).toBe("pending");
       if (host === "claude")
@@ -220,10 +267,10 @@ describe("unified setup", { timeout: 20000 }, () => {
 
   it("repeats setup without duplicate instructions, hooks, baseline replacement, or activation reset", async () => {
     await write("CLAUDE.md", "Keep these project conventions exactly.\r\n");
-    const first = await setupProject(root, { host: "codex" });
+    const first = await configureProject(root, { host: "codex" });
     const config = JSON.stringify(await loadSetup(root));
     const before = await fs.readFile(path.join(root, "CLAUDE.md"), "utf8");
-    const second = await setupProject(root, { host: "codex" });
+    const second = await configureProject(root, { host: "codex" });
     expect(second.changedFiles).toEqual([]);
     expect(JSON.stringify(await loadSetup(root))).toBe(config);
     expect(second.receiptPath).toBe(first.receiptPath);
@@ -236,7 +283,7 @@ describe("unified setup", { timeout: 20000 }, () => {
   it("creates Codex-readable AGENTS.md while keeping existing Claude project conventions", async () => {
     await fs.rm(path.join(root, "AGENTS.md"));
     await write(".claude/CLAUDE.md", "Existing conventions: use the src directory.\n");
-    const first = await setupProject(root, { host: "codex" });
+    const first = await configureProject(root, { host: "codex" });
     expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toContain(".claude/CLAUDE.md");
     expect(await fs.readFile(path.join(root, ".claude/CLAUDE.md"), "utf8")).toContain(
       "Existing conventions: use the src directory.\n",
@@ -244,14 +291,14 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(await fs.readFile(path.join(root, ".claude/CLAUDE.md"), "utf8")).toContain(
       "\n@../AGENTS.md\n",
     );
-    expect((await setupProject(root, { host: "codex" })).changedFiles).toEqual([]);
+    expect((await configureProject(root, { host: "codex" })).changedFiles).toEqual([]);
     expect(first.activation.hosts.codex.instructions).toBe("current");
   });
 
   it("adds guidance without creating a baseline when no instruction files exist", async () => {
     await fs.rm(path.join(root, "AGENTS.md"));
     await commitAll(root, "remove instructions");
-    const result = await setupProject(root, { host: "codex" });
+    const result = await configureProject(root, { host: "codex" });
     expect(result).not.toHaveProperty("findings");
     await expect(fs.access(path.join(root, ".mason/reports/repairs"))).rejects.toThrow();
     const after = await automate(root, { event: "task_end" });
@@ -270,7 +317,7 @@ describe("unified setup", { timeout: 20000 }, () => {
       ".codex/hooks.json",
       JSON.stringify({ setting: 7, hooks: { PreToolUse: [originalHook] } }),
     );
-    await setupProject(root, { host: "codex" });
+    await configureProject(root, { host: "codex" });
     const config = await fs.readFile(path.join(root, ".codex/config.toml"), "utf8");
     expect(config.startsWith(toml)).toBe(true);
     expect(parse(config).mcp_servers.other.command).toBe("other");
@@ -295,9 +342,9 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(parsed.mcp_servers.mason.tool_timeout_sec).toBe(80);
     expect(parsed.mcp_servers.mason.env).toEqual({ PROJECT_OPTION: "keep" });
     expect(edit.after).toContain('[mcp_servers.other]\ncommand = "keep"\n');
-    const result = await setupProject(root, { host: "codex" });
+    const result = await configureProject(root, { host: "codex" });
     expect(result.activation.hosts.codex.status).toBe("attention");
-    expect((await setupProject(root, { host: "codex" })).changedFiles).toEqual([]);
+    expect((await configureProject(root, { host: "codex" })).changedFiles).toEqual([]);
   });
 
   it("preserves Claude server options and replaces only its transport details", async () => {
@@ -310,7 +357,7 @@ describe("unified setup", { timeout: 20000 }, () => {
         },
       }),
     );
-    const result = await setupProject(root, { host: "claude" });
+    const result = await configureProject(root, { host: "claude" });
     const config = JSON.parse(await fs.readFile(path.join(root, ".mcp.json"), "utf8"));
     expect(config.mcpServers.mason.env).toEqual({ OPTION: "keep" });
     expect(config.mcpServers.mason.url).toBeUndefined();
@@ -324,24 +371,24 @@ describe("unified setup", { timeout: 20000 }, () => {
       "CLAUDE.md",
       "Before\r\n<!-- mason:start -->\r\nObsolete commands\r\n<!-- mason:end -->\r\nAfter\r\n",
     );
-    await setupProject(root, { host: "claude" });
+    await configureProject(root, { host: "claude" });
     const text = await fs.readFile(path.join(root, "CLAUDE.md"), "utf8");
     expect(text).toContain("\n@AGENTS.md\r\n");
     expect(text).not.toContain("Obsolete commands");
     expect(text.startsWith("Before\r\n")).toBe(true);
     expect(text.endsWith("\r\nAfter\r\n")).toBe(true);
-    expect((await setupProject(root, { host: "claude" })).changedFiles).toEqual([]);
+    expect((await configureProject(root, { host: "claude" })).changedFiles).toEqual([]);
   });
 
   it("adds a native Claude import beside a prose mention and preserves an existing import-only file", async () => {
     const original = "Project information is also in AGENTS.md.\n";
     await write("CLAUDE.md", original);
-    await setupProject(root, { host: "claude" });
+    await configureProject(root, { host: "claude" });
     const text = await fs.readFile(path.join(root, "CLAUDE.md"), "utf8");
     expect(text.startsWith(original)).toBe(true);
     expect(text).toContain("\n@AGENTS.md\n");
     await write("CLAUDE.md", "@AGENTS.md\r\n");
-    await setupProject(root, { host: "claude" });
+    await configureProject(root, { host: "claude" });
     expect(await fs.readFile(path.join(root, "CLAUDE.md"), "utf8")).toBe("@AGENTS.md\r\n");
   });
 
@@ -352,7 +399,7 @@ describe("unified setup", { timeout: 20000 }, () => {
   ])("rejects malformed %s before shared file edits", async (file, value) => {
     await write(file, value);
     const docs = await fs.readFile(path.join(root, "AGENTS.md"), "utf8");
-    await expect(setupProject(root, { host: "codex" })).rejects.toThrow();
+    await expect(configureProject(root, { host: "codex" })).rejects.toThrow();
     expect(await fs.readFile(path.join(root, file), "utf8")).toBe(value);
     expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toBe(docs);
   });
@@ -363,10 +410,10 @@ describe("unified setup", { timeout: 20000 }, () => {
       if (edit.path === ".codex/config.toml") throw new Error("disk full");
       return apply(dir, edit);
     });
-    await expect(setupProject(root, { host: "codex" })).rejects.toThrow("disk full");
-    expect((await setupStatus(root)).status).toBe("incomplete");
+    await expect(configureProject(root, { host: "codex" })).rejects.toThrow("disk full");
+    expect((await setupStatus(root)).status).toBe("not-configured");
     vi.mocked(setupFiles.applyEdit).mockImplementation(apply);
-    const done = await setupProject(root, { host: "codex" });
+    const done = await configureProject(root, { host: "codex" });
     expect(done).not.toHaveProperty("initialReportPath");
     await expect(fs.access(path.join(root, ".mason/reports/repairs"))).rejects.toThrow();
     expect(done.activation.status).toBe("pending");
@@ -383,12 +430,12 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).toBe("new concurrent content");
     await fs.mkdir(path.join(root, ".codex"));
     await fs.symlink(path.join(root, "AGENTS.md"), path.join(root, ".codex/config.toml"));
-    await expect(setupProject(root, { host: "codex" })).rejects.toThrow("Symlink");
+    await expect(configureProject(root, { host: "codex" })).rejects.toThrow("Symlink");
   });
 
   it("keeps reports private and decisions shareable under an existing blanket Mason ignore", async () => {
     await write(".gitignore", "# existing\r\n.mason/\r\n");
-    await setupProject(root, { host: "codex" });
+    await configureProject(root, { host: "codex" });
     expect(await git(["check-ignore", ".mason/reports/test.json"], root)).toBe(
       ".mason/reports/test.json",
     );
@@ -400,7 +447,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(await git(["check-ignore", "--verbose", ".mason/snapshot.json"], root)).toContain(
       "!/.mason/snapshot.json",
     );
-    expect((await setupProject(root, { host: "codex" })).changedFiles).toEqual([]);
+    expect((await configureProject(root, { host: "codex" })).changedFiles).toEqual([]);
   });
 
   it("uses the same setup engine through MCP mode and CLI, keeping inspection read-only", async () => {
@@ -412,6 +459,7 @@ describe("unified setup", { timeout: 20000 }, () => {
     );
     expect(JSON.parse(await masonInit(root)).mode).toBe("quickstart");
     await expect(fs.access(path.join(root, ".mason"))).rejects.toThrow();
+    await masonInit(root, { mode: "init", host: "codex" });
     const setup = JSON.parse(await masonInit(root, { mode: "setup", host: "codex" }));
     expect(setup.status).toBe("configured");
     const lines: string[] = [];
@@ -428,10 +476,11 @@ describe("unified setup", { timeout: 20000 }, () => {
   it("shows setup progress before configuration edits and keeps the final result on stdout", async () => {
     const out: string[] = [],
       err: string[] = [];
+    await initializeProject(root, { host: "claude" });
     const apply = setupFiles.applyEdit;
     vi.spyOn(setupFiles, "applyEdit").mockImplementation(async (dir, edit) => {
       expect(err.join("\n")).not.toContain("Auditing");
-      expect(err.join("\n")).toContain("Configuring Claude Code integration");
+      expect(err.join("\n")).toContain("Activating Claude Code integration");
       expect(out).toEqual([]);
       return apply(dir, edit);
     });
@@ -451,7 +500,7 @@ describe("unified setup", { timeout: 20000 }, () => {
   it("requires a host when detection is ambiguous and preserves explicit disabled settings", async () => {
     await expect(setupProject(root)).rejects.toThrow("--host");
     await write(".codex/config.toml", "[features]\nhooks = false\n");
-    const result = await setupProject(root);
+    const result = await configureProject(root, {});
     expect(result.host).toBe("codex");
     expect(result.activation.hosts.codex.status).toBe("attention");
     expect(
@@ -460,7 +509,7 @@ describe("unified setup", { timeout: 20000 }, () => {
   });
 
   it("requires actual MCP and hook observations and isolates sessions and installation revisions", async () => {
-    await setupProject(root, { host: "codex" });
+    await configureProject(root, { host: "codex" });
     await activateEnvironment("codex");
     await commitAll(root, "configure Mason");
     await getContext(root, "Read source", ["src/main.kt"]);
@@ -499,15 +548,16 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect(observed).not.toContain("src/main.kt");
     await write(".codex/hooks.json", "{}");
     expect((await setupStatus(root)).hosts.codex.status).toBe("attention");
-    await setupProject(root, { host: "codex" });
-    expect((await setupStatus(root)).hosts.codex.status).toBe("pending");
-    expect(await observeActivation(root, "context")).toContain("restart");
+    await configureProject(root, { host: "codex" });
+    // Restoring identical shared configuration preserves the existing local activation revision.
+    expect((await setupStatus(root)).hosts.codex.status).toBe("active");
+    expect(await observeActivation(root, "context")).toBeNull();
     await git(["switch", "-c", "other"], root);
     expect((await setupStatus(root)).hosts.codex.status).not.toBe("active");
   }, 60000);
 
   it("detects a missing global command without treating earlier activation as healthy", async () => {
-    await setupProject(root, { host: "codex" });
+    await configureProject(root, { host: "codex" });
     vi.mocked(launcher.installedCommand).mockResolvedValue({
       available: false,
       version: null,
@@ -518,12 +568,12 @@ describe("unified setup", { timeout: 20000 }, () => {
       runtime: "unavailable-on-path",
     });
     const before = await git(["diff"], root);
-    await expect(setupProject(root, { host: "codex" })).rejects.toThrow("PATH");
+    await expect(configureProject(root, { host: "codex" })).rejects.toThrow("PATH");
     expect(await git(["diff"], root)).toBe(before);
   });
 
   it("keeps version-specific activation evidence after a global upgrade without changing project configuration", async () => {
-    await setupProject(root, { host: "codex" });
+    await configureProject(root, { host: "codex" });
     await activateEnvironment("codex");
     await commitAll(root, "configure Mason");
     await observeActivation(root, "context");

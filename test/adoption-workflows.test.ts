@@ -1,3 +1,4 @@
+import { configureProject } from "./helpers.js";
 import { automate } from "../src/automation/runtime.js";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -10,7 +11,6 @@ import { computeAudit } from "../src/audit/audit.js";
 import { pathExists } from "../src/audit/scope.js";
 import { readAuditInput } from "../src/audit/inputs.js";
 import { readInputs, workspace } from "../src/automation/evidence.js";
-import { setupProject } from "../src/setup/setup.js";
 import { setupStatus } from "../src/setup/status.js";
 import { teardownProject } from "../src/setup/teardown.js";
 import { loadSetup } from "../src/setup/model.js";
@@ -125,7 +125,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
     await commitAll(root, "document Git metadata");
     const worktree = path.join(temp, "worktree");
     await git(["worktree", "add", "-b", "linked", worktree], root);
-    const result = await setupProject(worktree, { host: "claude" });
+    const result = await configureProject(worktree, { host: "claude" });
     expect(result.status).toBe("configured");
     const audit = (await computeAudit(worktree))!;
     expect(audit.skippedChecks).toEqual(
@@ -140,14 +140,14 @@ describe("adoption workflows", { timeout: 30000 }, () => {
     expect(audit.advisories.filter((f) => f.type === "deleted-reference")).toEqual([]);
     await expect(readInputs(worktree)).resolves.toHaveProperty("fingerprint");
     await commitAll(worktree, "configure worktree");
-    expect((await setupProject(worktree, { host: "claude" })).changedFiles).toEqual([]);
+    expect((await configureProject(worktree, { host: "claude" })).changedFiles).toEqual([]);
     expect(await git(["status", "--porcelain"], worktree)).toBe("");
   });
 
   it.each(["claude", "codex"] as const)(
     "serves useful %s MCP context in a fresh clone with actionable inactive setup and no automatic writes",
     async (host) => {
-      await setupProject(root, { host });
+      await configureProject(root, { host });
       await commitAll(root, "configure integration");
       const clone = path.join(temp, "clone");
       await git(["clone", root, clone], temp);
@@ -182,7 +182,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
       expect(await hook(clone, clone, host)).toBe("");
       await expect(fs.access(path.join(clone, ".mason"))).rejects.toMatchObject({ code: "ENOENT" });
       expect(await git(["status", "--porcelain"], clone)).toBe("");
-      expect((await teardownProject(clone, { host })).status).toBe("complete");
+      expect((await teardownProject(clone, { project: true, host })).status).toBe("complete");
       if (host === "claude")
         expect(
           JSON.parse(await fs.readFile(path.join(clone, ".mcp.json"), "utf8")).mcpServers?.mason,
@@ -193,7 +193,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
   it("uses payload checkout and an unambiguous project fallback while preserving pre-edit evidence", async () => {
     const initial = await automate(root, { event: "turn_start" });
     const baseline = initial.report.baselinePaths[0];
-    await setupProject(root, { host: "claude" });
+    await configureProject(root, { host: "claude" });
     const original = await fs.readFile(path.join(root, baseline));
     expect(await hook(path.join(root, "src"), outside)).toBe("");
     expect(
@@ -230,7 +230,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
         }),
       );
       expect(client.getInstructions()).toContain("automatic hooks are inactive");
-      await setupProject(root, { host: "claude" });
+      await configureProject(root, { host: "claude" });
       const context = await client.callTool({
         name: "get_context",
         arguments: { dir: root, task: "explain main", files: ["src/main.ts"] },
@@ -246,7 +246,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
   });
 
   it("does not let unmanaged hooks adopt an unrelated launch checkout when history is unavailable", async () => {
-    await setupProject(root, { host: "claude" });
+    await configureProject(root, { host: "claude" });
     const ws = await workspace(root),
       statePath = path.join(root, ws.directory, "state.json");
     await expect(fs.access(statePath)).rejects.toMatchObject({ code: "ENOENT" });
@@ -258,7 +258,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
   });
 
   it("keeps lost host-project history unavailable instead of falling back to another Git repository", async () => {
-    await setupProject(root, { host: "claude" });
+    await configureProject(root, { host: "claude" });
     const unrelated = path.join(temp, "unrelated");
     await fs.mkdir(unrelated);
     await initGitRepo(unrelated);
@@ -270,7 +270,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
   });
 
   it("inherits activation in the payload worktree and refuses to guess between checkouts outside Git", async () => {
-    await setupProject(root, { host: "claude" });
+    await configureProject(root, { host: "claude" });
     await commitAll(root, "configure original");
     const worktree = path.join(temp, "worktree");
     await git(["worktree", "add", "-b", "linked", worktree], root);
@@ -281,7 +281,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
       await readObservation(worktree, inheritedWs.directory, "claude", inheritedRevision, version),
     ).not.toBeNull();
     expect(await loadSetup(worktree)).toBeNull();
-    await setupProject(worktree, { host: "claude" });
+    await configureProject(worktree, { host: "claude" });
     expect(await hook(worktree, root)).toBe("");
     const ws = await workspace(worktree),
       revision = (await loadSetup(worktree))!.hosts.claude!.revision;
@@ -310,7 +310,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
     "shares only the knowledge allowlist and repeats setup without tracked churn (%j)",
     async (ignore) => {
       await fs.writeFile(path.join(root, ".gitignore"), ignore);
-      await setupProject(root, { host: "claude" });
+      await configureProject(root, { host: "claude" });
       for (const name of [
         "cache/probe",
         "scratch.json",
@@ -334,7 +334,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
       const config = JSON.parse(await fs.readFile(path.join(root, ".mcp.json"), "utf8"));
       expect(config.mcpServers.mason.type).toBe("stdio");
       await commitAll(root, "commit setup");
-      expect((await setupProject(root, { host: "claude" })).changedFiles).toEqual([]);
+      expect((await configureProject(root, { host: "claude" })).changedFiles).toEqual([]);
       expect(await git(["status", "--porcelain"], root)).toBe("");
     },
   );
@@ -345,7 +345,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
   ])(
     "distinguishes compatible older hooks (%s) from disabled, narrowed, or wrong-platform hooks without rewriting them",
     async (legacyCommand) => {
-      await setupProject(root, { host: "claude" });
+      await configureProject(root, { host: "claude" });
       const file = path.join(root, ".claude/settings.json");
       const config = JSON.parse(await fs.readFile(file, "utf8"));
       for (const groups of Object.values(config.hooks) as any[])

@@ -369,8 +369,8 @@ describe("MCP tools", () => {
       expect(data.playbook).toContain("<!-- mason:start -->");
       expect(data.playbook).toContain("<!-- mason:end -->");
       expect(data.playbook).toMatch(/`get_context` with the task text/);
-      // Installation belongs to the shared setup engine; read-only inspection must stay available.
-      expect(data.playbook).toMatch(/same engine as mason setup/);
+      // Initialization and activation are explicit; read-only inspection stays available.
+      expect(data.playbook).toMatch(/same engine as mason init/);
       expect(data.playbook).toMatch(
         /only requested inspection or review, report findings without running setup/,
       );

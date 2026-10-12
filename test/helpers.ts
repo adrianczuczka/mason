@@ -26,3 +26,17 @@ export async function initGitRepo(dir: string): Promise<void> {
   await git(["config", "user.email", "test@test.com"], dir);
   await git(["config", "user.name", "Test"], dir);
 }
+
+/** Fixture convenience: exercise the two explicit initialization and activation commands. */
+export async function configureProject(
+  dir: string,
+  options: Parameters<typeof import("../src/setup/setup.js").setupProject>[1] = {},
+) {
+  const { initializeProject, setupProject } = await import("../src/setup/setup.js");
+  const initialized = await initializeProject(dir, options);
+  const result = await setupProject(dir, options);
+  return {
+    ...result,
+    changedFiles: [...initialized.changes.map((change) => change.path), ...result.changedFiles],
+  };
+}

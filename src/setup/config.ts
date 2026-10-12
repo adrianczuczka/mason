@@ -204,3 +204,48 @@ export async function inspectHostConfig(root: string, host: Host, plannedMcp?: s
       (config.features as Record<string, unknown> | undefined)?.codex_hooks === false,
   };
 }
+
+/** Runtime compatibility is independent of the current generated template. */
+export async function inspectIntegration(root: string, host: Host) {
+  const config = await inspectHostConfig(root, host);
+  const instructions = await instructionEdits(root, host);
+  const primary = instructions[0]?.before ?? "";
+  const { blockSpan } = await import("./ownership.js");
+  const block = blockSpan(primary, "<!-- mason:start -->", "<!-- mason:end -->");
+  const instructionCompatible =
+    !!block &&
+    ["get_context", "save_decision", "review_decision"].every((tool) =>
+      block.text.includes(tool),
+    ) &&
+    instructions.slice(1).every((edit) => {
+      const imported = edit.path.startsWith(".claude/") ? "@../AGENTS.md" : "@AGENTS.md";
+      return (edit.before ?? "").split(/\r?\n/).some((line) => line.trim() === imported);
+    });
+  const expectedHooks = hookConfig(host, hookCommand(host)).hooks;
+  const normalizedHooks = Object.fromEntries(
+    Object.entries(config.hooks).map(([event, groups]) => [
+      event,
+      groups.map((group) => ({
+        ...group,
+        hooks: group.hooks.map((handler) => ({
+          ...handler,
+          command: expectedHooks.SessionStart[0].hooks[0].command,
+        })),
+      })),
+    ]),
+  );
+  const mcpCompatible =
+    isDeepStrictEqual({ command: config.mcp?.command, args: config.mcp?.args }, mcpCommand(host)) &&
+    (config.mcp?.type === undefined || config.mcp.type === "stdio");
+  const hooksCompatible = isDeepStrictEqual(normalizedHooks, expectedHooks);
+  return {
+    ...config,
+    instructions,
+    instructionCompatible,
+    instructionsCurrent: instructions.every((edit) => edit.before === edit.after),
+    mcpCompatible,
+    hooksCompatible,
+    hooksCurrent: isDeepStrictEqual(config.hooks, expectedHooks),
+    compatible: instructionCompatible && mcpCompatible && hooksCompatible,
+  };
+}

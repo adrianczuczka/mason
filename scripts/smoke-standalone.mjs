@@ -53,7 +53,7 @@ function run(command, args = [], options = {}) {
     child.stdin.end(options.input);
   });
 }
-const mason = (...args) => windows ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(bin, 'mason-launcher.ps1'), ...args]) : run(path.join(bin, 'mason'), args);
+const mason = (...args) => windows ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(bin, 'mason-launcher.ps1'), ...args], { allowFailure: args[0] === 'check' }) : run(path.join(bin, 'mason'), args, { allowFailure: args[0] === 'check' });
 const git = (...args) => run('git', args, { cwd: repo });
 const commit = async message => { await git('add', '-A'); await git('commit', '-m', message); };
 let corrupt = false;
@@ -119,8 +119,8 @@ try {
   env.MASON_VERSION = original.version;
   const installed = await install();
   assert(installed.stdout.includes('Open a new terminal'));
-  assert(installed.stdout.includes('Codex:       mason setup --host codex'));
-  assert(installed.stdout.includes('Claude Code: mason setup --host claude'));
+  assert(installed.stdout.includes('Codex:       mason init --host codex'));
+  assert(installed.stdout.includes('Claude Code: mason init --host claude'));
   for (const stage of ['Downloading Mason', 'Verifying download', 'Extracting installation files', 'Installing Mason']) assert(installed.stderr.includes(stage));
   assert(!installed.stderr.includes('\x1b'), 'Redirected installer progress must be plain text.');
   assert.equal((await mason('--version')).stdout.trim(), original.version);
@@ -153,6 +153,9 @@ try {
   await fs.writeFile(path.join(repo, 'AGENTS.md'), 'Entry module: `src/old.ts`.\n');
   await commit('initial');
   for (const host of ['codex', 'claude']) {
+    const preview = JSON.parse((await mason('init', '--dir', repo, '--host', host, '--dry-run', '--json')).stdout);
+    assert(preview.changes.length > 0);
+    await mason('init', '--dir', repo, '--host', host, '--json');
     const setupOutput = await mason('setup', '--dir', repo, '--host', host, '--json');
     assert.equal(setupOutput.stderr, '', 'JSON setup must not emit human progress.');
     const result = JSON.parse(setupOutput.stdout);
@@ -166,12 +169,14 @@ try {
   await commit('configure Mason');
   assert.equal((await git('ls-files', '.mason')).stdout.trim(), '');
   const before = JSON.parse(await fs.readFile(path.join(repo, '.mason/local/setup.json'), 'utf8'));
-  console.log('Setup installed both hosts in a non-npm repo. Exercising MCP and retained repair evidence…');
+  console.log('Init and local setup configured both hosts. Exercising MCP and explicit repair evidence…');
+  await mason('check', '--dir', repo, '--json');
   await context('codex');
   for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse']) await hook('codex', event);
   await git('mv', 'src/old.ts', 'src/new.ts');
   await commit('rename entry');
   await hook('codex', 'PostToolUse');
+  await mason('check', '--dir', repo, '--json');
   const baselines = await baselineBytes();
   assert(Object.values(baselines).some(text => text.includes('src/old.ts') && text.includes('deleted-reference')));
   const agents = await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8');
@@ -185,8 +190,8 @@ try {
   for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']) await hook('claude', event);
   const status = JSON.parse((await mason('status', '--dir', repo, '--json')).stdout);
   assert.equal(status.setup.status, 'active');
-  assert.equal(status.setup.hosts.codex.verificationStatus, 'incomplete');
-  const report = JSON.parse(await fs.readFile(path.join(repo, status.reportPath), 'utf8'));
+  assert.equal(status.setup.hosts.codex.verificationScope, 'decision-guidance');
+  const report = JSON.parse((await mason('check', '--dir', repo, '--json')).stdout);
   assert.equal(report.counts.unresolved, 0);
   assert(report.counts.resolved > 0);
   assert.equal((await mason('audit', '--dir', repo)).code, 0);
@@ -327,21 +332,22 @@ try {
   await mason('upgrade', nextVersion);
 
   const retainedInstructions = await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8');
-  const preview = JSON.parse((await mason('teardown', '--dir', repo, '--host', 'codex', '--dry-run', '--json')).stdout);
+  const preview = JSON.parse((await mason('teardown', '--project', '--dir', repo, '--host', 'codex', '--dry-run', '--json')).stdout);
   assert.equal(preview.status, 'complete');
   assert(preview.changes.some(change => change.path === '.codex/config.toml' && change.action === 'delete'));
   assert.equal(await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8'), retainedInstructions);
   await context('codex'); // Preview left the integration usable.
-  await mason('teardown', '--dir', path.join(repo, 'src'), '--host', 'codex');
+  await mason('teardown', '--project', '--dir', path.join(repo, 'src'), '--host', 'codex');
   await assert.rejects(fs.access(path.join(repo, '.codex/config.toml')), { code: 'ENOENT' });
   assert.equal(await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8'), retainedInstructions);
   await context('claude'); await hook('claude', 'Stop');
-  await mason('teardown', '--dir', repo);
+  await mason('teardown', '--project', '--dir', repo);
   assert.equal(JSON.parse((await mason('status', '--dir', repo, '--json')).stdout).setup.status, 'not-configured');
   assert(!(await fs.readFile(path.join(repo, 'AGENTS.md'), 'utf8')).includes('<!-- mason:start -->'));
   assert.equal((await mason('--version')).stdout.trim(), nextVersion);
-  assert.deepEqual(JSON.parse((await mason('teardown', '--dir', repo, '--json')).stdout).changes, []);
+  assert.deepEqual(JSON.parse((await mason('teardown', '--project', '--dir', repo, '--json')).stdout).changes, []);
   for (const [name, bytes] of Object.entries(baselines)) assert.equal((await baselineBytes())[name], bytes);
+  await mason('init', '--dir', repo, '--host', 'codex');
   await mason('setup', '--dir', repo, '--host', 'codex');
   await context('codex'); await hook('codex', 'Stop');
   console.log('Project teardown preserved the other host and evidence; repeat teardown and reconnection passed.');

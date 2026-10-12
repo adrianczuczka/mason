@@ -41,11 +41,12 @@ New standard standalone installs update automatically in the background. Updates
 Run this in your Git repository (open a new terminal if the installer asks):
 
 ```bash
-mason setup --host codex
+mason init --host codex    # Maintainer: prepare shared configuration for review/commit
+mason setup --host codex   # Each developer: activate locally
 # For Claude Code, use --host claude.
 ```
 
-Setup connects MCP, hooks, and project instructions. Review your host's trust settings, start a new session, and give your agent a normal task.
+If the repository already has compatible Mason configuration, run only `mason setup`. Initialization prepares MCP, hooks and project instructions; setup leaves shared files untouched. Review your host's trust settings, start a new session, and give your agent a normal task.
 
 Check that Mason is being used:
 

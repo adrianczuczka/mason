@@ -1,3 +1,4 @@
+import { configureProject } from "./helpers.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -15,7 +16,6 @@ import { automate, automationStatus } from "../src/automation/runtime.js";
 import { workspace } from "../src/automation/evidence.js";
 import { planAutomationInstall } from "../src/automation/install.js";
 import { setupStatus } from "../src/setup/status.js";
-import { setupProject } from "../src/setup/setup.js";
 import { loadSetup } from "../src/setup/model.js";
 import { readObservation } from "../src/setup/observations.js";
 import * as launcher from "../src/setup/launcher.js";
@@ -199,7 +199,7 @@ it.each(["claude", "codex"] as const)(
       version: "test",
       message: null,
     });
-    await setupProject(root, { host });
+    await configureProject(root, { host });
     const revision = (await loadSetup(root))!.hosts[host]!.revision;
     vi.stubEnv("MASON_SETUP_ROOT", root);
     vi.stubEnv("MASON_SETUP_HOST", host);

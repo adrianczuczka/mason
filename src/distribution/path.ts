@@ -57,7 +57,7 @@ export async function configurePath(
               path.posix.isAbsolute(entry) && path.posix.resolve(entry) === path.posix.resolve(bin),
           );
   const setupHint =
-    "To connect a project, run one of these inside its directory:\n  Codex:       mason setup --host codex\n  Claude Code: mason setup --host claude";
+    "To prepare a new project for review, run one of these inside its directory (use mason setup to activate existing team configuration):\n  Codex:       mason init --host codex\n  Claude Code: mason init --host claude";
   const message = (alreadyOnPath ? "" : "Open a new terminal to use mason.\n") + setupHint;
   const manual = (reason: string): PathResult => ({
     status: "manual",

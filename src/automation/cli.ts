@@ -15,11 +15,12 @@ import { hostSchema } from "./store.js";
 import { createProgress, type Progress } from "../utils/progress.js";
 import { withProfile } from "../utils/profile.js";
 
-const TEARDOWN_USAGE = `Usage: mason teardown [options]
+const TEARDOWN_USAGE = `Usage: mason teardown [--project] [options]
 
-Disconnect Mason from this Git project. Defaults to all project hosts.
+Disconnect Mason locally. Defaults to all locally configured hosts.
 
   --host codex|claude         Disconnect only this host
+  --project                  Remove shared integration files for review and commit
   --dir <path>               Project directory (defaults to cwd; subdirectories work)
   --dry-run                  Preview changes without writing
   --json                     Machine-readable changes and diagnostics
@@ -33,7 +34,7 @@ const STATS_USAGE = `Usage: mason stats [options]
 
 Show aggregate local observations, or inspect one session.
 
-  --enable | --disable       Enable/disable collection (setup enables it)
+  --enable | --disable       Enable/disable collection (disabled by default)
   --json                     Include session/finding IDs and evidence paths
   --dir <path>               Project directory (defaults to cwd)
   --session <id>             Filter to one retained session
@@ -42,10 +43,11 @@ Show aggregate local observations, or inspect one session.
 
 No uploads. Observed resolution does not establish causation.`;
 
-const USAGE = `Usage: mason <setup|teardown|install|config|status|check|hook|stats> [options]
+const USAGE = `Usage: mason <init|setup|teardown|install|config|status|check|hook|stats> [options]
 
-  setup [--host claude|codex]  Connect MCP, reasoning instructions and decision hooks to mason on PATH
-  teardown [--host claude|codex] Disconnect one host or all project hosts; retain knowledge and evidence
+  setup [--host claude|codex]  Activate existing shared configuration locally
+  init --host claude|codex     Prepare shared configuration for review and commit
+  teardown [--host claude|codex] Disconnect locally; --project removes shared configuration
   install --host claude|codex  Merge lifecycle hooks into this project's host config
   config --host claude|codex   Print the host config without writing
   config --stop-block off|drift Set local Claude Stop review behavior (default: drift)
@@ -57,7 +59,7 @@ const USAGE = `Usage: mason <setup|teardown|install|config|status|check|hook|sta
 
   --dir <path>                Project directory (defaults to cwd)
   --command <prefix>          Installed executable prefix for install/config
-  --dry-run                   Preview teardown without writing
+  --dry-run                   Preview init or teardown without writing
   --json                      Machine-readable output (status also uses JSON when piped)
   --profile                   Local phase timings on stderr for check/hook; no file contents
 
@@ -80,6 +82,7 @@ const parseCli = (argv: string[]) =>
       json: { type: "boolean" },
       help: { type: "boolean", short: "h" },
       "dry-run": { type: "boolean" },
+      project: { type: "boolean" },
       profile: { type: "boolean" },
       enable: { type: "boolean" },
       disable: { type: "boolean" },
@@ -125,6 +128,8 @@ export async function runAutomationCli(
     [action] = positionals;
     if (values.profile && !["check", "hook"].includes(action))
       throw new Error("--profile applies only to check/hook.");
+    if (values.project !== undefined && action !== "teardown")
+      throw new Error("--project applies only to teardown.");
     const trackingOptions = [
       values.enable,
       values.disable,
@@ -137,8 +142,8 @@ export async function runAutomationCli(
     const measured = <T>(run: () => Promise<T>) =>
       values.profile ? withProfile(run, io.err) : run();
     const dir = values.dir ?? process.cwd();
-    if (values["dry-run"] !== undefined && action !== "teardown")
-      throw new Error("--dry-run applies only to teardown.");
+    if (values["dry-run"] !== undefined && !["init", "teardown"].includes(action))
+      throw new Error("--dry-run applies only to init/teardown.");
     if (values["stop-block"] !== undefined) {
       if (action !== "config" || values.host || values.command)
         throw new Error(
@@ -154,6 +159,7 @@ export async function runAutomationCli(
       const result = await teardownProject(dir, {
         host: values.host === undefined ? undefined : hostSchema.parse(values.host),
         dryRun: values["dry-run"],
+        project: values.project,
       });
       io.out(values.json ? JSON.stringify(result, null, 2) : summarizeTeardown(result));
       return result.status === "complete" ? 0 : 2;
@@ -168,10 +174,11 @@ export async function runAutomationCli(
       if (output) io.out(JSON.stringify(output));
       return 0;
     }
-    if (action === "setup") {
+    if (action === "setup" || action === "init") {
       if (values.command)
         throw new Error("--command applies to install/config, not managed setup.");
-      const { setupProject, summarizeSetup } = await import("../setup/setup.js");
+      const { setupProject, summarizeSetup, initializeProject, summarizeInitialization } =
+        await import("../setup/setup.js");
       const host = values.host ? hostSchema.parse(values.host) : undefined;
       if (!values.json)
         progress = createProgress(
@@ -182,9 +189,15 @@ export async function runAutomationCli(
                 interactive: false,
               },
         );
-      const result = await setupProject(dir, { host, progress });
-      progress?.stop();
-      io.out(values.json ? JSON.stringify(result, null, 2) : summarizeSetup(result));
+      if (action === "init") {
+        const result = await initializeProject(dir, { host, dryRun: values["dry-run"], progress });
+        progress?.stop();
+        io.out(values.json ? JSON.stringify(result, null, 2) : summarizeInitialization(result));
+      } else {
+        const result = await setupProject(dir, { host, progress });
+        progress?.stop();
+        io.out(values.json ? JSON.stringify(result, null, 2) : summarizeSetup(result));
+      }
       return 0;
     }
     if (action === "install" || action === "config") {
@@ -277,7 +290,7 @@ export async function runAutomationCli(
       io.out(
         JSON.stringify({
           version: 1,
-          ...(["setup", "teardown"].includes(action)
+          ...(["init", "setup", "teardown"].includes(action)
             ? {
                 action,
                 status: "incomplete",

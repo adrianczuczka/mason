@@ -11,8 +11,9 @@ const usage = `Mason ${PKG_VERSION}
 
 Usage: mason <command> [options]
 
-  setup --host codex|claude   Connect this project to your assistant
-  teardown [--host codex|claude] Disconnect project integrations; retain knowledge
+  setup --host codex|claude   Activate this checkout without editing shared files
+  init --host codex|claude    Prepare shared configuration for review
+  teardown [--host codex|claude] Disconnect locally; --project removes shared configuration
   status                     Show configuration, observed use and verification
   stats                      Show local stats and feedback
   install --host codex|claude  Install lifecycle hooks
@@ -180,7 +181,7 @@ try {
         );
     }
   } else if (
-    ["setup", "teardown", "status", "check", "stats", "install", "config", "auto"].includes(
+    ["init", "setup", "teardown", "status", "check", "stats", "install", "config", "auto"].includes(
       command,
     ) ||
     lifecycleHook
@@ -198,10 +199,6 @@ try {
     process.exitCode = await runAutomationCli(forwarded, input, undefined, {
       managedHost: managedLaunch ? (setupHost as "codex" | "claude") : undefined,
     });
-    if (command === "setup" && process.exitCode === 0 && !args.includes("--help")) {
-      const { scheduleAutomaticUpdate } = await import("../src/distribution/updates.js");
-      void scheduleAutomaticUpdate();
-    }
   } else if (["audit", "review", "drift", "hook", "mcp"].includes(command)) {
     const binary = new URL(`./mason-${command}.js`, import.meta.url);
     process.argv = [process.execPath, fileURLToPath(binary), ...args];

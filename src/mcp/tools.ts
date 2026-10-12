@@ -671,19 +671,34 @@ export async function masonAutomation(dir: string, action: "status" | "check"): 
 
 export async function masonInit(
   dir: string,
-  options: { mode?: InitMode; host?: "codex" | "claude"; base?: string; evidence?: string[] } = {},
+  options: {
+    mode?: InitMode;
+    host?: "codex" | "claude";
+    dryRun?: boolean;
+    base?: string;
+    evidence?: string[];
+  } = {},
 ): Promise<string> {
-  if (options.mode && options.mode !== "quickstart" && options.mode !== "setup")
-    throw new Error("Managed map creation has been removed; use quickstart or setup.");
-  if (options.mode === "setup") {
+  if (
+    options.mode &&
+    options.mode !== "quickstart" &&
+    options.mode !== "setup" &&
+    options.mode !== "init"
+  )
+    throw new Error("Managed map creation has been removed; use quickstart, init or setup.");
+  if (options.mode === "setup" || options.mode === "init") {
     if (options.base !== undefined || options.evidence !== undefined)
       throw new Error(
         "base and evidence apply only to quickstart inspection; setup does not run a review.",
       );
-    const { setupProject } = await import("../setup/setup.js");
+    const { setupProject, initializeProject } = await import("../setup/setup.js");
+    if (options.mode === "init")
+      return JSON.stringify(await initializeProject(dir, options), null, 2);
+    if (options.dryRun !== undefined) throw new Error("dryRun applies only to mode: init.");
     return JSON.stringify(await setupProject(dir, options), null, 2);
   }
-  if (options.host) throw new Error("host applies only to mode: setup.");
+  if (options.host || options.dryRun !== undefined)
+    throw new Error("host applies only to init/setup; dryRun applies only to init.");
   const rootDir = path.resolve(dir);
   const marker = await loadProjectMarker(rootDir);
   const { loadSetup } = await import("../setup/model.js");

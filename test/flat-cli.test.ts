@@ -14,7 +14,7 @@ it("advertises top-level hook commands", async () => {
   expect(stdout).not.toMatch(/^ {2}auto\s/m);
 });
 
-it.each(["setup", "teardown", "status", "check", "stats", "install", "config", "hook"])(
+it.each(["init", "setup", "teardown", "status", "check", "stats", "install", "config", "hook"])(
   "keeps the auto %s alias equivalent",
   async (command) => {
     const direct = await exec(process.execPath, [binary, command, "--help"]);

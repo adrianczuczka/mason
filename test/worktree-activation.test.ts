@@ -1,3 +1,4 @@
+import { configureProject } from "./helpers.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -6,7 +7,6 @@ import { runAutomationHook } from "../src/automation/adapters.js";
 import { upsertDecision } from "../src/decisions/decisions.js";
 import { automationStatus } from "../src/automation/runtime.js";
 import { workspace } from "../src/automation/evidence.js";
-import { setupProject } from "../src/setup/setup.js";
 import { setupStatus } from "../src/setup/status.js";
 import { effectiveSetup, loadSetup } from "../src/setup/model.js";
 import { readObservation } from "../src/setup/observations.js";
@@ -45,7 +45,7 @@ afterEach(async () => {
 it.each(["claude", "codex"] as const)(
   "checks %s mutations in a linked worktree without local setup",
   async (host) => {
-    const setup = await setupProject(root, { host });
+    const setup = await configureProject(root, { host });
     await upsertDecision(root, {
       title: "Main entry",
       body: "Preserve the main entry contract.",
@@ -109,7 +109,7 @@ it.each(["claude", "codex"] as const)(
 );
 
 it("honors local overrides, inherited host scope, corrupt receipts, and teardown", async () => {
-  await setupProject(root, { host: "claude" });
+  await configureProject(root, { host: "claude" });
   await commitAll(root, "configure");
   await git(["worktree", "add", "-b", "linked", linked], root);
   expect(await launcher.prepareLaunch("codex", { dir: linked, allowInactive: true })).toBe(false);
@@ -131,13 +131,13 @@ it("honors local overrides, inherited host scope, corrupt receipts, and teardown
   expect((await setupStatus(linked)).status).toBe("not-configured");
   expect(await fs.readFile(path.join(root, ".mason/local/setup.json"), "utf8")).toBe(parent);
   expect((await teardownProject(linked, { host: "claude" })).changes).toEqual([]);
-  await setupProject(linked, { host: "claude" });
+  await configureProject(linked, { host: "claude" });
   expect((await effectiveSetup(linked)).root).toBe(linked);
   expect(await launcher.prepareLaunch("claude", { dir: linked })).toBe(true);
 }, 30000);
 
 it("requires a recorded checkout location when Git metadata was stored separately", async () => {
-  await setupProject(root, { host: "claude" });
+  await configureProject(root, { host: "claude" });
   await commitAll(root, "configure");
   await git(["init", "--separate-git-dir", path.join(temp, "git-metadata")], root);
   await git(["worktree", "add", "-b", "linked", linked], root);
@@ -148,8 +148,8 @@ it("requires a recorded checkout location when Git metadata was stored separatel
 });
 
 it("disconnects one inherited host while the other keeps following primary setup", async () => {
-  await setupProject(root, { host: "claude" });
-  await setupProject(root, { host: "codex" });
+  await configureProject(root, { host: "claude" });
+  await configureProject(root, { host: "codex" });
   await commitAll(root, "configure both hosts");
   await git(["worktree", "add", "-b", "linked", linked], root);
   expect((await teardownProject(linked, { host: "claude" })).status).toBe("complete");

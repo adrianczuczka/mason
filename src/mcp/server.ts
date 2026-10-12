@@ -43,20 +43,24 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "mason_init",
-    "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart is read-only and deterministic. Explicit mode: setup configures MCP, instructions and lifecycle hooks to use mason on PATH without running audits or preparing repairs; use it only when the user requests setup. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. Repeat calls refresh findings even after setup.",
+    "Inspect this project now: returns documentation audit findings, committed-diff review findings, decision/map status, and a quickstart playbook. Quickstart is read-only and deterministic. Explicit mode: setup validates shared configuration and activates locally without editing shared files; mode: init explicitly prepares MCP, instructions and lifecycle hooks for review and commit. Neither runs audits or prepares repairs; use only when requested. Optional host selects codex or claude. Optional base selects the review comparison; evidence imports CI manifests with check outcomes, commit freshness, and links to changed files and accepted decisions. Repeat calls refresh findings even after setup.",
     {
       dir: z.string().describe("Absolute path to the project root directory"),
       mode: z
-        .enum(["quickstart", "setup"])
+        .enum(["quickstart", "init", "setup"])
         .optional()
         .default("quickstart")
         .describe(
-          "Quickstart inspects without edits; setup configures the agent connection, reasoning instructions and decision hooks.",
+          "Quickstart inspects without edits; init prepares shared configuration; setup activates compatible configuration locally.",
         ),
       host: z
         .enum(["codex", "claude"])
         .optional()
-        .describe("Assistant to configure in setup mode; inferred only when unambiguous."),
+        .describe("Assistant to configure in init/setup mode; inferred only when unambiguous."),
+      dryRun: z
+        .boolean()
+        .optional()
+        .describe("Init only: preview shared configuration changes without writing files."),
       base: z
         .string()
         .optional()
@@ -71,8 +75,8 @@ export function createMcpServer(): McpServer {
           "Quickstart only: repository-local CI evidence manifests to include in the review. Imports Vitest JSON, SARIF, and native-validator mason-check-json results without executing check commands.",
         ),
     },
-    async ({ dir, mode, host, base, evidence }) => {
-      const result = await masonInit(dir, { mode, host, base, evidence });
+    async ({ dir, mode, host, dryRun, base, evidence }) => {
+      const result = await masonInit(dir, { mode, host, dryRun, base, evidence });
       return { content: [{ type: "text", text: result }] };
     },
   );

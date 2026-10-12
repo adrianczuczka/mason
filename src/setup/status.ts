@@ -1,12 +1,10 @@
-import { isDeepStrictEqual } from "node:util";
 import { hash, workspace } from "../automation/evidence.js";
 import { events } from "../automation/store.js";
 import { automationStatus } from "../automation/runtime.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
-import { hookConfig } from "../automation/adapters.js";
 import { effectiveSetup, loadSetupReceipt } from "./model.js";
-import { inspectHostConfig, instructionEdits } from "./config.js";
-import { hookCommand, mcpCommand, installedCommand } from "./launcher.js";
+import { inspectIntegration } from "./config.js";
+import { installedCommand } from "./launcher.js";
 import { readObservation } from "./observations.js";
 
 export async function setupStatus(dir: string) {
@@ -21,15 +19,36 @@ export async function setupStatus(dir: string) {
       })),
     );
     const pending = partial.filter((item) => item.receipt !== null).map((item) => item.host);
+    const configuration: Record<
+      string,
+      { compatible: boolean; disabled?: boolean; diagnostic?: string }
+    > = {};
+    await Promise.all(
+      (["codex", "claude"] as const).map(async (host) => {
+        try {
+          const inspected = await inspectIntegration(ws.root, host);
+          configuration[host] = {
+            compatible: inspected.compatible,
+            disabled: inspected.disabled || inspected.mcpDisabled,
+          };
+        } catch (error) {
+          configuration[host] = {
+            compatible: false,
+            diagnostic: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }),
+    );
     return {
       version: 1,
       status: pending.length ? "incomplete" : "not-configured",
       hosts: {},
+      configuration,
       next: pending.length
         ? "Setup did not finish. Rerun mason setup --host " +
           pending[0] +
-          " to resume using the retained original evidence."
-        : "Project hooks are inactive until local setup. Run mason setup --host codex or --host claude.",
+          " to resume local activation; use mason init if shared configuration needs updating."
+        : "Project hooks are inactive. Run mason setup --host codex or --host claude for compatible shared configuration; a maintainer uses mason init to prepare missing or incompatible configuration.",
     };
   }
   const hosts: Record<
@@ -53,28 +72,12 @@ export async function setupStatus(dir: string) {
   for (const host of ["codex", "claude"] as const) {
     const entry = setup.hosts[host];
     if (!entry) continue;
-    const instructions = await instructionEdits(ws.root, host);
-    const instructionsCurrent = instructions.every((edit) => edit.before === edit.after);
-    const config = await inspectHostConfig(ws.root, host, undefined);
+    const config = await inspectIntegration(ws.root, host);
+    const instructionsCurrent = config.instructionsCurrent;
     const mcp =
-      !config.mcpDisabled &&
-      hash(config.mcp) === entry.mcpFingerprint &&
-      isDeepStrictEqual({ command: config.mcp?.command, args: config.mcp?.args }, mcpCommand(host));
-    const expectedHooks = hookConfig(host, hookCommand(host)).hooks;
-    const currentHooks = isDeepStrictEqual(config.hooks, expectedHooks);
-    const compatibleHooks = Object.fromEntries(
-      Object.entries(config.hooks).map(([event, groups]) => [
-        event,
-        groups.map((group) => ({
-          ...group,
-          hooks: group.hooks.map((handler) => ({
-            ...handler,
-            command: expectedHooks.SessionStart[0].hooks[0].command,
-          })),
-        })),
-      ]),
-    );
-    const hooks = isDeepStrictEqual(compatibleHooks, expectedHooks) && !config.disabled;
+      config.mcpCompatible && !config.mcpDisabled && hash(config.mcp) === entry.mcpFingerprint;
+    const currentHooks = config.hooksCurrent;
+    const hooks = config.hooksCompatible && !config.disabled;
     const local = await loadSetupReceipt(ws.root, ws.directory, host);
     const configured =
       activation.root !== ws.root ||
@@ -98,9 +101,9 @@ export async function setupStatus(dir: string) {
     const observedEvents = complete?.events ?? sessions[0]?.events ?? [];
     const pending: string[] = [];
     if (!installed.available) pending.push(installed.message!);
-    if (!mcp || !hooks || !instructionsCurrent || !configured)
+    if (!mcp || !hooks || !config.instructionCompatible || !configured)
       pending.push(
-        "Rerun setup to reconcile project configuration; inspect any disabled host settings.",
+        "Run mason setup to activate existing configuration; incompatible shared configuration needs mason init and review. Inspect any disabled host settings.",
       );
     if (!observation?.contextCalls)
       pending.push(
@@ -118,7 +121,7 @@ export async function setupStatus(dir: string) {
       installed.available &&
       mcp &&
       hooks &&
-      instructionsCurrent &&
+      config.instructionCompatible &&
       configured &&
       automation.status !== "unavailable";
     hosts[host] = {
@@ -129,7 +132,11 @@ export async function setupStatus(dir: string) {
         : "attention",
       runtime: installed.available ? "global (" + installed.version + ")" : "unavailable-on-path",
       mcp: mcp ? "configured" : "changed",
-      instructions: instructionsCurrent ? "current" : "changed",
+      instructions: instructionsCurrent
+        ? "current"
+        : config.instructionCompatible
+          ? "compatible"
+          : "incompatible",
       hookConfiguration: hooks
         ? currentHooks
           ? "configured"
@@ -144,9 +151,9 @@ export async function setupStatus(dir: string) {
           : "unavailable",
       pending,
       updates:
-        hooks && !currentHooks
+        config.compatible && (!currentHooks || !instructionsCurrent)
           ? [
-              "A newer hook template is available. Run mason setup --host " +
+              "Updated integration templates are available. A maintainer can run mason init --host " +
                 host +
                 " to update it when convenient; review and commit the configuration changes.",
             ]

@@ -14,37 +14,48 @@ Install the [standalone CLI](distribution.md) to use Mason without system Node o
 
 ## Unified project setup
 
-Run setup from the target Git repository, choosing the assistant you use:
+The CLI separates shared repository configuration from local activation:
+
+| Command | Purpose | Files it may change |
+|---|---|---|
+| `mason init --host claude` | Prepare or update shared integration for an MR | Agent instructions, MCP and hooks configuration, ignore rules; local ownership bookkeeping |
+| `mason setup --host claude` | Activate compatible existing integration | Ignored local activation records only |
+| `mason status` | Inspect configuration, compatibility and observed use | None |
+| `mason teardown --host claude` | Disconnect this developer locally | Local activation records only |
+| `mason teardown --project --host claude` | Remove shared integration for an MR | Identifiable shared integration entries and their local records |
+
+Use `--host codex` for Codex. Commands run in the current Git checkout; `--dir /absolute/path/to/project` selects another checkout. Installing or upgrading the executable is separate from configuring a repository.
+
+For a new project, a maintainer runs:
 
 ```bash
-mason setup --host codex
-# Use --host claude for Claude Code; add --dir /absolute/path/to/project to target another repository.
+mason init --host claude --dry-run
+mason init --host claude
+# Review and commit the shared configuration through the project's normal workflow.
+```
+
+Each developer, including the maintainer, then runs:
+
+```bash
+mason setup --host claude
 mason status
 ```
 
-With npm instead (requires Node 20.17+ and npm):
+With npm, first run `npm install -g mason-context`. A temporary `npx` invocation alone does not install the persistent `mason` command required for activation. A local source build uses `npm run build` and `npm link` in Mason's checkout.
 
-```bash
-npm install -g mason-context
-mason setup --host codex
-mason status
-```
+`init` prepares configuration without activating the checkout or running audits. Repeating it is idempotent. `setup` validates compatibility and writes local records; it never repairs shared files. If configuration is absent or incompatible, it explains that a maintainer must run `init`. Compatible older guidance, known supported hook commands and alternate JSON formatting do not require a template update. Status reports available template updates separately from incompatibility. Compatibility checks recognize supported integrations; they do not establish that prose guidance is correct or that host trust has been granted.
 
-Run setup once for each host in a fresh clone or primary checkout. Linked Git worktrees inherit that checkout’s local host activation unless they have their own setup record; separate clones still need setup. Mason must be installed on PATH before setup; a temporary `npx` invocation alone does not install a persistent command. For a local source build, run `npm run build` and `npm link` in Mason's checkout, then use `mason setup --dir /absolute/path/to/project --host codex`.
+For teams, pin a common release when reproducibility matters. Initialize once per desired host and review the resulting MR. Teammates activate the committed configuration locally without an MR. Separate clones need local setup; linked Git worktrees inherit primary-checkout activation unless locally overridden. An executable upgrade does not rewrite tracked files. Required shared migrations use `mason init` and an MR; ordinary activation remains `mason setup`.
 
-**For teams:** committing Mason's configuration does not activate hooks for everyone. Each developer installs Mason and runs `mason setup --host claude` or `--host codex` in their own checkout, then completes the host activation steps below. Until local setup, the shared automatic hooks stay silent. Once configured, normal upgrades require restarting the assistant; rerun setup when release notes require a configuration update or when repairing configuration.
+Shared mutation commands support `--dry-run`, including `teardown --project`. Previews create no files or locks and list the files that would change. `--json` emits one structured result to stdout, including action, status and planned/applied changes; human progress uses stderr. Invalid arguments and failed operations return exit code 2, successful operations/previews return 0, and no command prompts for input. Setup and initialization do not grant host trust, approve decisions, run documentation audits, prepare repairs or enable stats. Explicit checks remain available through `mason audit`, `mason review` and `mason check`.
 
-Setup configures MCP, project instructions for preserving and consulting reasoning, and decision lifecycle hooks to call the installed `mason` command. It does not run documentation audits, review committed changes, prepare repair baselines, or enable usage statistics. Use `mason audit`, `mason review`, or `mason check` explicitly for those checks. It creates no project launch scripts, runtime copy, or npm dependencies. Git is required. Standalone installations include Node in the user installation; npm installations use system Node. Neither hooks nor MCP download packages when they run.
+Initialization preserves guidance outside marked Mason blocks, unrelated host settings and explicit disable options. Codex receives an `AGENTS.md` entry point; Claude receives or reuses `CLAUDE.md`, with native `@AGENTS.md` imports where appropriate. Malformed configuration and concurrent edits are rejected. Interrupted initialization can be resumed with `mason init`; interrupted local activation uses `mason setup`.
 
-The setup CLI shows progress while checking configuration, configuring the selected assistant, and checking agent configuration. Interactive terminals show a spinner and elapsed time; redirected output uses plain stderr lines. `mason setup --json` and MCP setup keep their structured output without human progress. A completed setup still needs the activation steps below.
+Commit assistant instructions, `.gitignore`, the selected host's configuration (`.codex/config.toml` and `.codex/hooks.json`, or `.mcp.json` and `.claude/settings.json`), and shared decisions/configuration as appropriate. Local ownership and activation live under ignored `.mason/local/`; observations and receipts are in ignored `.mason/reports/`. Local operations refuse tracked private-state files. Existing repair evidence is retained.
 
-Existing project guidance is preserved outside marked Mason blocks. Codex receives an `AGENTS.md` entry point; Claude Code receives or reuses a `CLAUDE.md` entry point, using a native `@AGENTS.md` import when that is the shared document (or `@../AGENTS.md` from `.claude/CLAUDE.md`). See [Claude Code memory imports](https://code.claude.com/docs/en/memory#agentsmd). Setup merges the named Mason MCP server and its recorded hooks while retaining unrelated settings and explicit disable options. It refuses malformed or ambiguous configuration and concurrent edits. Repeating setup resumes interrupted configuration without running audits or altering existing repair evidence.
+A fresh clone with Mason installed and its MCP configuration trusted can retrieve context before local setup. Shared automatic hooks remain inactive until local or inherited activation exists. Connecting does not create local setup. Native host trust is a separate step; status distinguishes configured from observed use.
 
-Commit assistant instructions, `.gitignore`, the selected host's configuration (`.codex/config.toml` and `.codex/hooks.json`, or `.mcp.json` and `.claude/settings.json`), and any shared `.mason/config.json`, decisions, or optional snapshot. Setup receipts and hook ownership live in ignored `.mason/local/`; repair evidence and observed activation remain in ignored `.mason/reports/`. Setup does not create a top-level `.mason/project.json` marker. Explicit `mason_complete_init` records its timestamp locally and preserves existing shared feature settings.
-
-A fresh clone with Mason installed and its MCP configuration trusted can connect and retrieve context before local setup. MCP instructions and `get_context` explain how to run setup; automatic hooks remain inactive and no local setup or activation is created by connecting. A linked worktree can inherit activation through Git’s common directory; its audit baselines, observations, and reports still belong to that worktree and branch. A local setup record takes precedence, including a record left by teardown to keep the worktree disconnected. All projects use the installed Mason version on their next launch. After upgrading, restart running assistants; setup is needed again only to change or repair project configuration. This layout replaces the earlier generated launchers and per-project runtime pins; there is no automatic migration from those setups. Remove the earlier Mason host entries and generated setup files before setting up again, preserving decisions and repair evidence.
-
-The generated Git ignore block excludes `.mason/` contents by default and allows shared `decisions/`, `reviews/`, `config.json`, and `snapshot.json`. Unexpected scratch or cache files stay ignored. Already tracked files retain Git's normal tracking behavior. Repeating setup with unchanged templates leaves committed configuration unchanged; upgrading the executable alone does not rewrite it. Claude MCP entries explicitly use `type: "stdio"`.
+The generated Git ignore block excludes `.mason/` contents by default and allows shared `decisions/`, `reviews/`, `config.json`, and `snapshot.json`. Unexpected scratch or cache files stay ignored. Already tracked files retain Git's normal tracking behavior. Repeating initialization with unchanged templates leaves committed configuration unchanged; upgrading the executable alone does not rewrite it. Claude MCP entries explicitly use `type: "stdio"`.
 
 Setup checks that its process can find a compatible `mason` on PATH. A desktop assistant may have a different environment: restart it after installation, then check MCP and hook activation. If it still cannot find Mason, check the PATH inherited by that application. Terminal discovery alone does not prove desktop activation.
 
@@ -58,21 +69,23 @@ Finish activation in the host:
 
 Status labels recognized older hook commands `compatible` and offers a template update separately. Disabled hooks, narrowed event matchers, and commands for another operating system still require attention. Status never rewrites configuration.
 
-For an assistant already connected to this build, `mason_init` with `mode: "setup"` and `host: "codex"` or `"claude"` invokes the same engine. Its default quickstart remains read-only. Setup does not build a concept map, approve advisories, or create decision records; decisions should capture actual lessons from subsequent work.
+For an assistant already connected to this build, `mason_init` with `mode: "init"` prepares shared configuration (`dryRun: true` previews it); `mode: "setup"` activates locally. Both accept `host: "codex"` or `"claude"`. Its default quickstart remains read-only. Setup does not build a concept map, approve advisories, or create decision records; decisions should capture actual lessons from subsequent work.
 
 ## Disconnect a project
 
-Available from **0.16.0**:
-
 ```bash
-mason teardown --dry-run       # Preview without changing files
-mason teardown --host codex    # Disconnect one assistant
-mason teardown                 # Disconnect all project assistants
+mason teardown --dry-run                  # Preview local disconnection
+mason teardown --host codex               # Disconnect one assistant locally
+mason teardown                           # Disconnect all local project assistants
+mason teardown --project --dry-run        # Preview shared removal for an MR
+mason teardown --project --host codex     # Remove the shared Codex integration
 ```
 
-Run from the Git repository or a subdirectory, or pass `--dir /path/to/project`. Teardown removes identifiable Mason MCP entries, lifecycle hooks, and local setup records. Shared Mason instruction blocks stay while another configured host needs them. After the last host is disconnected, unchanged Mason blocks are removed too. Restart running assistants to unload their existing sessions, then review and commit the configuration changes normally.
+Local teardown preserves shared files and ownership bookkeeping. Restart the assistant to unload the current session; `mason setup` reconnects. A worktree opt-out suppresses inherited activation while leaving the primary checkout connected.
 
-User settings, unrelated hooks and instruction text are preserved. Setup records file ownership in ignored `.mason/local/integration.json` before changing shared files, so teardown can remove files Mason created when no user content remains. With missing receipts, only recognizable entries and blocks are removed; empty files remain because their creation cannot be attributed to Mason. Edited or ambiguous entries are retained with diagnostics. Fix or remove those entries manually and rerun teardown to finish. Repeating a completed teardown is harmless.
+Explicit `--project` removal removes identifiable Mason MCP entries, lifecycle hooks and local setup records. Shared Mason instruction blocks stay while another configured host needs them. After the last host is removed, unchanged Mason blocks are removed too. Review and commit shared removals. Run `mason init`, followed by `mason setup`, to restore a removed integration.
+
+User settings, unrelated hooks and instruction text are preserved. Initialization records file ownership in ignored `.mason/local/integration.json` before changing shared files, so teardown can remove files Mason created when no user content remains. With missing receipts, only recognizable entries and blocks are removed; empty files remain because their creation cannot be attributed to Mason. Edited or ambiguous entries are retained with diagnostics. Fix or remove those entries manually and rerun teardown to finish. Repeating a completed teardown is harmless.
 
 Decisions, shared configuration, optional maps, repair baselines and reports remain, along with their Git ignore rules. Teardown removes setup receipts across this checkout’s local branch records and keeps a local opt-out record in linked worktrees. It preserves verification history. Disconnecting the primary checkout also stops inherited activation in worktrees without their own setup; independently configured worktrees remain connected. It never uninstalls Mason or changes global host settings. There is no purge option.
 
@@ -158,7 +171,7 @@ Explicit audit checks preserve original repair evidence before later edits can o
 
 Limits: hooks depend on host support and observed events. Explicit audit checks may need committed changes or defer judgment during document edits. Findings may include concurrent edits, and a whole-file decision anchor cannot identify which edit affects a decision. Use a full check before committing, inspect relevant evidence, and keep repairs within the authorized task.
 
-Unified setup generates an inline availability guard. Hooks stay quiet if Mason is absent from PATH or the checkout has neither local nor inherited setup for that host; `mason status` explains inactive setup. Invalid records and failures after activation remain visible. After upgrading to these guards, rerun setup and review the generated changes. Custom commands from manual `install --command` are not automatically guarded. See [data and network behavior](data-and-network.md) and [hook performance](hook-performance.md).
+Unified setup generates an inline availability guard. Hooks stay quiet if Mason is absent from PATH or the checkout has neither local nor inherited setup for that host; `mason status` explains inactive setup. Invalid records and failures after activation remain visible. After upgrading to these guards, run `mason init` and review the generated changes. Custom commands from manual `install --command` are not automatically guarded. See [data and network behavior](data-and-network.md) and [hook performance](hook-performance.md).
 
 Checks reuse cached results only when their dependencies match. Documentation and history, module candidates, documented workspace counts, command manifests, and decision evidence have separate invalidation keys. Unrelated generated build output does not invalidate these checks; explicitly documented generated files and workspace members still do. Changes to a dirty manifest invalidate its checks even when Git's status text is unchanged. Skipped checks are retried. Cache corruption causes recomputation; invalid original baselines or active state remain errors. Concurrent events serialize writes, and interrupted local writers' locks are recovered only when their process is gone. New reports are written atomically. Unchanged tool events reuse the existing full report.
 
@@ -265,9 +278,9 @@ Add to your VS Code settings (`settings.json`):
 
 ## Upgrading from earlier versions
 
-**0.17.1:** Upgrade Mason and restart running assistants to receive the audit, MCP and hook fixes. Rerun `mason setup --host codex` or `--host claude` to refresh the Git ignore allowlist and Claude's explicit stdio entry; review and commit those configuration changes. A fresh clone can connect to MCP before local setup, but automatic hooks still require setup in each checkout. Existing decisions and repair evidence are retained.
+**0.17.1:** Upgrade Mason and restart running assistants to receive the audit, MCP and hook fixes. With the current CLI, run `mason init --host codex` or `--host claude` to refresh the Git ignore allowlist and Claude's explicit stdio entry; review and commit those configuration changes. A fresh clone can connect to MCP before local setup, but automatic hooks still require setup in each checkout. Existing decisions and repair evidence are retained.
 
-**0.17.0:** Upgrade Mason and restart running assistants. Existing PATH-based integrations immediately use the upgraded binary. Rerun `mason setup --host codex` or `--host claude` in each project to refresh the managed guidance for revising existing lessons and the Git ignore rules that retain `.mason/reviews/`. Review and commit these project changes. Existing decisions and repair evidence are preserved; no decision-store migration is required, and setup does not approve findings or decisions.
+**0.17.0:** Upgrade Mason and restart running assistants. Existing PATH-based integrations immediately use the upgraded binary. With the current CLI, run `mason init --host codex` or `--host claude` in each project to refresh the managed guidance for revising existing lessons and the Git ignore rules that retain `.mason/reviews/`. Review and commit these project changes. Existing decisions and repair evidence are preserved; no decision-store migration is required, and setup does not approve findings or decisions.
 
 **0.15.0:** Project integrations use the global `mason` command. Earlier generated setup layouts have no automatic migration: remove their Mason MCP/hook entries and generated setup files, preserve decisions and repair reports, then follow the fresh setup flow above. Once configured, global upgrades apply on the next launch; restart running assistants and review any changed native trust settings.
 

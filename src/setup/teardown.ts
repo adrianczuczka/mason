@@ -32,7 +32,7 @@ const hosts = ["codex", "claude"] as const;
 const object = z.record(z.unknown());
 const json = (value: unknown) => JSON.stringify(value, null, 2) + "\n";
 
-async function planTeardown(root: string, selected: readonly Host[]) {
+async function planProjectTeardown(root: string, selected: readonly Host[]) {
   const edits: Edit[] = [],
     diagnostics: Array<{ path: string; message: string }> = [];
   const inputs = new Map<string, string | null>();
@@ -342,14 +342,73 @@ async function planTeardown(root: string, selected: readonly Host[]) {
   };
 }
 
+async function planLocalTeardown(root: string, selected: readonly Host[]) {
+  const inputs = new Map<string, string | null>();
+  const read = async (file: string) => {
+    const value = await readText(root, file);
+    inputs.set(file, value);
+    return value;
+  };
+  const edits: Edit[] = [];
+  const setupBefore = await read(SETUP_PATH);
+  const setup = setupBefore === null ? null : setupSchema.parse(JSON.parse(setupBefore));
+  const automationBefore = await read(AUTOMATION_PATH);
+  const automation =
+    automationBefore === null ? null : recordSchema.parse(JSON.parse(automationBefore));
+  for (const host of selected) {
+    if (setup) delete setup.hosts[host];
+    if (automation) delete automation.hosts[host];
+  }
+  if (setup) edits.push({ path: SETUP_PATH, before: setupBefore, after: json(setup) });
+  if (automation)
+    edits.push({ path: AUTOMATION_PATH, before: automationBefore, after: json(automation) });
+  // A local opt-out must also suppress activation inherited from the primary checkout.
+  const linked =
+    (await workspace(root)).gitDir !==
+    (await fs.realpath(
+      path.resolve(root, (await git(root, "rev-parse", "--git-common-dir")).trim()),
+    ));
+  if (linked && !setup) {
+    const before = await read(INACTIVE_HOSTS_PATH);
+    const inactive =
+      before === null
+        ? { version: 1, hosts: [] as Host[] }
+        : inactiveHostsSchema.parse(JSON.parse(before));
+    edits.push({
+      path: INACTIVE_HOSTS_PATH,
+      before,
+      after: json({ version: 1, hosts: [...new Set([...inactive.hosts, ...selected])].sort() }),
+    });
+  }
+  const receipts = await fg(
+    selected.map((host) => ".mason/reports/automation/*/setup-" + host + ".json"),
+    { cwd: root, dot: true, onlyFiles: false, followSymbolicLinks: false },
+  );
+  if (receipts.length > 1000)
+    throw new Error("Too many setup receipts; inspect local setup history before teardown.");
+  for (const file of receipts) {
+    const host = file.endsWith("setup-codex.json") ? "codex" : "claude";
+    await loadSetupReceipt(root, file.slice(0, file.lastIndexOf("/")), host);
+    edits.push({ path: file, before: await read(file), after: null });
+  }
+  return {
+    edits: edits.filter((edit) => edit.before !== edit.after),
+    inputs,
+    diagnostics: [] as Array<{ path: string; message: string }>,
+    remainingHost: true,
+  };
+}
+
 export async function teardownProject(
   dir: string,
-  options: { host?: Host; dryRun?: boolean } = {},
+  options: { host?: Host; dryRun?: boolean; project?: boolean } = {},
 ) {
   const { root } = await workspace(dir);
   const selected = options.host ? [options.host] : [...hosts];
   const run = async (apply: boolean) => {
-    const plan = await planTeardown(root, selected);
+    const plan = options.project
+      ? await planProjectTeardown(root, selected)
+      : await planLocalTeardown(root, selected);
     if (apply) {
       // Include the other host and shared instructions in the concurrency check.
       for (const [file, before] of plan.inputs)
@@ -360,6 +419,7 @@ export async function teardownProject(
     return {
       version: 1,
       action: "teardown",
+      scope: options.project ? "project" : "local",
       status: plan.diagnostics.length ? "incomplete" : "complete",
       root,
       hosts: selected,
@@ -372,25 +432,42 @@ export async function teardownProject(
       sharedInstructionsRetained: plan.remainingHost || !!plan.diagnostics.length,
       next: plan.diagnostics.length
         ? "Inspect the retained entries, remove or correct them, then rerun teardown."
-        : "Restart running assistants to unload the project integration. Run mason setup --host codex or --host claude to reconnect.",
+        : options.project
+          ? "Review and commit shared removals. Run mason init to restore shared configuration."
+          : "Restart running assistants to unload the local integration. Shared configuration is retained; run mason setup to reconnect.",
     };
   };
   // A preview (including an untouched project) must not create local state or locks.
   const preview = await run(false);
   if (options.dryRun || !preview.changes.length) return preview;
+  if (
+    (
+      await git(
+        root,
+        "ls-files",
+        "--",
+        ".mason/local",
+        ".mason/reports/setup-lock",
+        ...preview.changes
+          .filter((change) => change.path.startsWith(".mason/reports/"))
+          .map((change) => change.path),
+      )
+    ).trim()
+  )
+    throw new Error("Mason local state must be untracked before teardown.");
   return withLock(root, ".mason/reports/setup-lock", () => run(true));
 }
 
 export function summarizeTeardown(result: Awaited<ReturnType<typeof teardownProject>>) {
   return [
-    `Mason teardown${result.dryRun ? " preview" : ""}: ${result.status}.`,
+    `Mason ${result.scope} teardown${result.dryRun ? " preview" : ""}: ${result.status}.`,
     ...result.changes.map(
       (change) => `  ${result.dryRun ? "Would " : ""}${change.action}: ${change.path}`,
     ),
     ...result.diagnostics.map((item) => `  Retained ${item.path}: ${item.message}`),
     ...(!result.changes.length ? ["No changes."] : []),
     "Shared knowledge, repair evidence, ignore rules and the installed Mason command are retained.",
-    ...(result.sharedInstructionsRetained
+    ...(result.scope === "project" && result.sharedInstructionsRetained
       ? [
           "Shared instruction cleanup is deferred while another host or incomplete removal needs inspection.",
         ]

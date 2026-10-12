@@ -125,8 +125,12 @@ it("advertises the runtime decision inspection flow in the published bundle tool
     const declaredInit = manifest.tools.find(
       (entry: { name: string }) => entry.name === "mason_init",
     );
-    expect(init.inputSchema.properties!.mode).toMatchObject({ enum: ["quickstart", "setup"] });
-    expect(declaredInit.inputSchema.properties.mode.enum).toEqual(["quickstart", "setup"]);
+    expect(init.inputSchema.properties!.mode).toMatchObject({
+      enum: ["quickstart", "init", "setup"],
+    });
+    expect(declaredInit.inputSchema.properties.mode.enum).toEqual(["quickstart", "init", "setup"]);
+    expect(init.inputSchema.properties!.dryRun).toMatchObject({ type: "boolean" });
+    expect(declaredInit.inputSchema.properties.dryRun.type).toBe("boolean");
     const completeInit = tools.find((entry) => entry.name === "mason_complete_init")!;
     expect(completeInit.inputSchema.properties).not.toHaveProperty("confluenceConfigured");
     const declared = manifest.tools.find(
