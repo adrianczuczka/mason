@@ -116,6 +116,19 @@ describe("Claude decision Stop review", { timeout: 30000 }, () => {
     expect(await hook("Stop")).toHaveProperty("decision", "block");
   });
 
+  it("does not treat a missing decision record as confirmed closure", async () => {
+    await edit("export const retries = 2;\n");
+    expect(await hook("Stop")).toHaveProperty("decision", "block");
+    await fs.unlink(path.join(root, ".mason/decisions", id + ".json"));
+    const output = await hook("Stop");
+    expect(output?.decision).toBeUndefined();
+    expect(output?.systemMessage).toContain("could not establish closure");
+    const status = await automationStatus(root);
+    expect(status.verificationStatus).toBe("incomplete");
+    const report = JSON.parse(await fs.readFile(path.join(root, status.reportPath!), "utf8"));
+    expect(report.findings).toEqual([expect.objectContaining({ status: "unverified" })]);
+  });
+
   it("clears a resolved finding on an explicit check so recurrence can block again", async () => {
     await edit("export const retries = 2;\n");
     expect(await hook("Stop")).toHaveProperty("decision", "block");
@@ -150,7 +163,7 @@ describe("Claude decision Stop review", { timeout: 30000 }, () => {
     expect((await hook("Stop"))?.decision).toBeUndefined();
   });
 
-  it("preserves other completion findings when the Stop block is emitted", async () => {
+  it("keeps decision Stop review independent of documentation findings", async () => {
     await hook("PreToolUse", tool);
     await write("src/client.ts", "export const retries = 2;\n");
     await write("README.md", "See `src/missing.ts`.\n");
@@ -158,7 +171,8 @@ describe("Claude decision Stop review", { timeout: 30000 }, () => {
     const output = await hook("Stop");
     expect(output?.decision).toBe("block");
     expect(output?.reason).toContain(id);
-    expect(output?.reason).toContain("src/missing.ts");
+    expect(output?.reason).not.toContain("src/missing.ts");
+    expect((await automate(root, { event: "task_end" })).message).toContain("src/missing.ts");
   });
 
   it("names every affected decision in one block", async () => {

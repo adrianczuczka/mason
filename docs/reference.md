@@ -72,8 +72,6 @@ Mason records assertions of review; it does not authenticate reviewer identity, 
 | Tool | Purpose |
 |---|---|
 | `mason_init` | Read-only audit/review findings by default; optional `base`, CI `evidence` (Vitest, SARIF, or native-validator JSON). `mode: "setup", host: "codex"` (or `"claude"`) configures MCP, instructions, and hooks using `mason` on PATH using the shared setup engine. |
-| `mason_repair` | Prepare an audit repair baseline; verify the same original findings after edits. Reports unresolved advisories and unavailable checks. |
-| `review_advisory` | Prepare an original advisory's evidence, then record an authorized assessment. Dependency advisories also support one-step `dismiss` with `reasonCode` and `note`; `no-dependency-claims` tracks document content, while `unrelated-manifest-change` also tracks scoped manifests. Decision findings route to `review_decision`. |
 | `mason_automation` | Inspect configured hooks, observed events, pending proposals and notification baselines, or check all retained findings without consuming pending notifications. |
 | `mason_complete_init` | Records assistant instruction setup in ignored local state, with feature settings in shared configuration; preserves prior settings on repeated calls. |
 | `save_snapshot` | Directly save or update a legacy map; the managed build workflow is removed. |

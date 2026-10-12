@@ -5,7 +5,7 @@ import os from "node:os";
 import { computeAudit } from "../src/audit/audit.js";
 import { prepareRepair, verifyRepair } from "../src/audit/repair.js";
 import { runAuditCli } from "../src/audit/cli.js";
-import { masonInit, masonRepair } from "../src/mcp/tools.js";
+import { masonInit } from "../src/mcp/tools.js";
 import { CHECKS } from "../src/audit/checks/index.js";
 import { commitAll, git, initGitRepo } from "./helpers.js";
 
@@ -257,34 +257,14 @@ describe("audit repair", () => {
     expect((await verifyRepair(root, prepared.baselinePath)).findings).toHaveLength(25);
   });
 
-  it("exposes preparation and verification through the CLI and MCP without changing ordinary exit codes", async () => {
+  it("exposes preparation and verification through the CLI without changing ordinary exit codes", async () => {
     await seed();
     const preparedCli = await cli(["--prepare-repair", "--checks", "deleted-reference", "--json"]);
     expect(preparedCli.code).toBe(1);
     const prepared = JSON.parse(preparedCli.out);
     expect((await cli(["--verify-repair", prepared.baselinePath])).code).toBe(1);
-    const preparedMcp = JSON.parse(
-      await masonRepair(root, { action: "prepare", checks: ["deleted-reference"] }),
-    );
-    expect(preparedMcp.workOrder).toContain(preparedMcp.baselinePath);
-    expect(preparedMcp.workOrder).toContain("setup-only");
     await write("CLAUDE.md", "Source: `src/kept.ts`.\n");
     expect((await cli(["--verify-repair", prepared.baselinePath])).code).toBe(0);
-    expect(
-      JSON.parse(
-        await masonRepair(root, { action: "verify", baselinePath: preparedMcp.baselinePath }),
-      ).status,
-    ).toBe("verified");
-    expect(JSON.parse(await masonRepair(root, { action: "verify" })).status).toBe("unavailable");
-    expect(
-      JSON.parse(
-        await masonRepair(root, {
-          action: "verify",
-          baselinePath: preparedMcp.baselinePath,
-          checks: ["new-module"],
-        }),
-      ).status,
-    ).toBe("unavailable");
     expect(
       (await cli(["--verify-repair", prepared.baselinePath, "--checks", "new-module"])).code,
     ).toBe(2);

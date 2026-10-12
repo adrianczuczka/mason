@@ -62,64 +62,6 @@
       }
     },
     {
-      "name": "mason_repair",
-      "description": "Track documentation repairs against original audit evidence. prepare saves a local baseline and returns a scoped work order; verify reads that baseline and reports resolved, unresolved, review-required, unverified, and new findings. Suppressed advisories remain unresolved. Does not edit documentation or approve decisions. No map required.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "dir": { "type": "string", "description": "Absolute path to the project root directory" },
-          "action": { "type": "string", "enum": ["prepare", "verify"] },
-          "baselinePath": { "type": "string", "description": "Original baseline path returned by prepare; required for verify." },
-          "checks": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["deleted-reference", "new-module", "stale-count", "dead-command", "deps-changed", "decision-anchor-drift"] }, "description": "Optional audit check subset for prepare. Verification always uses the original checks." }
-        },
-        "required": ["dir", "action"]
-      }
-    },
-    {
-      "name": "review_advisory",
-      "description": "Prepare an assessment of an original repair advisory and its exact repository scope, then record authorized addressed, inapplicable or deferred outcomes with reviewToken, reviewer and note. Relevant changes reopen reviews; unrelated commits preserve them. Records belong in Git. Decision findings route to review_decision; this tool never approves decisions. Recorded identities are assertions, not authenticated approvals. For dependency advisories, action dismiss with reasonCode and note records a one-step dismissal without a token or reviewer. no-dependency-claims reopens only on document content changes; unrelated-manifest-change also tracks scoped manifests.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "dir": {
-            "type": "string"
-          },
-          "baselinePath": {
-            "type": "string"
-          },
-          "findingId": {
-            "type": "string"
-          },
-          "action": {
-            "type": "string",
-            "enum": [
-              "prepare",
-              "addressed",
-              "inapplicable",
-              "deferred",
-              "dismiss"
-            ],
-            "default": "prepare"
-          },
-          "reasonCode": { "type": "string", "enum": ["no-dependency-claims", "unrelated-manifest-change"] },
-          "reviewer": {
-            "type": "string"
-          },
-          "note": {
-            "type": "string"
-          },
-          "reviewToken": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "dir",
-          "baselinePath",
-          "findingId"
-        ]
-      }
-    },
-    {
       "name": "mason_complete_init",
       "description": "Record assistant instruction setup locally in ignored .mason/local/project.json, with feature settings in shared .mason/config.json. Other tools work without this marker. Repeated calls preserve the original setup time and existing settings.",
       "inputSchema": {

@@ -49,6 +49,8 @@ for (const host of hosts) for (const task of tasks) for (const arm of arms) {
       if (result?.decision === "block") continuations++;
       return result;
     };
+    // The retired automatic audit path is not exercised: replay explicit capture.
+    auto(binary, root, ["check", "--json"]);
     fire("SessionStart");
     fire("PreToolUse", "source");
     if (task === "rename") {
@@ -62,7 +64,7 @@ for (const host of hosts) for (const task of tasks) for (const arm of arms) {
       fire("PostToolUse", "docs");
     }
     fire("Stop");
-    session = { ok: true, kind: "deterministic-replay", costUsd: 0 };
+    session = { ok: true, kind: "deterministic-replay", captureMode: "explicit-check", costUsd: 0 };
   } else session = await runHost({ host, arm, cwd: root, prompt: task === "rename" ? PROMPT : CONTROL_PROMPT,
     transcript: path.join(output, name + "-transcript.jsonl"), timeoutMs, budgetUsd, model: values.model });
   const evaluation = await grade(root, host, arm, binary, initial, task, continuations);

@@ -1,5 +1,7 @@
 # Hook performance
 
+Historical audit-hook measurements below describe the earlier implementation. The current unreleased candidate separates decision lifecycle checks from general documentation audits; no new comparative timing claim is established by that change.
+
 [← Mason](../README.md)
 
 Lifecycle hooks are synchronous and still spawn a process for each event. Known read-only tools now record lifecycle observations without running the audit inventory, verifier, or execution receipt writer. These observations do not refresh the last audit verdict. Shell, editor, unknown, and MCP tools retain before/after evidence checks; session start, prompt submission, and stop still check the repository. Narrowing to editor tools or removing pre-tool capture would lose shell edits or their original evidence.

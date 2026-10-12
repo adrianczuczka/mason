@@ -8,6 +8,7 @@ import { installAutomation, installedAutomation } from "../src/automation/instal
 import { workspace } from "../src/automation/evidence.js";
 import { runAutomationCli } from "../src/automation/cli.js";
 import { masonAutomation } from "../src/mcp/tools.js";
+import { upsertDecision } from "../src/decisions/decisions.js";
 import { CHECKS } from "../src/audit/checks/index.js";
 import { commitAll, git, initGitRepo } from "./helpers.js";
 
@@ -49,9 +50,10 @@ afterEach(async () => {
 // Each lifecycle case runs many real Git processes; allow for parallel CI load.
 describe("portable automation", { timeout: 20000 }, () => {
   it.each(["claude", "codex"] as const)(
-    "captures a %s rename before documentation edits and verifies through the final commit",
+    "keeps %s hooks quiet for documentation changes while explicit checks retain original evidence",
     async (host) => {
       await seed();
+      await automate(root, { event: "session_start" });
       await hook(host, "SessionStart");
       const tool = {
         tool_name: "Bash",
@@ -61,13 +63,11 @@ describe("portable automation", { timeout: 20000 }, () => {
       await hook(host, "PreToolUse", tool);
       await fs.rename(path.join(root, "old-module"), path.join(root, "greeting-module"));
       const output = await hook(host, "PostToolUse", tool);
-      expect(output).toMatchObject({
-        hookSpecificOutput: {
-          hookEventName: "PostToolUse",
-          additionalContext: expect.stringContaining("old-module/index.js"),
-        },
-      });
-      expect(JSON.stringify(await hook(host, "Stop"))).toContain("old-module/index.js");
+      expect(output).toBeNull();
+      expect(await hook(host, "Stop")).toBeNull();
+      expect((await automate(root, { event: "task_end" })).message).toContain(
+        "old-module/index.js",
+      );
       const before = await automationStatus(root);
       expect(before.baselinePaths).toHaveLength(2);
       const saved = await Promise.all(
@@ -99,6 +99,7 @@ describe("portable automation", { timeout: 20000 }, () => {
       '{"devDependencies":{"typescript":"5"},"scripts":{"test":"node --test","build":"tsc"}}',
     );
     await commitAll(root, "manifest changes");
+    await automate(root, { event: "session_start" });
     await hook("claude", "SessionStart");
     const original = (await automationStatus(root)).baselinePaths;
     await write(
@@ -172,7 +173,7 @@ describe("portable automation", { timeout: 20000 }, () => {
   });
 
   it.each(["claude", "codex"] as const)(
-    "reports %s new issues once at completion without a repair loop",
+    "leaves %s documentation findings to explicit checks",
     async (host) => {
       await seed();
       await hook(host, "SessionStart");
@@ -181,8 +182,10 @@ describe("portable automation", { timeout: 20000 }, () => {
       await fs.rename(path.join(root, "old-module"), path.join(root, "greeting-module"));
       await hook(host, "PostToolUse", tool);
       const completion = await hook(host, "Stop");
-      expect(completion).toHaveProperty("systemMessage");
-      expect(completion).not.toHaveProperty("decision");
+      expect(completion).toBeNull();
+      expect((await automate(root, { event: "task_end" })).message).toContain(
+        "old-module/index.js",
+      );
       expect(await hook(host, "Stop", { stop_hook_active: true })).toBeNull();
       expect(await hook(host, "Stop")).toBeNull();
     },
@@ -195,11 +198,46 @@ describe("portable automation", { timeout: 20000 }, () => {
     const state = JSON.parse(
       await fs.readFile(path.join(root, ws.directory, "state.json"), "utf8"),
     );
-    const report = JSON.parse(await fs.readFile(path.join(root, state.latest), "utf8"));
+    const report = JSON.parse(await fs.readFile(path.join(root, state.guidance.path), "utf8"));
     expect(report.capture).toBe("unknown");
     expect(report.status).toBe("incomplete");
     await fs.rm(path.join(root, ".git"), { recursive: true });
     expect(JSON.stringify(await hook("codex", "Stop"))).toContain("unavailable");
+  });
+
+  it("checks decision drift without reading damaged audit baselines or advancing audit receipts", async () => {
+    await seed();
+    const audit = await automate(root, { event: "session_start" });
+    const ws = await workspace(root);
+    const statePath = path.join(root, ws.directory, "state.json");
+    const before = JSON.parse(await fs.readFile(statePath, "utf8"));
+    const baseline = path.join(root, audit.report.baselinePaths[0]);
+    await fs.writeFile(baseline, "retained damaged audit evidence");
+    const check = vi.spyOn(CHECKS, "deleted-reference");
+    await upsertDecision(root, {
+      title: "Preserve greeting",
+      body: "The greeting remains stable.",
+      category: "decision",
+      files: ["old-module/index.js"],
+    });
+    await hook("claude", "PreToolUse", { tool_name: "Bash", tool_use_id: "source" });
+    await write("old-module/index.js", "export const greeting = 'changed';\n");
+    await hook("claude", "PostToolUse", { tool_name: "Bash", tool_use_id: "source" });
+    expect(await hook("claude", "Stop")).toHaveProperty("decision", "block");
+    expect(check).not.toHaveBeenCalled();
+    const after = JSON.parse(await fs.readFile(statePath, "utf8"));
+    expect(after.latest).toBe(before.latest);
+    expect(after.fingerprint).toBe(before.fingerprint);
+    expect(after.baselines).toEqual(before.baselines);
+    expect(after.analysis).toEqual(before.analysis);
+    expect(await fs.readFile(baseline, "utf8")).toBe("retained damaged audit evidence");
+    const status = await automationStatus(root);
+    expect(status.scope).toBe("decision-guidance");
+    expect(status.auditReportPath).toBe(audit.report.reportPath);
+    const report = JSON.parse(await fs.readFile(path.join(root, status.reportPath!), "utf8"));
+    expect(report.checks.ran).toEqual(["decision-anchor-drift"]);
+    expect(report.baselinePaths).toEqual([]);
+    await expect(automate(root, { event: "task_end" })).rejects.toThrow();
   });
 
   it("does not overwrite corrupt active state or modified original baselines", async () => {
@@ -297,14 +335,17 @@ describe("portable automation", { timeout: 20000 }, () => {
     );
   });
 
-  it("records unavailable docs once and begins capturing when instruction files appear", async () => {
+  it("keeps doc-free guidance valid and captures audit evidence only on explicit checks", async () => {
     await write("source.js", "export const source = true;");
     await commitAll(root, "no docs");
-    expect(JSON.stringify(await hook("codex", "SessionStart"))).toContain("unavailable");
+    expect(await hook("codex", "SessionStart")).toBeNull();
     expect(
       await hook("codex", "PreToolUse", { tool_name: "Bash", tool_use_id: "read" }),
     ).toBeNull();
-    expect((await automationStatus(root)).verificationStatus).toBe("unavailable");
+    expect((await automationStatus(root)).verificationStatus).toBe("verified");
+    expect((await automationStatus(root)).scope).toBe("decision-guidance");
+    expect((await automationStatus(root)).baselinePaths).toEqual([]);
+    expect((await automate(root, { event: "task_end" })).report.status).toBe("unavailable");
     await write("AGENTS.md", "The `source.js` entry point.\n");
     await commitAll(root, "instructions");
     expect((await automate(root, { event: "task_end" })).report.baselinePaths).toHaveLength(1);

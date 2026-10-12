@@ -1,6 +1,10 @@
 import { hasErrorCode } from "../utils/validation.js";
 import { captureAnchorScopes, type AnchorCapture } from "../decisions/anchors.js";
-import { loadDecisionStore, readDecisionInputs } from "../decisions/decisions.js";
+import {
+  loadDecisionStore,
+  readDecisionInputs,
+  type DecisionRecord,
+} from "../decisions/decisions.js";
 import { decisionAnchors, decisionInspectionDigest } from "../decisions/provenance.js";
 import { includedCheckPaths } from "../audit/policy.js";
 import { loadProjectConfig } from "../utils/files.js";
@@ -61,6 +65,76 @@ export interface Inputs {
   docs: Record<string, string | null>;
   keys: Record<CheckName, string>;
   decisionEvidence: Record<string, { digest: string; capture: AnchorCapture }>;
+}
+
+async function captureDecisionEvidence(root: string, records: DecisionRecord[]) {
+  const scopes = new Map(
+    records
+      .filter((record) => record.status === "active")
+      .map((record) => {
+        const anchors = decisionAnchors(record).sort();
+        return [JSON.stringify(anchors), anchors] as const;
+      }),
+  );
+  // Dirty path/status alone cannot detect another edit to the same file.
+  // Preserve each scope's bound: a large union must not hide smaller complete captures.
+  const captures = await captureAnchorScopes(root, [...scopes.values()]);
+  const capturesByScope = new Map([...scopes.keys()].map((key, index) => [key, captures[index]]));
+  const decisionEvidence: Inputs["decisionEvidence"] = {};
+  for (const record of records.filter((record) => record.status === "active")) {
+    const key = JSON.stringify(decisionAnchors(record).sort());
+    decisionEvidence[record.id] = {
+      digest: decisionInspectionDigest(record),
+      capture: capturesByScope.get(key)!,
+    };
+  }
+  return decisionEvidence;
+}
+
+/** Guidance inputs exclude documentation claims, repair baselines and advisory reviews. */
+export async function readGuidanceInputs(root: string): Promise<Inputs> {
+  const [head, raw, store, shallowPath, replacements] = await Promise.all([
+    git(root, "rev-parse", "HEAD").then((text) => text.trim()),
+    readDecisionInputs(root),
+    loadDecisionStore(root),
+    git(root, "rev-parse", "--git-path", "shallow"),
+    git(root, "for-each-ref", "--format=%(refname) %(objectname)", "refs/replace"),
+  ]);
+  if (raw.diagnostics.length || store.diagnostics.length)
+    throw new Error(
+      "Cannot read decision inputs: " +
+        [...raw.diagnostics, ...store.diagnostics].map((d) => `${d.path}: ${d.message}`).join("; "),
+    );
+  const decisionEvidence = await captureDecisionEvidence(root, store.records);
+  const shallow = await fs
+    .readFile(path.resolve(root, shallowPath.trim()), "utf8")
+    .catch((error: unknown) => {
+      if (hasErrorCode(error, "ENOENT")) return null;
+      throw error;
+    });
+  const fingerprint = hash([
+    "guidance",
+    engineVersion,
+    head,
+    raw.inputs,
+    decisionEvidence,
+    shallow,
+    replacements,
+  ]);
+  return {
+    fingerprint,
+    head,
+    decisionEvidence,
+    docs: {},
+    keys: {
+      "deleted-reference": "",
+      "new-module": "",
+      "stale-count": "",
+      "dead-command": "",
+      "deps-changed": "",
+      "decision-anchor-drift": fingerprint,
+    },
+  };
 }
 
 export async function readInputs(root: string): Promise<Inputs> {
@@ -172,27 +246,8 @@ async function collectInputs(root: string): Promise<Inputs> {
       ])
     : ["", ""];
   const records = decisions.length ? (await loadDecisionStore(root)).records : [];
-  const scopes = new Map(
-    records
-      .filter((record) => record.status === "active")
-      .map((record) => {
-        const anchors = decisionAnchors(record).sort();
-        return [JSON.stringify(anchors), anchors] as const;
-      }),
-  );
-  // Dirty path/status alone cannot detect another edit to the same file.
-  // Preserve each scope's bound: a large union must not hide smaller complete captures.
-  const captures = await captureAnchorScopes(root, [...scopes.values()]);
-  const capturesByScope = new Map([...scopes.keys()].map((key, index) => [key, captures[index]]));
-  const decisionEvidence: Inputs["decisionEvidence"] = {};
-  for (const record of records.filter((record) => record.status === "active")) {
-    const key = JSON.stringify(decisionAnchors(record).sort());
-    decisionEvidence[record.id] = {
-      digest: decisionInspectionDigest(record),
-      capture: capturesByScope.get(key)!,
-    };
-  }
-  const anchorContent = [...scopes.keys()].map((key, index) => [key, captures[index]]);
+  const decisionEvidence = await captureDecisionEvidence(root, records);
+  const anchorContent = Object.entries(decisionEvidence);
   const common = [8, engineVersion, head, shallow, replacements, docContents, auditPolicy];
   const keys: Record<CheckName, string> = {
     "deleted-reference": hash([common, claims, docStatus]),

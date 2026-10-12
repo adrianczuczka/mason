@@ -9,7 +9,6 @@ import { computeAudit } from "../src/audit/audit.js";
 import { automate } from "../src/automation/runtime.js";
 import { upsertDecision, loadDecisions } from "../src/decisions/decisions.js";
 import { reviewDecision } from "../src/decisions/review.js";
-import { masonReviewAdvisory } from "../src/mcp/tools.js";
 import { git, initGitRepo, commitAll } from "./helpers.js";
 import { CHECKS } from "../src/audit/checks/index.js";
 
@@ -273,7 +272,7 @@ describe("durable advisory assessments", () => {
     expect((await automate(root, { event: "task_end" })).report.status).toBe("verified");
   });
 
-  it("exposes preparation and recording through CLI and MCP", async () => {
+  it("exposes preparation and recording through the CLI", async () => {
     const target = await seed();
     const output: string[] = [];
     const code = await runAuditCli(
@@ -291,17 +290,31 @@ describe("durable advisory assessments", () => {
     );
     expect(code).toBe(0);
     const prepared = JSON.parse(output[0]);
+    output.length = 0;
     expect(
-      JSON.parse(
-        await masonReviewAdvisory(root, {
-          ...target,
-          action: "inapplicable",
-          reviewToken: prepared.reviewToken,
-          reviewer: "Fixture reviewer",
-          note: "Reviewed",
-        }),
-      ).status,
-    ).toBe("recorded");
+      await runAuditCli(
+        [
+          "review",
+          "--dir",
+          root,
+          "--baseline",
+          target.baselinePath,
+          "--finding",
+          target.findingId,
+          "--outcome",
+          "inapplicable",
+          "--token",
+          prepared.reviewToken,
+          "--reviewer",
+          "Fixture reviewer",
+          "--note",
+          "Reviewed",
+          "--json",
+        ],
+        { out: (text) => output.push(text), err: (text) => output.push(text) },
+      ),
+    ).toBe(0);
+    expect(JSON.parse(output[0]).status).toBe("recorded");
   });
 
   it("routes decisions to existing reviews and preserves acceptance, reopening and retirement", async () => {

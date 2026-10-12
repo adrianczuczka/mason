@@ -3,7 +3,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { inactiveSetupMessage } from "../setup/launcher.js";
 import { attributionSchema } from "../decisions/provenance.js";
-import { advisoryReviewRequest } from "../audit/advisory-review.js";
 import {
   decisionTitleSchema,
   decisionBodySchema,
@@ -22,8 +21,6 @@ import {
   verifySnapshot,
   masonCompleteInit,
   masonInit,
-  masonRepair,
-  masonReviewAdvisory,
   masonAutomation,
   saveSnapshotData,
 } from "./tools.js";
@@ -91,51 +88,6 @@ export function createMcpServer(): McpServer {
     },
     async ({ dir, action }) => ({
       content: [{ type: "text", text: await masonAutomation(dir, action) }],
-    }),
-  );
-
-  server.tool(
-    "mason_repair",
-    "Track documentation repairs against original audit evidence. prepare saves a local baseline and returns a scoped work order; verify reads that baseline and reports resolved, unresolved, review-required, unverified, and new findings. Suppressed advisories remain unresolved. Does not edit documentation or approve decisions. No map required.",
-    {
-      dir: z.string().describe("Absolute path to the project root directory"),
-      action: z.enum(["prepare", "verify"]),
-      baselinePath: z
-        .string()
-        .optional()
-        .describe("Original baseline path returned by prepare; required for verify."),
-      checks: z
-        .array(
-          z.enum([
-            "deleted-reference",
-            "new-module",
-            "stale-count",
-            "dead-command",
-            "deps-changed",
-            "decision-anchor-drift",
-          ]),
-        )
-        .min(1)
-        .optional()
-        .describe(
-          "Optional audit check subset for prepare. Verification always uses the original checks.",
-        ),
-    },
-    async ({ dir, action, baselinePath, checks }) => {
-      const result = await masonRepair(dir, { action, baselinePath, checks });
-      return { content: [{ type: "text", text: result }] };
-    },
-  );
-
-  server.tool(
-    "review_advisory",
-    "Prepare an assessment of an original repair advisory and its exact repository scope, then record authorized addressed, inapplicable or deferred outcomes with reviewToken, reviewer and note. Relevant changes reopen reviews; unrelated commits preserve them. Records belong in Git. Decision findings route to review_decision; this tool never approves decisions. Recorded identities are assertions, not authenticated approvals. For dependency advisories, action dismiss with reasonCode and note records a one-step dismissal without a token or reviewer. no-dependency-claims reopens only on document content changes; unrelated-manifest-change also tracks scoped manifests.",
-    {
-      dir: z.string().describe("Absolute path to the project root"),
-      ...advisoryReviewRequest.shape,
-    },
-    async ({ dir, ...request }) => ({
-      content: [{ type: "text", text: await masonReviewAdvisory(dir, request) }],
     }),
   );
 

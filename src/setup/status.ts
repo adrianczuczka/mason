@@ -43,6 +43,7 @@ export async function setupStatus(dir: string) {
       observedEvents: string[];
       contextCalls: number;
       verificationStatus: string;
+      verificationScope: string;
       pending: string[];
       updates: string[];
     }
@@ -136,6 +137,7 @@ export async function setupStatus(dir: string) {
         : "disabled-or-changed",
       observedEvents,
       contextCalls: observation?.contextCalls ?? 0,
+      verificationScope: automation.scope,
       verificationStatus:
         automation.status === "current"
           ? (automation.verificationStatus ?? "unavailable")
@@ -183,7 +185,7 @@ export function summarizeActivation(status: Awaited<ReturnType<typeof setupStatu
       `${host}: ${state.status}`,
       `  Runtime: ${state.runtime}; MCP: ${state.mcp}; instructions: ${state.instructions}.`,
       `  Hooks: ${state.hookConfiguration}; observed: ${state.observedEvents.join(", ") || "none"}.`,
-      `  Task context requests: ${state.contextCalls}; verification: ${state.verificationStatus}.`,
+      `  Task context requests: ${state.contextCalls}; verification: ${state.verificationStatus} (${state.verificationScope}).`,
       ...state.pending.map((message) => "  Next: " + message),
     );
     lines.push(...state.updates.map((message) => "  Optional: " + message));

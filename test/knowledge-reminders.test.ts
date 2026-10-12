@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { configureStopBlock } from "../src/automation/config.js";
 import { pendingKnowledge } from "../src/decisions/pending.js";
 import { upsertDecision } from "../src/decisions/decisions.js";
 import { reviewDecision } from "../src/decisions/review.js";
@@ -318,6 +319,13 @@ it.each(["claude", "codex"] as const)(
     await fs.writeFile(path.join(root, "src/main.ts"), "present");
     await fs.writeFile(path.join(root, "README.md"), "See `src/main.ts`.\n");
     await commitAll(root, "document file");
+    await configureStopBlock(root, "off");
+    await upsertDecision(root, {
+      title: "Main entry",
+      body: "Preserve the entry point contract.",
+      category: "decision",
+      files: ["src/main.ts"],
+    });
     await invoke("SessionStart");
     const tool = { tool_name: "Bash", tool_use_id: "delete" };
     await invoke("PreToolUse", tool);
@@ -335,7 +343,7 @@ it.each(["claude", "codex"] as const)(
     });
     expect(await invoke("Stop")).toBeNull();
     // Fix within the task, then verify recurrence reaches the agent again.
-    await fs.writeFile(path.join(root, "src/main.ts"), "restored");
+    await fs.writeFile(path.join(root, "src/main.ts"), "present");
     expect(await invoke("UserPromptSubmit")).toBeNull();
     await fs.unlink(path.join(root, "src/main.ts"));
     expect(await invoke("UserPromptSubmit")).toMatchObject({

@@ -5,6 +5,7 @@ import os from "node:os";
 import { initGitRepo, commitAll, git } from "./helpers.js";
 import { runAutomationCli } from "../src/automation/cli.js";
 import { runAutomationHook } from "../src/automation/adapters.js";
+import { upsertDecision, loadDecisions } from "../src/decisions/decisions.js";
 import { automate } from "../src/automation/runtime.js";
 import {
   configureUsefulness,
@@ -49,6 +50,13 @@ it("is disabled by default and does not create local tracking files", async () =
 
 it("tracks real delivery, resolution, supplied ratings and retrieval without saving payloads", async () => {
   await configureUsefulness(root, true);
+  await upsertDecision(root, {
+    title: "Greeting entry",
+    body: "The greeting contract remains stable.",
+    category: "decision",
+    files: ["old/index.js"],
+  });
+  const lesson = (await loadDecisions(root))[0];
   await hook("SessionStart");
   const tool = { tool_name: "Bash", tool_use_id: "move" };
   await hook("PreToolUse", tool);
@@ -56,13 +64,21 @@ it("tracks real delivery, resolution, supplied ratings and retrieval without sav
   expect(JSON.stringify(await hook("PostToolUse", tool))).toContain("old/index.js");
   const first = (await usefulnessStatus(root)).sessions[0];
   const id = Object.keys(first.findings).find(
-    (id) => first.findings[id].type === "deleted-reference",
+    (id) => first.findings[id].type === "decision-anchor-drift",
   )!;
   expect(id).toBeTruthy();
   expect(first.findings[id].channels).toContain("agent");
   await rateUsefulness(root, first.id, id, "helpful");
   await hook("PreToolUse", { ...tool, tool_use_id: "docs" });
   await write("README.md", "Use `new/index.js`.\n");
+  await commitAll(root, "rename source and documentation");
+  await upsertDecision(root, {
+    id: lesson.id,
+    title: lesson.title,
+    body: lesson.body,
+    category: lesson.category,
+    files: ["new/index.js"],
+  });
   await hook("PostToolUse", { ...tool, tool_use_id: "docs" });
   await hook("PostToolUse", {
     tool_name: "mcp__mason__get_context",

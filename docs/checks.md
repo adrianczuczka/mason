@@ -56,7 +56,7 @@ Issues drive the exit code; **advisories never do**. Specific historical depende
 
 ### Track a repair through verification
 
-Ask your assistant: *"Use Mason to prepare a repair, fix the documented issues within scope, and verify against the original findings."* The assistant calls `mason_repair` with `action: "prepare"`, makes grounded edits, and then calls it with `action: "verify"` and the returned `baselinePath`. Setup alone only installs assistant instructions; repairing existing claims needs to be part of your request.
+Ask your assistant: *"Use Mason to prepare a repair, fix the documented issues within scope, and verify against the original findings."* The assistant runs `mason audit --prepare-repair --json`, makes grounded edits, then runs `mason audit --verify-repair <baselinePath> --json` against the returned original baseline. Setup alone only installs assistant instructions; repairing existing claims needs to be part of your request.
 
 The CLI provides the same workflow:
 
@@ -76,11 +76,11 @@ Ordinary audit exit codes remain **0** for no issues (advisories may exist), **1
 
 ### Review an advisory
 
-An advisory can remain true after review: a manifest changed, but the instructions still apply. Ask your assistant to assess that finding. `review_advisory` takes the original `baselinePath`, the `findingId` from verification or automation, and `action: "prepare"`. It returns the original evidence, scoped Git state, review history, a bounded diff preview, and a `reviewToken` without writing anything.
+An advisory can remain true after review: a manifest changed, but the instructions still apply. Ask your assistant to assess that finding. Run `mason audit review --baseline <baselinePath> --finding <findingId> --json`, using the original baseline and finding ID from verification or automation. It returns the original evidence, scoped Git state, review history, a bounded diff preview, and a `reviewToken` without writing anything.
 
-After inspecting the evidence, record the authorized assessment with `action: "addressed"`, `"inapplicable"`, or `"deferred"`, the actual `reviewer`, a reason in `note`, and that token. Relevant document and source edits must be committed; unrelated local work can remain. Changed evidence or competing reviews invalidate the prepared token. Deferral remains outstanding.
+After inspecting the evidence, record the authorized assessment with `--outcome addressed|inapplicable|deferred`, the actual `--reviewer`, a reason in `--note`, and that `--token`. Relevant document and source edits must be committed; unrelated local work can remain. Changed evidence or competing reviews invalidate the prepared token. Deferral remains outstanding.
 
-CLI equivalent:
+Prepare and record through the CLI:
 
 ```sh
 mason audit review --baseline .mason/reports/repairs/<baseline>.json --finding <finding-id> --json
@@ -100,7 +100,7 @@ mason audit review --baseline .mason/reports/repairs/<id>.json --finding <findin
   --note "This README only describes navigation, not dependency requirements."
 ```
 
-The MCP equivalent is `review_advisory` with `action: "dismiss"`, `baselinePath`, `findingId`, `reasonCode`, and `note`. No preparation, token or named reviewer is required. Choose `no-dependency-claims` when the document makes no such claims: the dismissal binds to the committed document content and survives manifest-only changes, including uncommitted manifest edits. Choose `unrelated-manifest-change` when the inspected manifest changes do not affect the guidance: later changes to the document or scoped manifests reopen it. The relevant scope must be committed before dismissing. Dismissals take effect locally; commit their records to share them. A dismissal records a reasoned disposition, not approval or a proof of correctness. Other advisory types retain the prepared assessment workflow.
+No preparation, token or named reviewer is required. Choose `no-dependency-claims` when the document makes no such claims: the dismissal binds to the committed document content and survives manifest-only changes, including uncommitted manifest edits. Choose `unrelated-manifest-change` when the inspected manifest changes do not affect the guidance: later changes to the document or scoped manifests reopen it. The relevant scope must be committed before dismissing. Dismissals take effect locally; commit their records to share them. A dismissal records a reasoned disposition, not approval or a proof of correctness. Other advisory types retain the prepared assessment workflow.
 
 Decision findings route to `review_decision`. Acceptance, reaffirmation or retirement must cover the original finding and retain usable history; proposals alone never close it. An advisory assessment cannot approve an engineering decision. Recorded reviewer identities and dispositions are assertions for normal project review, not authenticated approvals or proof of correctness. Missing, malformed, skipped or conflicting evidence remains unverified. If setup previously ignored all `.mason/` data, rerun setup to allow versioning `.mason/reviews/`.
 

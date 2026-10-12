@@ -240,8 +240,8 @@ it("validates a matched block through the actual observer without any model call
       completed.every((r: any) => r.grade.pass && r.integrationValid && r.session.costUsd === 0),
     ).toBe(true);
     const hooked = completed.find((r: any) => r.arm === "hooks");
-    expect(hooked.observation.agentNotices.length).toBeGreaterThan(0);
-    expect(hooked.observation.agentNotices[0].text).toContain("src/message/index.mjs");
+    // This documentation-only fixture has no decision anchors; lifecycle hooks stay quiet.
+    expect(hooked.observation.agentNotices).toEqual([]);
     expect(hooked.observation.events).toEqual(
       expect.arrayContaining(["SessionStart", "PreToolUse", "PostToolUse", "Stop"]),
     );

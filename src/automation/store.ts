@@ -37,6 +37,7 @@ export const stateSchema = z.object({
   updatedAt: z.string(),
   fingerprint: z.string().nullable(),
   latest: z.string().nullable(),
+  guidance: z.object({ fingerprint: z.string(), path: z.string() }).optional(),
   notifications: notificationStateSchema.optional(),
   agentNotifications: notificationStateSchema.optional(),
   analysis: z

@@ -1,3 +1,4 @@
+import { automate } from "../src/automation/runtime.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -205,12 +206,7 @@ describe("adoption workflows", { timeout: 30000 }, () => {
       tool_name: "Bash",
       tool_use_id: "rename",
     });
-    expect(JSON.parse(checked)).toMatchObject({
-      hookSpecificOutput: {
-        hookEventName: "PostToolUse",
-        additionalContext: expect.stringContaining("src/main.ts"),
-      },
-    });
+    expect(checked).toBe("");
     expect(checked).not.toContain("not a git repository");
     expect(await fs.readFile(path.join(root, baseline))).toEqual(original);
     const ws = await workspace(root),
@@ -218,8 +214,8 @@ describe("adoption workflows", { timeout: 30000 }, () => {
     const observation = await readObservation(root, ws.directory, "claude", revision, version);
     expect(Object.values(observation!.sessions)[0].events).toEqual(["before_tool", "after_tool"]);
     const completion = await hook(outside, outside, "claude", { hook_event_name: "Stop" });
-    expect(completion).toContain("src/main.ts");
-    expect(JSON.parse(completion)).not.toHaveProperty("decision");
+    expect(completion).toBe("");
+    expect((await automate(root, { event: "task_end" })).message).toContain("src/main.ts");
   });
 
   it("updates the MCP reminder after explicit setup without inventing activation", async () => {

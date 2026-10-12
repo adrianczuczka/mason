@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { runAutomationHook } from "../src/automation/adapters.js";
+import { upsertDecision } from "../src/decisions/decisions.js";
 import { automationStatus } from "../src/automation/runtime.js";
 import { workspace } from "../src/automation/evidence.js";
 import { setupProject } from "../src/setup/setup.js";
@@ -45,6 +46,12 @@ it.each(["claude", "codex"] as const)(
   "checks %s mutations in a linked worktree without local setup",
   async (host) => {
     const setup = await setupProject(root, { host });
+    await upsertDecision(root, {
+      title: "Main entry",
+      body: "Preserve the main entry contract.",
+      category: "decision",
+      files: ["src/main.ts"],
+    });
     await commitAll(root, "configure");
     await git(["worktree", "add", "-b", "linked", linked], root);
     const mainReport = await fs.readFile(path.join(root, setup.initialReportPath));
@@ -76,7 +83,9 @@ it.each(["claude", "codex"] as const)(
     expect(report.root).toBe(linked);
     expect(report.capture).toBe("observed");
     expect(report.diagnostics).toEqual([]);
-    expect(report.counts.unresolved).toBe(1);
+    expect(report.counts["review-required"]).toBe(1);
+    expect(report.counts.unresolved).toBe(0);
+    expect(report.baselinePaths).toEqual([]);
     expect(await loadSetup(linked)).toBeNull();
     expect(await fs.readFile(path.join(root, setup.initialReportPath))).toEqual(mainReport);
     for (const baseline of status.baselinePaths) {

@@ -128,7 +128,7 @@ it("replaces known generated hook variants in a clone while preserving custom ho
   ).toEqual(["echo custom", plan.newCommand]);
 });
 
-it("observes known read tools without advancing audit evidence, then checks shell and unknown tools", async () => {
+it("observes reads and mutating tools without advancing documentation audit evidence", async () => {
   const sessionId = "reads";
   await automate(root, { event: "session_start", host: "claude", sessionId });
   const ws = await workspace(root);
@@ -186,7 +186,8 @@ it("observes known read tools without advancing audit evidence, then checks shel
         JSON.stringify({ cwd: root, session_id: sessionId, hook_event_name: "Stop" }),
       ),
     ),
-  ).toContain("src/wrong.ts");
+  ).not.toContain("src/wrong.ts");
+  expect((await automate(root, { event: "task_end" })).message).toContain("src/wrong.ts");
 }, 20000);
 
 it.each(["claude", "codex"] as const)(

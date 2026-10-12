@@ -18,6 +18,7 @@ it("replays both real adapter binaries through protected grading and final commi
     expect(report.rows).toHaveLength(4);
     for (const row of report.rows) {
       expect(row.session.kind).toBe("deterministic-replay");
+      expect(row.session.captureMode).toBe("explicit-check");
       expect(row.evaluation).toMatchObject({
         pass: true,
         captureBeforeEdit: true,

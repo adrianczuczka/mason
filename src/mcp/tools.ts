@@ -1,8 +1,4 @@
 import path from "node:path";
-import { prepareRepair, verifyRepair } from "../audit/repair.js";
-import { reviewAdvisory, type AdvisoryReviewInput } from "../audit/advisory-review.js";
-import { formatFixPrompt } from "../audit/cli.js";
-import type { CheckName } from "../audit/types.js";
 
 import { createFileAccess } from "../utils/files.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
@@ -670,48 +666,6 @@ export async function masonAutomation(dir: string, action: "status" | "check"): 
     const { automationFailure } = await import("../automation/execution.js");
     const failure = automationFailure(error);
     return JSON.stringify({ version: 1, status: "unavailable", error: failure.message, failure });
-  }
-}
-
-export async function masonReviewAdvisory(
-  dir: string,
-  options: AdvisoryReviewInput,
-): Promise<string> {
-  try {
-    return JSON.stringify(await reviewAdvisory(dir, options), null, 2);
-  } catch (error) {
-    return JSON.stringify({
-      status: "unavailable",
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-export async function masonRepair(
-  dir: string,
-  options: { action: "prepare" | "verify"; baselinePath?: string; checks?: CheckName[] },
-): Promise<string> {
-  try {
-    if (options.action === "verify") {
-      if (!options.baselinePath || options.checks)
-        throw new Error(
-          "Verification requires baselinePath and uses the original checks; do not pass checks.",
-        );
-      return JSON.stringify(await verifyRepair(dir, options.baselinePath), null, 2);
-    }
-    if (options.action !== "prepare" || options.baselinePath)
-      throw new Error("Preparation accepts checks, not an existing baselinePath.");
-    const result = await prepareRepair(dir, options.checks);
-    return JSON.stringify(
-      { ...result, workOrder: formatFixPrompt(result.report, result.baselinePath) },
-      null,
-      2,
-    );
-  } catch (error) {
-    return JSON.stringify({
-      status: "unavailable",
-      error: error instanceof Error ? error.message : String(error),
-    });
   }
 }
 

@@ -6,7 +6,7 @@ Install the [standalone CLI](distribution.md) to use Mason without system Node o
 
 - [Unified project setup](#unified-project-setup)
 - [Disconnect a project](#disconnect-a-project)
-- [Automatic documentation checks (mason)](#automatic-documentation-checks-mason)
+- [Decision hooks and explicit audit checks](#automatic-documentation-checks-mason)
 - [Decision injection (mason-hook)](#decision-injection-mason-hook)
 - [Other clients](#other-clients)
 - [Upgrading from earlier versions](#upgrading-from-earlier-versions)
@@ -106,9 +106,11 @@ Data stays under `.mason/local/usefulness/`, with its own Git ignore rule. It co
 
 Tracking errors do not suppress audits, existing findings, or setup. Setup reports unavailable stats and preserves unreadable preferences. `mason stats --disable` can reset a malformed preference even when observation files are unreadable; it retains those files. Delayed delivery records use newer retained audit evidence, or report an unknown outcome if that evidence is unavailable. At task end, unavailable tracking produces a short diagnostic; `mason stats --json` reports invalid storage explicitly.
 
-## Automatic documentation checks (mason)
+<a id="automatic-documentation-checks-mason"></a>
 
-Mason can preserve documentation audit evidence and resume unfinished repairs through Claude Code or Codex lifecycle hooks. A shared engine owns the evidence, verification, and cache; each host adapter handles its event format. No concept map or model call is required for the checks.
+## Decision hooks and explicit audit checks
+
+Lifecycle hooks check decision anchors and deliver applicable recorded guidance. They do not discover documentation claims, create repair baselines, or verify retained documentation findings. Explicit `mason check` and `mason audit` commands preserve the documentation workflow. Setup still captures its initial audit before instruction edits; later hooks leave that evidence intact. The paths share event storage and execution receipts, with separate guidance and audit report pointers. No concept map or model call is required for these checks.
 
 Unified setup already installs these hooks. For manual npm hook installation (available from 0.12.0), install or upgrade the package in each project:
 
@@ -125,7 +127,7 @@ When upgrading an existing MCP setup, update any separately pinned server comman
 
 `status` distinguishes configuration from observed events. Host versions, project trust, policy, and specialized tool paths can prevent hooks from running. Configuration alone is not evidence of automatic use. Codex requires review/trust of new or changed non-managed hooks. See the [Claude Code hook reference](https://code.claude.com/docs/en/hooks) and [Codex hook reference](https://learn.chatgpt.com/docs/hooks).
 
-Mason checks documentation as you work. It gives the assistant new or worsened findings after tool calls and when you submit a prompt. At the end of a response, a separate notice shows you any remaining new findings. Existing findings normally stay quiet. Claude Stop can continue the assistant once when outstanding decision drift overlaps anchor edits observed during that session.
+Mason checks decision anchors as you work. It gives the assistant new or worsened decision notices after tool calls and when you submit a prompt. At completion, a separate notice reports new decision drift. Existing findings normally stay quiet; general documentation findings appear only during explicit audit checks. Claude Stop can continue the assistant once when outstanding decision drift overlaps anchor edits observed during that session.
 
 The current development implementation also delivers file-scoped decision bodies through Claude's standard lifecycle handlers: after `Read`, or before `Edit`/`Write` when their payload includes `file_path`. No additional hook configuration is needed. Existing PATH-based setups receive this behavior after upgrading and restarting the assistant. Accepted guidance stays distinct from pending proposals and includes source, scope and freshness labels. Delivery is confined to the active checkout and deduplicated per session/agent; changed records and withdrawals can be delivered again. Reading a file does not advance the audit verification result.
 
@@ -145,15 +147,15 @@ mason status                   # Shows stopBlock, including before hooks run
 
 The local preference and session receipts live under `.mason/reports/automation/`. Host hook generation with `mason config --host claude|codex` remains read-only and separate. Body-length warnings remain advisory.
 
-Run `mason check` to see all outstanding findings, including the quiet backlog. Exit codes are 0 for verified checks, 1 for outstanding issues, and 2 for incomplete or unavailable verification. A quiet completion notice does not mean the audit passed.
+Run `mason check` to explicitly verify retained documentation findings, including the quiet backlog. Exit codes are 0 for verified checks, 1 for outstanding issues, and 2 for incomplete or unavailable verification. A quiet completion notice does not mean the audit passed.
 
 Mason compares the underlying condition, so changes to wording, line numbers, or commit metadata do not repeat a notice. A finding can notify again if it worsens or returns after a confirmed resolution. Delivery history survives restarts and is shared within the branch/worktree. Assistant feedback and user notices have separate histories; explicit checks consume neither. Each notice shows up to four findings, with overflow kept for later delivery.
 
 Use `mason status` or `mason_automation(action: "status")` to review uncommitted decision records and pending proposals, with the oldest proposals first. Assistants retrieve relevant proposals through `get_context`. Proposals require explicit review before acceptance; their presence alone does not fail a check.
 
-Checks preserve original repair evidence before later edits can obscure it. Known read-only tools record activity without rescanning. If an old notification report cannot be loaded, Mason starts notification tracking from the current audit and reports the recovery; original repair evidence remains intact. Verification warnings are deduplicated per session.
+Explicit audit checks preserve original repair evidence before later edits can obscure it. Lifecycle hooks inspect current decision records and anchor content instead, without reading repair baselines. Known read-only tools record activity without rescanning. If an old notification report cannot be loaded, Mason starts notification tracking from current findings and reports the recovery; original repair evidence remains intact. Verification warnings are deduplicated per session. `status` reports its `scope` (`decision-guidance` or `documentation-audit`) and keeps the last explicit audit path in `auditReportPath`. A current guidance report does not establish that documentation repairs passed.
 
-Limits: hooks depend on host support and observed events. Some checks need committed changes or defer judgment during document edits. Findings may include concurrent edits, and a whole-file decision anchor cannot identify which edit affects a decision. Use a full check before committing, inspect relevant evidence, and keep repairs within the authorized task.
+Limits: hooks depend on host support and observed events. Explicit audit checks may need committed changes or defer judgment during document edits. Findings may include concurrent edits, and a whole-file decision anchor cannot identify which edit affects a decision. Use a full check before committing, inspect relevant evidence, and keep repairs within the authorized task.
 
 Unified setup generates an inline availability guard. Hooks stay quiet if Mason is absent from PATH or the checkout has neither local nor inherited setup for that host; `mason status` explains inactive setup. Invalid records and failures after activation remain visible. After upgrading to these guards, rerun setup and review the generated changes. Custom commands from manual `install --command` are not automatically guarded. See [data and network behavior](data-and-network.md) and [hook performance](hook-performance.md).
 
@@ -165,7 +167,7 @@ mason check --json   # Capture/resume the active evidence and verify it
 mason check
 ```
 
-The equivalent MCP operation is `mason_automation(action: "check")`. Its response is concise and links the full local report. `status` is read-only; `check` writes evidence. Exit codes are 0 for verified checks, 1 for unresolved issues, and 2 for incomplete/unavailable checks. When only advisory assessments remain, the human summary says “advisories awaiting review”; the JSON status and exit code remain `incomplete` and 2. Summaries use current finding evidence when available and identify historical conditions that no longer appear in the current check. Original `mason_repair` baselines remain separately verifiable by their paths. Hook errors are visible and advisory; exit 0 from a hook does not mean verification passed. Claude Stop can return JSON `decision: "block"` with exit 0 to request one continuation for decision inspection. CLI JSON and MCP failures include a category (`inputs-changed`, `storage-full`, `busy`, `invalid-input`, `history-unavailable`, `invalid-evidence`, `io-error`, or `internal`), retryability, and whether a failure receipt was saved. Changing inputs require another check on a stable checkout; they never produce a cached pass.
+The equivalent MCP operation is `mason_automation(action: "check")`. Its response is concise and links the full local report. `status` is read-only; `check` writes evidence. Exit codes are 0 for verified checks, 1 for unresolved issues, and 2 for incomplete/unavailable checks. When only advisory assessments remain, the human summary says “advisories awaiting review”; the JSON status and exit code remain `incomplete` and 2. Summaries use current finding evidence when available and identify historical conditions that no longer appear in the current check. Original repair baselines remain separately verifiable with `mason audit --verify-repair <path>`. Hook errors are visible and advisory; exit 0 from a hook does not mean verification passed. Claude Stop can return JSON `decision: "block"` with exit 0 to request one continuation for decision inspection. CLI JSON and MCP failures include a category (`inputs-changed`, `storage-full`, `busy`, `invalid-input`, `history-unavailable`, `invalid-evidence`, `io-error`, or `internal`), retryability, and whether a failure receipt was saved. Changing inputs require another check on a stable checkout; they never produce a cached pass.
 
 `status` includes a bounded history of the latest 32 execution attempts, their duration after lock acquisition, and the number of older receipts omitted. A completed attempt includes its verification outcome. A started attempt without a matching live local lock owner is unknown, and a failed or unfinished latest attempt prevents an older report from being presented as current verification. Storage exhaustion can prevent even a failure receipt from being saved; the caller reports that explicitly. Receipts contain no prompts or tool arguments. The existing `mason-hook` decision injector keeps its previous behavior.
 

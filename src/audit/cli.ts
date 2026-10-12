@@ -208,7 +208,7 @@ export function formatFixPrompt(report: AuditReport, baselinePath?: string): str
   lines.push(
     baselinePath
       ? `- Preserve the original repair baseline: ${JSON.stringify(baselinePath)}. Do not replace it after editing.`
-      : "- Before the first edit, call mason_repair with action: prepare, or run mason-audit --prepare-repair --json with the same --dir and --checks. Keep the returned baselinePath through verification.",
+      : "- Before the first edit, run mason audit --prepare-repair --json with the same --dir and --checks. Keep the returned baselinePath through verification.",
   );
   lines.push(
     `- Edit ONLY these files: ${flaggedDocs.join(", ") || "none (advisory review only)"}. Bring the docs into agreement with verified source evidence; do not change source code or configs to silence findings.`,
@@ -231,7 +231,7 @@ export function formatFixPrompt(report: AuditReport, baselinePath?: string): str
     "- new-module: review whether the directory needs documenting; an omission alone does not establish a defect. Preserve scope and describe only what you verified.",
   );
   lines.push(
-    "- Specific historical ADVISORIES require a separate authorized assessment using review_advisory with the baselinePath and findingId from verification. Prepare and inspect evidence first; record addressed, inapplicable or deferred with the actual reviewer, note and reviewToken. Dependency notices marked resolution: informational require no review. Dependency advisories may be dismissed with action: dismiss, reasonCode (no-dependency-claims or unrelated-manifest-change), and note, without a reviewer or token. Decision findings use review_decision. Candidates marked resolution: recheck can be rerun to see whether the condition remains; this does not establish semantic approval. Report what remains unknown.",
+    "- Specific historical ADVISORIES require a separate authorized assessment using mason audit review with --baseline and --finding from verification. Prepare and inspect evidence first; record addressed, inapplicable or deferred with the actual reviewer, note and reviewToken. Dependency notices marked resolution: informational require no review. Dependency advisories may be dismissed with --outcome dismiss, --reason (no-dependency-claims or unrelated-manifest-change), and --note, without a reviewer or token. Decision findings use review_decision. Candidates marked resolution: recheck can be rerun to see whether the condition remains; this does not establish semantic approval. Report what remains unknown.",
   );
   lines.push("");
   lines.push(
@@ -253,7 +253,7 @@ export function formatFixPrompt(report: AuditReport, baselinePath?: string): str
   );
   lines.push("");
   lines.push(
-    "After edits, call mason_repair with action: verify and the original baselinePath, or mason-audit --verify-repair <baselinePath> --dir <project>. Repeat against the same baseline after any final documentation commit. Summarize resolved, unresolved, review-required, unverified, and new findings with their evidence. Do not report a suppressed or unavailable check as fixed. This audit covers the listed documents and supported claims; application behavior and code examples need their own validation.",
+    "After edits, run mason audit --verify-repair <baselinePath> --dir <project>. Repeat against the same baseline after any final documentation commit. Summarize resolved, unresolved, review-required, unverified, and new findings with their evidence. Do not report a suppressed or unavailable check as fixed. This audit covers the listed documents and supported claims; application behavior and code examples need their own validation.",
   );
   return lines.join("\n");
 }

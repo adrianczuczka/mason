@@ -1,7 +1,7 @@
 import { retrievedDecisions } from "./usefulness.js";
 import { failureMessage, hookFailureMessage } from "./execution.js";
 import { z } from "zod";
-import { automate, observeReadOnlyTool, type AutomationEvent } from "./runtime.js";
+import { observeDecisionLifecycle, observeReadOnlyTool, type AutomationEvent } from "./runtime.js";
 import { hostSchema, type Host } from "./store.js";
 import { resolveHookRoot } from "./hook-root.js";
 import { runHook } from "../hook/hook.js";
@@ -54,7 +54,7 @@ async function decisionContext(host: Host, raw: unknown, root: string): Promise<
       .object({ hookSpecificOutput: z.object({ additionalContext: z.string() }) })
       .parse(parsed).hookSpecificOutput.additionalContext;
   } catch (error) {
-    // Delivery failure must not discard an audit notice or an activation diagnostic.
+    // Delivery failure must not discard a guidance notice or an activation diagnostic.
     return failureMessage(error) + " Decision knowledge was not delivered.";
   }
 }
@@ -129,7 +129,7 @@ export async function runAutomationHook(
           ? { systemMessage: warning }
           : null;
     }
-    const result = await automate(input.cwd, input.event);
+    const result = await observeDecisionLifecycle(input.cwd, input.event);
     const { observeActivation } = await import("../setup/observations.js");
     const warning = await observeActivation(result.report.root, input.event.event, {
       sessionId: input.event.sessionId,
@@ -153,7 +153,7 @@ export async function runAutomationHook(
       ? await hookFailureMessage(hook.cwd, host, hook.event.sessionId!, error)
       : failureMessage(error);
     if (!message) return null;
-    // Hook failure is visible but does not turn documentation advice into an editing permission gate.
+    // Hook failure is visible but does not turn guidance into an editing permission gate.
     return {
       systemMessage: message,
       ...(["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"].includes(name)

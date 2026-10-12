@@ -51,7 +51,7 @@ afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
-it("shares a slow check across parallel MCP hooks while read observations remain independent", async () => {
+it("shares explicit slow audit checks while read hooks remain independent", async () => {
   await automate(root, { event: "session_start", host: "claude", sessionId });
   await fs.writeFile(
     path.join(root, "package.json"),
@@ -66,7 +66,17 @@ it("shares a slow check across parallel MCP hooks while read observations remain
     return original(ctx);
   });
   const ids = Array.from({ length: 8 }, (_, i) => `jira-${i}`);
-  const calls = Promise.all(ids.map((id) => hook("PreToolUse", id)));
+  const calls = Promise.all(
+    ids.map((id) =>
+      automate(root, {
+        event: "before_tool",
+        host: "claude",
+        sessionId,
+        toolId: id,
+        mutating: true,
+      }),
+    ),
+  );
   try {
     await entered.promise;
     // This must finish while the expensive check is still held at the barrier.
@@ -128,7 +138,7 @@ it("preserves separate process receipts and pre/post pairs during a hook burst",
   const after = await Promise.all(ids.map((id) => invoke("PostToolUse", id)));
   expect(after.join("\n")).not.toContain("unavailable");
   const saved = await state();
-  expect(saved.baselines).toHaveLength(1);
+  expect(saved.baselines).toHaveLength(0);
   expect(saved.sessions[evidence.hash(["claude", sessionId])]).toMatchObject({
     pending: {},
     coverageGaps: [],
@@ -150,8 +160,8 @@ it("records failures independently of the state lock and warns once until recove
       }),
     ).rejects.toMatchObject({ failure: { code: "busy", receiptRecorded: true } });
   });
-  const original = evidence.readInputs;
-  const inputs = vi.spyOn(evidence, "readInputs").mockRejectedValue(busy);
+  const original = evidence.readGuidanceInputs;
+  const inputs = vi.spyOn(evidence, "readGuidanceInputs").mockRejectedValue(busy);
   const failures = await Promise.all([0, 1, 2].map((i) => hook("PreToolUse", `failure-${i}`)));
   expect(failures.filter(Boolean)).toHaveLength(1);
   expect(JSON.stringify(failures)).toContain("unavailable [busy]");

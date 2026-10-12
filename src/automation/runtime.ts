@@ -1,3 +1,5 @@
+import { loadDecisionStore } from "../decisions/decisions.js";
+import { checkDecisionAnchors } from "../audit/checks/decision-anchor.js";
 import { readAutomationConfig } from "./config.js";
 import {
   observeDecisionEdits,
@@ -21,7 +23,15 @@ import {
 } from "../audit/repair.js";
 import { ALL_CHECKS, type AuditReport } from "../audit/types.js";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
-import { checkCache, git, hash, readInputs, workspace, type Inputs } from "./evidence.js";
+import {
+  checkCache,
+  git,
+  hash,
+  readInputs,
+  readGuidanceInputs,
+  workspace,
+  type Inputs,
+} from "./evidence.js";
 import { parseState, withLock, type Event, type Host, type State } from "./store.js";
 
 export interface AutomationEvent {
@@ -109,7 +119,7 @@ export function summarize(report: AutomationReport): string {
     ...(open.length > 4 ? [`${open.length - 4} more findings in the report.`] : []),
     ...report.diagnostics.slice(0, 2).map(cleanText),
     `Evidence: ${report.reportPath}. Resume/check with mason_automation(action: "check") or mason check.`,
-    "Keep original evidence. Address findings relevant to the authorized task; report unrelated findings with a brief scope reason and suggested follow-up. Use review_advisory for authorized assessments; otherwise leave advisories open without approving them.",
+    "Keep original evidence. Address findings relevant to the authorized task; report unrelated findings with a brief scope reason and suggested follow-up. Use mason audit review for authorized assessments; otherwise leave advisories open without approving them.",
   ].join("\n");
 }
 
@@ -236,10 +246,13 @@ async function matchingAnalysis(
   return { analysis: a };
 }
 
-async function verifyInputs(ws: Workspace, inputs: Inputs) {
+async function verifyInputs(ws: Workspace, inputs: Inputs, guidance = false) {
   return profilePhase("automation.revalidate", () =>
     withRepositoryInspection(ws.root, async () => {
-      const [after, currentWs] = await Promise.all([readInputs(ws.root), workspace(ws.root)]);
+      const [after, currentWs] = await Promise.all([
+        guidance ? readGuidanceInputs(ws.root) : readInputs(ws.root),
+        workspace(ws.root),
+      ]);
       if (after.fingerprint !== inputs.fingerprint || currentWs.directory !== ws.directory) {
         throw new Error(
           "Repository inputs or branch changed during automation; no current verification was recorded. Retry on a stable checkout.",
@@ -456,18 +469,101 @@ async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, st
   );
 }
 
-/** Durable lifecycle: read concurrently, then merge each call into the latest state. */
+/** Current decision evidence uses the same publication/receipt path, without repair baselines. */
+async function guidanceAnalysis(ws: Workspace, inputs: Inputs) {
+  const checked = await checkDecisionAnchors({
+    root: ws.root,
+    docs: [],
+    headHash: inputs.head,
+    changesSinceDoc: new Map(),
+    decisionsPresent: true,
+  });
+  const findings: RepairFinding[] = checked.advisories.map((current) => ({
+    id: findingId(current),
+    original: current,
+    current,
+    status: "review-required",
+    reason: "Current decision anchors changed; inspect their reasoning.",
+  }));
+  // Reuse the last guidance receipt for explicit closure; absence alone is not proof.
+  const before = await loadState(ws);
+  if (before.guidance) {
+    const prior = z
+      .object({ findings: z.array(repairFindingSchema) })
+      .parse(await readStoreJson(ws.root, before.guidance.path)) as { findings: RepairFinding[] };
+    const currentIds = new Set(findings.map((finding) => finding.id));
+    const records = (await loadDecisionStore(ws.root)).records;
+    for (const previous of prior.findings) {
+      if (currentIds.has(previous.id) || previous.original.evidence.kind !== "decision-anchor")
+        continue;
+      const evidence = previous.original.evidence;
+      const record = records.find((record) => record.id === evidence.decisionId);
+      const capture = record && inputs.decisionEvidence[record.id]?.capture;
+      const resolved =
+        record?.status === "retired" ||
+        (!!record && !!capture?.complete && capture.anchors.length > 0 && !checked.skipped.length);
+      findings.push({
+        id: previous.id,
+        original: previous.original,
+        status: resolved ? "resolved" : "unverified",
+        reason: resolved
+          ? "Current decision evidence no longer reports this drift, or the retained record is retired."
+          : "Decision evidence could not establish closure.",
+      });
+    }
+  }
+  const counts = {
+    resolved: 0,
+    unresolved: 0,
+    "review-required": 0,
+    unverified: checked.skipped.length,
+  };
+  for (const finding of findings) counts[finding.status]++;
+  const report: AutomationReport = {
+    version: 1,
+    status: counts.unverified || counts["review-required"] ? "incomplete" : "verified",
+    root: ws.root,
+    branch: ws.branch,
+    head: inputs.head,
+    baselinePaths: [],
+    reportPath: "",
+    findings,
+    diagnostics: [
+      ...checked.skipped.map((item) => item.reason),
+      ...findings
+        .filter((finding) => finding.status === "unverified")
+        .map((finding) => `Decision ${finding.id}: ${finding.reason}`),
+    ],
+    checks: { ran: ["decision-anchor-drift"], reused: [], skipped: checked.skipped },
+    counts,
+    capture: "unknown",
+    scope:
+      "Decision anchor evidence only. Documentation audits and retained repair baselines were not checked. Source inspection remains separate from human approval.",
+  };
+  await verifyInputs(ws, inputs, true);
+  return { analysis: { id: "guidance", report }, shared: false as const };
+}
+
 export async function automate(dir: string, event: AutomationEvent) {
+  return runAutomation(dir, event, false);
+}
+
+export async function observeDecisionLifecycle(dir: string, event: AutomationEvent) {
+  return runAutomation(dir, event, true);
+}
+
+/** Durable lifecycle: read concurrently, then merge each call into the latest state. */
+async function runAutomation(dir: string, event: AutomationEvent, guidance: boolean) {
   const startedAt = Date.now();
   const ws = await profilePhase("automation.workspace", () => workspace(dir));
   const config = await readAutomationConfig(ws.root);
   const output = await recordExecution(ws.root, ws.directory, event.event, () =>
     withRepositoryInspection(ws.root, async () => {
-      const inputs = await readInputs(ws.root);
-      const result = await profilePhase("automation.analysis", () =>
-        analyze(ws, inputs, event, startedAt),
+      const inputs = await (guidance ? readGuidanceInputs(ws.root) : readInputs(ws.root));
+      const result = await profilePhase("automation.analysis", async () =>
+        guidance ? await guidanceAnalysis(ws, inputs) : await analyze(ws, inputs, event, startedAt),
       );
-      if (result.shared) {
+      if (!guidance && result.shared) {
         await verifyInputs(ws, inputs);
         if (result.analysis.baselineDigest !== (await baselineDigest(ws, await loadState(ws)))) {
           throw new Error(
@@ -478,20 +574,22 @@ export async function automate(dir: string, event: AutomationEvent) {
       return profilePhase("automation.publish", () =>
         withLock(ws.root, ws.directory, async () => {
           const state = await loadState(ws);
-          if (state.analysis?.id !== result.analysis.id)
+          if (!guidance && state.analysis?.id !== result.analysis.id)
             throw new Error(
               "Automation evidence changed during publication; retry against the current inputs.",
             );
           const report = structuredClone(result.analysis.report) as AutomationReport;
+          if (guidance) await verifyInputs(ws, inputs, true);
           if (!state.notifications) {
             // Upgrade from the last retained observation, not a fresh session's state.
             // This keeps changes made since that observation eligible for notification.
             let baseline = { findings: report.findings, head: report.head };
-            if (state.latest) {
+            const previousPath = guidance ? state.guidance?.path : state.latest;
+            if (previousPath) {
               try {
                 const previous = z
                   .object({ findings: z.array(repairFindingSchema), head: z.string() })
-                  .safeParse(await readStoreJson(ws.root, state.latest));
+                  .safeParse(await readStoreJson(ws.root, previousPath));
                 if (!previous.success) throw new Error("Unsupported saved report");
                 baseline = previous.data as typeof baseline;
               } catch {
@@ -509,7 +607,8 @@ export async function automate(dir: string, event: AutomationEvent) {
               reused: [...new Set([...report.checks.ran, ...report.checks.reused])],
               shared: true,
             };
-          report.reportPath = ws.directory + "/checks/" + randomUUID() + ".json";
+          report.reportPath =
+            ws.directory + "/checks/" + (guidance ? "guidance-" : "") + randomUUID() + ".json";
           const now = new Date().toISOString();
           const key = event.host && event.sessionId ? hash([event.host, event.sessionId]) : null;
           const newSession = key !== null && !state.sessions[key];
@@ -611,16 +710,22 @@ export async function automate(dir: string, event: AutomationEvent) {
                 .join("\n") || null;
           const notify = message !== null;
           // Completion notices are advisory; no automatic retry/repair loop.
+          const previousPath = guidance ? state.guidance?.path : state.latest;
+          const previousFingerprint = guidance ? state.guidance?.fingerprint : state.fingerprint;
           const persistReport =
-            !state.latest ||
-            state.fingerprint !== inputs.fingerprint ||
+            !previousPath ||
+            previousFingerprint !== inputs.fingerprint ||
             notify ||
             newSession ||
             event.event === "task_end";
-          if (!persistReport) report.reportPath = state.latest!;
+          if (!persistReport) report.reportPath = previousPath!;
           state.updatedAt = now;
-          state.fingerprint = inputs.fingerprint;
-          state.latest = report.reportPath;
+          if (guidance)
+            state.guidance = { fingerprint: inputs.fingerprint, path: report.reportPath };
+          else {
+            state.fingerprint = inputs.fingerprint;
+            state.latest = report.reportPath;
+          }
           if (persistReport) await writeStoreJson(ws.root, report.reportPath, report);
           await writeStoreJson(ws.root, ws.directory + "/state.json", state);
           return {
@@ -674,6 +779,8 @@ export async function automationStatus(dir: string) {
       root: ws.root,
       branch: ws.branch,
       baselinePaths: [],
+      scope: "not-observed",
+      auditReportPath: null,
       hosts: {},
       execution,
       notifications,
@@ -682,9 +789,10 @@ export async function automationStatus(dir: string) {
   const state = parseState(raw);
   if (state.root !== ws.root || state.gitDir !== ws.gitDir || state.branch !== ws.branch)
     throw new Error("Automation state belongs to another workspace.");
-  const inputs = await readInputs(ws.root);
-  const latest = state.latest
-    ? ((await readStoreJson(ws.root, state.latest)) as AutomationReport | null)
+  const inputs = await (state.guidance ? readGuidanceInputs(ws.root) : readInputs(ws.root));
+  const reportPath = state.guidance?.path ?? state.latest;
+  const latest = reportPath
+    ? ((await readStoreJson(ws.root, reportPath!)) as AutomationReport | null)
     : null;
   const hosts: Record<string, { sessions: number; observedEvents: string[] }> = {};
   for (const session of Object.values(state.sessions)) {
@@ -698,19 +806,21 @@ export async function automationStatus(dir: string) {
     stopBlock: config.stopBlock,
     status: unfinished
       ? "unavailable"
-      : inputs.fingerprint === state.fingerprint
+      : inputs.fingerprint === (state.guidance?.fingerprint ?? state.fingerprint)
         ? "current"
         : "changed",
     root: ws.root,
     branch: ws.branch,
     baselinePaths: state.baselines.map((b) => b.path),
-    reportPath: state.latest,
+    reportPath,
+    scope: state.guidance ? "decision-guidance" : "documentation-audit",
+    auditReportPath: state.latest,
     verificationStatus: unfinished ? "unavailable" : (latest?.status ?? "unavailable"),
     hosts,
     execution,
     notifications,
     knowledge,
     notificationBaselineHead: state.notifications?.baselineHead ?? null,
-    note: "Observed events do not prove all tool paths are intercepted. Run check to verify the retained evidence.",
+    note: "Status describes the reported scope only. Decision guidance does not verify documentation repairs. Observed events do not prove all tool paths are intercepted. Run mason check for retained audit evidence.",
   };
 }
