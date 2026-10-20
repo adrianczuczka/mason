@@ -5,7 +5,12 @@ import { z } from "zod";
 import fg from "fast-glob";
 import { inspectionGit, inspectionRead } from "../audit/inspection.js";
 import { createFileAccess, MAX_SOURCE_BYTES } from "../utils/files.js";
-import { indexMatchingPaths, matchingPaths, normalizeRepoPath } from "../utils/paths.js";
+import {
+  anchorMatches,
+  indexMatchingPaths,
+  matchingPaths,
+  normalizeRepoPath,
+} from "../utils/paths.js";
 import { storePath } from "../utils/storage.js";
 
 const repoPath = z.string().refine((p) => normalizeRepoPath(p) === p);
@@ -40,21 +45,33 @@ export async function captureAnchorScopes(
     );
     const inventory = access.inventory();
     if (!inventory) throw new Error("Git anchor inventory unavailable");
-    const ignored = await inspectionGit(
-      [
-        "ls-files",
-        "-z",
-        "--others",
-        "--ignored",
-        "--exclude-standard",
-        "--",
-        ...union.map((anchor) => `:(literal)${anchor}`),
-      ],
-      { cwd: root, maxBuffer: 8 * 1024 * 1024 },
+    // Ignored files under an anchor with Git-visible content sit outside its evidence, as
+    // in Git. An anchor naming only ignored paths (.env, an ignored directory) stays
+    // incomplete rather than capturing nothing.
+    const visible = indexMatchingPaths(
+      union.map((anchor) => [anchor]),
+      inventory,
     );
-    const files = [
-      ...new Set([...inventory, ...ignored.stdout.split("\0").filter(Boolean)]),
-    ].sort();
+    const hidden = new Set(union.filter((_, index) => !visible[index].length));
+    const ignored = hidden.size
+      ? (
+          await inspectionGit(
+            [
+              "ls-files",
+              "-z",
+              "--others",
+              "--ignored",
+              "--exclude-standard",
+              "--",
+              ...[...hidden].map((anchor) => `:(literal)${anchor}`),
+            ],
+            { cwd: root, maxBuffer: 8 * 1024 * 1024 },
+          )
+        ).stdout
+          .split("\0")
+          .filter(Boolean)
+      : [];
+    const files = [...new Set([...inventory, ...ignored])].sort();
     // Apply file policy in one glob walk rather than one walk per anchor file.
     // storePath still rejects symlinked parents at each bounded byte read.
     const patterns = await Promise.all(
@@ -74,7 +91,7 @@ export async function captureAnchorScopes(
     const filesByScope = new Map(
       scopes.map((scope, index) => [JSON.stringify([...new Set(scope)].sort()), indexed[index]]),
     );
-    return { filesByScope, eligible };
+    return { filesByScope, eligible, hidden, ignored: new Set(ignored) };
   };
   return Promise.all(
     scopes.map((scope) => {
@@ -86,8 +103,16 @@ export async function captureAnchorScopes(
           const capture: AnchorCapture = { anchors, files: {}, complete: true };
           if (!anchors.length) return capture;
           try {
-            const { eligible, filesByScope } = await (context ??= prepareContext());
-            const files = filesByScope.get(JSON.stringify(anchors))!;
+            const { eligible, filesByScope, hidden, ignored } = await (context ??=
+              prepareContext());
+            // Another scope's hidden anchor can list ignored files under this scope's anchors.
+            const files = filesByScope
+              .get(JSON.stringify(anchors))!
+              .filter(
+                (file) =>
+                  !ignored.has(file) ||
+                  anchors.some((anchor) => hidden.has(anchor) && anchorMatches(anchor, file)),
+              );
             if (files.length > 2000) return { ...capture, complete: false };
             for (const file of files) {
               const evidence = await inspectionRead(

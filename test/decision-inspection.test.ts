@@ -127,11 +127,12 @@ describe("captured anchors and separate source inspections", () => {
         return captured;
       });
       expect(first.every((capture) => capture.complete)).toBe(true);
-      expect(observed.mock.calls.filter(([args]) => args[0] === "ls-files")).toHaveLength(2);
+      // Every anchor has visible files, so no ignored-file listing is needed.
+      expect(observed.mock.calls.filter(([args]) => args[0] === "ls-files")).toHaveLength(1);
       await write("src/part-0.ts", "export const value = 42;\n");
       const final = await withRepositoryInspection(root, () => captureAnchorScopes(root, scopes));
       expect(final[0].files).not.toEqual(first[0].files);
-      expect(observed.mock.calls.filter(([args]) => args[0] === "ls-files")).toHaveLength(4);
+      expect(observed.mock.calls.filter(([args]) => args[0] === "ls-files")).toHaveLength(2);
     } finally {
       observed.mockRestore();
     }
@@ -301,6 +302,33 @@ describe("captured anchors and separate source inspections", () => {
     const result = await upsertDecision(root, { ...input, id, files: ["src/link.ts"] });
     expect(result.status).toBe("updated");
     expect((await inspect(id)).status).toBe("error");
+  });
+
+  it("leaves ignored files beneath a directory anchor out of its evidence", async () => {
+    await fs.mkdir(path.join(root, "web/node_modules"), { recursive: true });
+    await write("web/app.js", "console.log(1);\n");
+    await write("web/.gitignore", "local/\nnode_modules/\n");
+    await commitAll(root, "web");
+    const id = await create({ files: ["web"] });
+    await commitAll(root, "proposal");
+    await fs.mkdir(path.join(root, "web/local"));
+    await write("web/local/note.txt", "plain text\n");
+    await write("web/untracked.txt", "untracked\n");
+    // More ignored files than a capture may hold must not exhaust the visible scope.
+    await Promise.all(
+      Array.from({ length: 2001 }, (_, i) => write(`web/node_modules/${i}.js`, `${i}\n`)),
+    );
+    const [web, local, both] = await captureAnchorScopes(root, [
+      ["web"],
+      ["web/local"],
+      ["web", "web/local"],
+    ]);
+    expect(web.complete).toBe(true);
+    expect(Object.keys(web.files)).toEqual(["web/.gitignore", "web/app.js", "web/untracked.txt"]);
+    // Naming only ignored content stays unknown instead of capturing nothing.
+    expect(local).toMatchObject({ complete: false, files: {} });
+    expect(both.complete).toBe(false);
+    expect((await inspect(id)).status).toBe("inspected");
   });
   describe("operative inspection scope", () => {
     async function acceptedWithDraft(files = ["src/client.ts"]) {

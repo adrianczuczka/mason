@@ -493,6 +493,9 @@ async function guidanceAnalysis(ws: Workspace, inputs: Inputs) {
       .parse(await readStoreJson(ws.root, before.guidance.path)) as { findings: RepairFinding[] };
     const currentIds = new Set(findings.map((finding) => finding.id));
     const records = (await loadDecisionStore(ws.root)).records;
+    // An incomplete capture blocks closure for its own decision only.
+    const incomplete = new Set(checked.incompleteDecisions);
+    const sharedSkip = checked.skipped.length > checked.incompleteDecisions.length;
     for (const previous of prior.findings) {
       if (currentIds.has(previous.id) || previous.original.evidence.kind !== "decision-anchor")
         continue;
@@ -501,7 +504,11 @@ async function guidanceAnalysis(ws: Workspace, inputs: Inputs) {
       const capture = record && inputs.decisionEvidence[record.id]?.capture;
       const resolved =
         record?.status === "retired" ||
-        (!!record && !!capture?.complete && capture.anchors.length > 0 && !checked.skipped.length);
+        (!!record &&
+          !!capture?.complete &&
+          capture.anchors.length > 0 &&
+          !sharedSkip &&
+          !incomplete.has(record.id));
       findings.push({
         id: previous.id,
         original: previous.original,

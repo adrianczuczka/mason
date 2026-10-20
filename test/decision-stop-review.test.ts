@@ -129,6 +129,34 @@ describe("Claude decision Stop review", { timeout: 30000 }, () => {
     expect(report.findings).toEqual([expect.objectContaining({ status: "unverified" })]);
   });
 
+  it("lets an incomplete capture block only its own decision's closure", async () => {
+    await write(".gitignore", ".mason/reports/\n.env\n");
+    await write(".env", "SECRET=value\n");
+    await upsertDecision(root, {
+      title: "Keep local settings out of Git",
+      body: "Local credentials stay in an ignored file.",
+      category: "decision",
+      files: [".env"],
+    });
+    const other = (await loadDecisions(root)).find((record) => record.id !== id)!.id;
+    await edit("export const retries = 2;\n");
+    expect(await hook("Stop")).toHaveProperty("decision", "block");
+    await inspect();
+    expect((await hook("Stop"))?.decision).toBeUndefined();
+    const status = await automationStatus(root);
+    const report = JSON.parse(await fs.readFile(path.join(root, status.reportPath!), "utf8"));
+    expect(report.findings).toEqual([
+      expect.objectContaining({
+        status: "resolved",
+        original: expect.objectContaining({
+          evidence: expect.objectContaining({ decisionId: id }),
+        }),
+      }),
+    ]);
+    expect(report.counts.unverified).toBe(1);
+    expect(report.diagnostics).toEqual([expect.stringContaining(other)]);
+  });
+
   it("clears a resolved finding on an explicit check so recurrence can block again", async () => {
     await edit("export const retries = 2;\n");
     expect(await hook("Stop")).toHaveProperty("decision", "block");

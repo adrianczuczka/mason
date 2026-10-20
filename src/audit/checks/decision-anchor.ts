@@ -9,8 +9,12 @@ import { emptyResult } from "./index.js";
  * path stays dark on bare repos). Decision records encode human knowledge —
  * they are surfaced for re-verification, never rewritten by the fix agent.
  */
-export async function checkDecisionAnchors(ctx: CheckContext): Promise<CheckResult> {
-  const result = emptyResult();
+export async function checkDecisionAnchors(
+  ctx: CheckContext,
+): Promise<CheckResult & { incompleteDecisions: string[] }> {
+  // One entry per skip caused by a single decision's anchor evidence; the remaining
+  // skips (store diagnostics, missing history) leave every decision unverifiable.
+  const result = { ...emptyResult(), incompleteDecisions: [] as string[] };
   if (!ctx.decisionsPresent) return result;
 
   const store = await loadDecisionStore(ctx.root);
@@ -49,6 +53,7 @@ export async function checkDecisionAnchors(ctx: CheckContext): Promise<CheckResu
         check: "decision-anchor-drift",
         reason: `Anchor evidence for decision ${record.id} is incomplete or unreadable`,
       });
+      result.incompleteDecisions.push(record.id);
       continue;
     }
     if (!changedFiles.length) continue;

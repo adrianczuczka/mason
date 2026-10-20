@@ -1,0 +1,111 @@
+{
+  "version": 2,
+  "id": "ignored-files-under-a-directory-anchor-are-not-decision",
+  "title": "Ignored files under a directory anchor are not decision evidence",
+  "body": "A directory anchor's capture covers what Git sees under it: tracked files and untracked files that are not ignored. Git-ignored files beneath it (local fonts, node_modules, build output) are left out and do not make the capture incomplete. Counting them turned routine local setup into unknown freshness, made review_decision refuse inspection, and could exhaust the 2000-file capture cap. An anchor naming only ignored content, such as an explicit .env or a wholly ignored directory, stays incomplete: capturing nothing would report false current freshness, and excluded files must not be read. Naming an ignored file explicitly therefore keeps it unknown rather than capturing it. An incomplete capture leaves only its own decision unverified; shared failures (unreadable decision store, missing history) still block closure for every decision.",
+  "category": "decision",
+  "files": [
+    "src/decisions/anchors.ts",
+    "src/automation/runtime.ts",
+    "src/audit/checks/decision-anchor.ts",
+    "test/decision-inspection.test.ts",
+    "test/decision-stop-review.test.ts"
+  ],
+  "createdAt": "2026-10-20T11:17:40.688Z",
+  "updatedAt": "2026-10-20T11:17:40.688Z",
+  "refreshedHash": "70bd1350d274d917d57d6f341ba6c6e12fc3de77",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "issue",
+      "reference": "https://github.com/adrianczuczka/mason/issues/22",
+      "note": "Reported reproduction: ignored files under an anchored directory made the capture incomplete and 17 other drift findings unverified."
+    },
+    {
+      "kind": "document",
+      "reference": "test/decision-inspection.test.ts",
+      "note": "Regression: ignored files under a directory anchor; ignored-only anchors stay incomplete."
+    },
+    {
+      "kind": "document",
+      "reference": "test/decision-stop-review.test.ts",
+      "note": "Regression: an incomplete capture blocks only its own decision's closure."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-10-20T11:17:40.688Z",
+      "actor": "Claude Code session fixing issue #22",
+      "revision": 1,
+      "content": {
+        "title": "Ignored files under a directory anchor are not decision evidence",
+        "body": "A directory anchor's capture covers what Git sees under it: tracked files and untracked files that are not ignored. Git-ignored files beneath it (local fonts, node_modules, build output) are left out and do not make the capture incomplete. Counting them turned routine local setup into unknown freshness, made review_decision refuse inspection, and could exhaust the 2000-file capture cap. An anchor naming only ignored content, such as an explicit .env or a wholly ignored directory, stays incomplete: capturing nothing would report false current freshness, and excluded files must not be read. Naming an ignored file explicitly therefore keeps it unknown rather than capturing it. An incomplete capture leaves only its own decision unverified; shared failures (unreadable decision store, missing history) still block closure for every decision.",
+        "category": "decision",
+        "files": [
+          "src/decisions/anchors.ts",
+          "src/automation/runtime.ts",
+          "src/audit/checks/decision-anchor.ts",
+          "test/decision-inspection.test.ts",
+          "test/decision-stop-review.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "issue",
+            "reference": "https://github.com/adrianczuczka/mason/issues/22",
+            "note": "Reported reproduction: ignored files under an anchored directory made the capture incomplete and 17 other drift findings unverified."
+          },
+          {
+            "kind": "document",
+            "reference": "test/decision-inspection.test.ts",
+            "note": "Regression: ignored files under a directory anchor; ignored-only anchors stay incomplete."
+          },
+          {
+            "kind": "document",
+            "reference": "test/decision-stop-review.test.ts",
+            "note": "Regression: an incomplete capture blocks only its own decision's closure."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "70bd1350d274d917d57d6f341ba6c6e12fc3de77",
+      "capture": {
+        "anchors": [
+          "src/audit/checks/decision-anchor.ts",
+          "src/automation/runtime.ts",
+          "src/decisions/anchors.ts",
+          "test/decision-inspection.test.ts",
+          "test/decision-stop-review.test.ts"
+        ],
+        "files": {
+          "src/audit/checks/decision-anchor.ts": "9a6ce435b9f9cf3e15f080e2eb57cea059d52f458fa8411a62348bb769b0c86b",
+          "src/automation/runtime.ts": "2c52ad41a6eeb5376dccb40e78024babeb57970b9c9d0619e4d418b3007ab9a3",
+          "src/decisions/anchors.ts": "26b5ed6374d8fb283d25996ddaf74cc7b6f7112daa2033e0d8b0eb93c8230018",
+          "test/decision-inspection.test.ts": "b201aca0c72d72248f5856e125f24a0cbf68e369f198aa48a08ec4f87708e16f",
+          "test/decision-stop-review.test.ts": "03acde6ecb597d9786f4bbefff496b638bbd550e2d037c9824704daae72c72f2"
+        },
+        "complete": true
+      }
+    }
+  ],
+  "capture": {
+    "anchors": [
+      "src/audit/checks/decision-anchor.ts",
+      "src/automation/runtime.ts",
+      "src/decisions/anchors.ts",
+      "test/decision-inspection.test.ts",
+      "test/decision-stop-review.test.ts"
+    ],
+    "files": {
+      "src/audit/checks/decision-anchor.ts": "9a6ce435b9f9cf3e15f080e2eb57cea059d52f458fa8411a62348bb769b0c86b",
+      "src/automation/runtime.ts": "2c52ad41a6eeb5376dccb40e78024babeb57970b9c9d0619e4d418b3007ab9a3",
+      "src/decisions/anchors.ts": "26b5ed6374d8fb283d25996ddaf74cc7b6f7112daa2033e0d8b0eb93c8230018",
+      "test/decision-inspection.test.ts": "b201aca0c72d72248f5856e125f24a0cbf68e369f198aa48a08ec4f87708e16f",
+      "test/decision-stop-review.test.ts": "03acde6ecb597d9786f4bbefff496b638bbd550e2d037c9824704daae72c72f2"
+    },
+    "complete": true
+  }
+}

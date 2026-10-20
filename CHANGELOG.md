@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Leave Git-ignored files beneath a directory anchor out of its capture instead of marking the capture incomplete, so local setup files no longer block `review_decision` inspection or make the anchor's freshness unknown. Anchors naming only ignored content still stay unknown. An incomplete capture now leaves only its own decision's earlier drift findings unverified instead of every decision's.
+
 ## 0.22.0 — 2026-10-12
 
 - Separate CLI scopes: `mason init` prepares shared repository integration without activating it; `mason setup` activates compatible existing configuration using local state only. `mason teardown` now disconnects locally; use `--project` explicitly for shared removal. Initialization and teardown support read-only `--dry-run` previews. Compatible older instructions, supported legacy hooks and JSON formatting do not force shared rewrites; status reports optional template updates separately. MCP exposes matching `init`/`setup` modes. Setup no longer triggers background update checks. Migrate scripts that used setup to generate configuration to `mason init` followed by `mason setup`; scripts removing shared configuration must add `teardown --project`.
