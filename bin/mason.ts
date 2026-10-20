@@ -24,6 +24,8 @@ Usage: mason <command> [options]
   review --base <ref>         Review committed changes
   drift                      Check an optional architecture map
   mcp                        Run the MCP server (stdio)
+  merge-decision <base> <current> <incoming>
+                             Git merge driver for decision records (set by setup)
   upgrade [version]          Upgrade the standalone user installation
   updates [status|enable|disable|pin|unpin]
                              Manage automatic standalone updates
@@ -97,6 +99,9 @@ try {
         `${outcome} in ${installed.home}.\n${installed.path.message}\nAutomatic updates: ${policy}. Manage with mason updates.`,
       );
     }
+  } else if (command === "merge-decision") {
+    const { runDecisionMerge } = await import("../src/decisions/merge.js");
+    process.exitCode = await runDecisionMerge(args);
   } else if (command === "updates") {
     if (args.includes("--help"))
       console.log(

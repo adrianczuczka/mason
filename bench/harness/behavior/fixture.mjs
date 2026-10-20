@@ -27,6 +27,7 @@ export async function fixture(root, { task, arm, host, binary, hookObserver, hoo
   const common = '# Project instructions\nKeep executable behavior and the public API consistent with the requested change. Read README.md for the current layout. Leave unrelated existing problems alone.\n';
   for (const file of ['AGENTS.md', 'CLAUDE.md']) await write(root, file, common + (arm === 'baseline' ? '' : '\n' + guidance));
   await write(root, '.gitignore', '.mason/reports/\n.mason/local/\n\n# mason:ignore:start\n!/.mason/\n/.mason/*\n!/.mason/decisions/\n!/.mason/decisions/**\n!/.mason/reviews/\n!/.mason/reviews/**\n!/.mason/config.json\n!/.mason/snapshot.json\n/.mason/local/\n/.mason/reports/\n# mason:ignore:end\n');
+  await write(root, '.gitattributes', '# mason:merge:start\n.mason/decisions/*.json merge=mason-decision\n# mason:merge:end\n');
   if (task.kind === 'lesson') await write(root, 'incident.md', incidents[task.topic]);
   if (task.backlog) await write(root, 'legacy/retired.mjs', 'export {};\n');
   git(root, 'init', '-b', 'main'); git(root, 'config', 'user.name', 'Mason evaluation'); git(root, 'config', 'user.email', 'evaluation@example.invalid');

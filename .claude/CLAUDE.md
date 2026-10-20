@@ -19,7 +19,7 @@ Mason exposes an MCP server and standalone deterministic CLIs. Entry points:
 - **mason lifecycle** (`bin/mason.ts` → `src/automation/cli.ts`) — Claude Code and Codex hooks check decision anchors and surface guidance. Explicit `check` retains documentation-repair evidence and exits 0 verified / 1 issues / 2 incomplete. Legacy `mason auto` aliases remain supported. `init --host codex|claude` prepares shared configuration; `setup --host codex|claude` activates compatible configuration locally. `status` reports configured versus observed activation without writes.
 - **mason-hook** (`bin/mason-hook.ts` → `src/hook/cli.ts`) — Claude Code PostToolUse hook: injects decision records anchored to the file a session just read or edited; deterministic, per-session deduped, silent on no match (this repo dogfoods it via `.claude/settings.json`)
 - **mason-review** (`bin/mason-review.ts` → `src/review/cli.ts`) — diff review vs a base ref: flags absent historical co-change partners and touched decisions. Optional CI evidence imports preserve outcomes and provenance. Exit 0 no missing partners / 1 missing partners / 2 error; `--require-evidence` additionally gates on current, complete passing checks.
-- **mason** (`bin/mason.ts`) — unified init/setup/teardown/status/check/stats/audit/review/drift/MCP CLI, plus standalone upgrade/uninstall; dedicated binaries remain supported. Teardown disconnects locally by default; `--project` explicitly removes shared integration. Init and teardown support read-only dry runs. Removal preserves knowledge/evidence and reports ambiguous ownership with exit 2.
+- **mason** (`bin/mason.ts`) — unified init/setup/teardown/status/check/stats/audit/review/drift/MCP CLI and the `merge-decision` Git merge driver that setup configures, plus standalone upgrade/uninstall; dedicated binaries remain supported. Teardown disconnects locally by default; `--project` explicitly removes shared integration. Init and teardown support read-only dry runs. Removal preserves knowledge/evidence and reports ambiguous ownership with exit 2.
 
 ### Core Modules
 
@@ -41,6 +41,7 @@ src/
 │   ├── decisions.ts    # Legacy/v2 store, proposal revisions, serialized writes
 │   ├── provenance.ts   # Validated history, approval, sources, owner, shared guidance
 │   ├── review.ts       # Prepared evidence and authorized verdicts with conflict checks
+│   ├── merge.ts        # Git merge driver: unions appended inspections/history, refuses real conflicts
 │   └── drift.ts        # Committed and local anchor freshness
 ├── distribution/       # Standalone bundle validation and user installation lifecycle
 ├── drift/

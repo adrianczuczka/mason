@@ -466,7 +466,7 @@ export function summarizeTeardown(result: Awaited<ReturnType<typeof teardownProj
     ),
     ...result.diagnostics.map((item) => `  Retained ${item.path}: ${item.message}`),
     ...(!result.changes.length ? ["No changes."] : []),
-    "Shared knowledge, repair evidence, ignore rules and the installed Mason command are retained.",
+    "Shared knowledge, repair evidence, ignore rules, the decision merge driver and the installed Mason command are retained.",
     ...(result.scope === "project" && result.sharedInstructionsRetained
       ? [
           "Shared instruction cleanup is deferred while another host or incomplete removal needs inspection.",

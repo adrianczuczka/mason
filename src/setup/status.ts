@@ -3,7 +3,7 @@ import { events } from "../automation/store.js";
 import { automationStatus } from "../automation/runtime.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
 import { effectiveSetup, loadSetupReceipt } from "./model.js";
-import { inspectIntegration } from "./config.js";
+import { decisionMergeStatus, inspectIntegration, mergeDriverSummary } from "./config.js";
 import { installedCommand } from "./launcher.js";
 import { readObservation } from "./observations.js";
 
@@ -11,6 +11,7 @@ export async function setupStatus(dir: string) {
   const ws = await workspace(dir);
   const activation = await effectiveSetup(ws.root);
   const setup = activation.setup;
+  const mergeDriver = await decisionMergeStatus(ws.root);
   if (!setup || !Object.keys(setup.hosts).length) {
     const partial = await Promise.all(
       (["codex", "claude"] as const).map(async (host) => ({
@@ -44,6 +45,7 @@ export async function setupStatus(dir: string) {
       status: pending.length ? "incomplete" : "not-configured",
       hosts: {},
       configuration,
+      mergeDriver,
       next: pending.length
         ? "Setup did not finish. Rerun mason setup --host " +
           pending[0] +
@@ -174,6 +176,7 @@ export async function setupStatus(dir: string) {
     hosts,
     activationRoot: activation.root,
     decisionRecords: decisions.records.length,
+    mergeDriver,
     diagnostics: decisions.diagnostics,
     scope:
       "Activation receipts record observed use after setup, not complete interception, correct repairs, or measured usefulness. Host trust and higher-priority settings may prevent execution. Receipts are local to this worktree and branch.",
@@ -198,6 +201,8 @@ export function summarizeActivation(status: Awaited<ReturnType<typeof setupStatu
     lines.push(...state.updates.map((message) => "  Optional: " + message));
   }
   if ("decisionRecords" in status) lines.push(`Decision records: ${status.decisionRecords}.`);
+  if (status.mergeDriver.attribute || status.mergeDriver.driver !== "missing")
+    lines.push(mergeDriverSummary(status.mergeDriver));
   if (status.next) lines.push(status.next);
   return lines.join("\n");
 }

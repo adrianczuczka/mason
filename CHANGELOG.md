@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Merge decision records automatically when branches each append inspections or review history, instead of conflicting inside the JSON on every rebase of a stacked branch. `mason init` adds a `.gitattributes` entry for `.mason/decisions/*.json`; `mason setup` configures the local `mason-decision` Git merge driver, and `mason status` reports a committed attribute without it. Two different changes to the same field still conflict, and Git's ordinary text conflict is used whenever Mason refuses a merge or is not on PATH. Run `mason init --host <host>` to add the attribute, commit `.gitattributes`, then run `mason setup` in each checkout.
 - Leave Git-ignored files beneath a directory anchor out of its capture instead of marking the capture incomplete, so local setup files no longer block `review_decision` inspection or make the anchor's freshness unknown. Anchors naming only ignored content still stay unknown. An incomplete capture now leaves only its own decision's earlier drift findings unverified instead of every decision's.
 
 ## 0.22.0 — 2026-10-12

@@ -18,8 +18,8 @@ The CLI separates shared repository configuration from local activation:
 
 | Command | Purpose | Files it may change |
 |---|---|---|
-| `mason init --host claude` | Prepare or update shared integration for an MR | Agent instructions, MCP and hooks configuration, ignore rules; local ownership bookkeeping |
-| `mason setup --host claude` | Activate compatible existing integration | Ignored local activation records only |
+| `mason init --host claude` | Prepare or update shared integration for an MR | Agent instructions, MCP and hooks configuration, ignore rules, decision merge attribute; local ownership bookkeeping |
+| `mason setup --host claude` | Activate compatible existing integration | Ignored local activation records; the repository's local Git merge-driver setting |
 | `mason status` | Inspect configuration, compatibility and observed use | None |
 | `mason teardown --host claude` | Disconnect this developer locally | Local activation records only |
 | `mason teardown --project --host claude` | Remove shared integration for an MR | Identifiable shared integration entries and their local records |
@@ -51,11 +51,17 @@ Shared mutation commands support `--dry-run`, including `teardown --project`. Pr
 
 Initialization preserves guidance outside marked Mason blocks, unrelated host settings and explicit disable options. Codex receives an `AGENTS.md` entry point; Claude receives or reuses `CLAUDE.md`, with native `@AGENTS.md` imports where appropriate. Malformed configuration and concurrent edits are rejected. Interrupted initialization can be resumed with `mason init`; interrupted local activation uses `mason setup`.
 
-Commit assistant instructions, `.gitignore`, the selected host's configuration (`.codex/config.toml` and `.codex/hooks.json`, or `.mcp.json` and `.claude/settings.json`), and shared decisions/configuration as appropriate. Local ownership and activation live under ignored `.mason/local/`; observations and receipts are in ignored `.mason/reports/`. Local operations refuse tracked private-state files. Existing repair evidence is retained.
+Commit assistant instructions, `.gitignore`, `.gitattributes`, the selected host's configuration (`.codex/config.toml` and `.codex/hooks.json`, or `.mcp.json` and `.claude/settings.json`), and shared decisions/configuration as appropriate. Local ownership and activation live under ignored `.mason/local/`; observations and receipts are in ignored `.mason/reports/`. Local operations refuse tracked private-state files. Existing repair evidence is retained.
 
 A fresh clone with Mason installed and its MCP configuration trusted can retrieve context before local setup. Shared automatic hooks remain inactive until local or inherited activation exists. Connecting does not create local setup. Native host trust is a separate step; status distinguishes configured from observed use.
 
 The generated Git ignore block excludes `.mason/` contents by default and allows shared `decisions/`, `reviews/`, `config.json`, and `snapshot.json`. Unexpected scratch or cache files stay ignored. Already tracked files retain Git's normal tracking behavior. Repeating initialization with unchanged templates leaves committed configuration unchanged; upgrading the executable alone does not rewrite it. Claude MCP entries explicitly use `type: "stdio"`.
+
+### Decision record merges
+
+Branches that each record a `review_decision` inspection, or one inspection and one acceptance, edit the same decision file. Git's text merge then places conflict markers inside the JSON. `init` adds `.mason/decisions/*.json merge=mason-decision` to a marked `.gitattributes` block. Git cannot share driver commands through committed files, so `setup` writes the `merge.mason-decision` entry to the repository's local Git configuration, which linked worktrees share. An existing customized entry is left unchanged. Checkouts without that entry keep Git's ordinary text merge.
+
+The driver (`mason merge-decision`) combines the appended `inspections` and `history` entries from both sides, ordered by time with exact duplicates removed. It takes any other field changed on only one side. Two different changes to the same field, a side that rewrites earlier entries, or a combined record that fails validation are left to a person: Mason exits non-zero and the configured command falls back to `git merge-file`, which writes ordinary conflict markers. The same fallback applies when `mason` is not on PATH. A successful merge rewrites the record in its normal formatting. `mason status` reports a committed attribute without a local driver. Merged inspections and reviews remain recorded assertions; merging them does not re-verify the code.
 
 Setup checks that its process can find a compatible `mason` on PATH. A desktop assistant may have a different environment: restart it after installation, then check MCP and hook activation. If it still cannot find Mason, check the PATH inherited by that application. Terminal discovery alone does not prove desktop activation.
 
@@ -81,7 +87,7 @@ mason teardown --project --dry-run        # Preview shared removal for an MR
 mason teardown --project --host codex     # Remove the shared Codex integration
 ```
 
-Local teardown preserves shared files and ownership bookkeeping. Restart the assistant to unload the current session; `mason setup` reconnects. A worktree opt-out suppresses inherited activation while leaving the primary checkout connected.
+Local teardown preserves shared files, ownership bookkeeping and the local decision merge driver, which falls back to Git's text merge without Mason; remove it with `git config --remove-section merge.mason-decision`. Restart the assistant to unload the current session; `mason setup` reconnects. A worktree opt-out suppresses inherited activation while leaving the primary checkout connected.
 
 Explicit `--project` removal removes identifiable Mason MCP entries, lifecycle hooks and local setup records. Shared Mason instruction blocks stay while another configured host needs them. After the last host is removed, unchanged Mason blocks are removed too. Review and commit shared removals. Run `mason init`, followed by `mason setup`, to restore a removed integration.
 

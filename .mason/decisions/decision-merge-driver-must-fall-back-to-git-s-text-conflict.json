@@ -1,0 +1,99 @@
+{
+  "version": 2,
+  "id": "decision-merge-driver-must-fall-back-to-git-s-text-conflict",
+  "title": "Decision merge driver must fall back to Git's text conflict",
+  "body": "Decision records merge through the mason-decision Git driver: appended inspections and history are unioned in time order with exact duplicates removed, other fields take the side that changed, and the result must pass decisionSchema. Two different changes to one field, rewritten earlier entries, or an invalid combination are refused rather than resolved, because they need a person (two revisions or two verdicts). A refusal must never leave Git's working file as 'ours' alone: Git keeps %A unchanged when a custom driver exits non-zero, so the merge is reported as conflicted but has no markers and the other side is silently dropped from the file (observed with git 2.43). The configured command therefore ends in `|| git merge-file ... %A %O %B`, which also covers a checkout where mason is not on PATH. Keep the driver from writing %A before it has a valid result. Git cannot share driver commands through committed files, so init owns the .gitattributes entry and setup owns local Git config; teardown retains both because the fallback stays safe without Mason. Reconsider if Git gains built-in fallback for failing drivers or records gain fields that are not append-only lists or plain values.",
+  "category": "gotcha",
+  "files": [
+    "src/decisions/merge.ts",
+    "src/setup/config.ts",
+    "test/decision-merge.test.ts"
+  ],
+  "createdAt": "2026-10-20T11:35:42.381Z",
+  "updatedAt": "2026-10-20T11:35:42.381Z",
+  "refreshedHash": "b870205a0429e71e8c7b44a0b7deb2b1b7ccc4d9",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "issue",
+      "reference": "https://github.com/adrianczuczka/mason/issues/21",
+      "note": "Stacked-branch rebases conflicted inside decision JSON when both sides appended inspections and one accepted."
+    },
+    {
+      "kind": "document",
+      "reference": "test/decision-merge.test.ts",
+      "note": "End-to-end rebase with and without the driver, fallback markers when Mason is absent or refuses, symmetric merges."
+    },
+    {
+      "kind": "other",
+      "reference": "Local experiment with git 2.43.0 on 2026-10-20",
+      "note": "A driver exiting non-zero left the conflicted file as the current side without conflict markers; an undefined driver used the built-in text merge."
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-10-20T11:35:42.381Z",
+      "actor": "Claude Code session fixing issue #21",
+      "revision": 1,
+      "content": {
+        "title": "Decision merge driver must fall back to Git's text conflict",
+        "body": "Decision records merge through the mason-decision Git driver: appended inspections and history are unioned in time order with exact duplicates removed, other fields take the side that changed, and the result must pass decisionSchema. Two different changes to one field, rewritten earlier entries, or an invalid combination are refused rather than resolved, because they need a person (two revisions or two verdicts). A refusal must never leave Git's working file as 'ours' alone: Git keeps %A unchanged when a custom driver exits non-zero, so the merge is reported as conflicted but has no markers and the other side is silently dropped from the file (observed with git 2.43). The configured command therefore ends in `|| git merge-file ... %A %O %B`, which also covers a checkout where mason is not on PATH. Keep the driver from writing %A before it has a valid result. Git cannot share driver commands through committed files, so init owns the .gitattributes entry and setup owns local Git config; teardown retains both because the fallback stays safe without Mason. Reconsider if Git gains built-in fallback for failing drivers or records gain fields that are not append-only lists or plain values.",
+        "category": "gotcha",
+        "files": [
+          "src/decisions/merge.ts",
+          "src/setup/config.ts",
+          "test/decision-merge.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "issue",
+            "reference": "https://github.com/adrianczuczka/mason/issues/21",
+            "note": "Stacked-branch rebases conflicted inside decision JSON when both sides appended inspections and one accepted."
+          },
+          {
+            "kind": "document",
+            "reference": "test/decision-merge.test.ts",
+            "note": "End-to-end rebase with and without the driver, fallback markers when Mason is absent or refuses, symmetric merges."
+          },
+          {
+            "kind": "other",
+            "reference": "Local experiment with git 2.43.0 on 2026-10-20",
+            "note": "A driver exiting non-zero left the conflicted file as the current side without conflict markers; an undefined driver used the built-in text merge."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "b870205a0429e71e8c7b44a0b7deb2b1b7ccc4d9",
+      "capture": {
+        "anchors": [
+          "src/decisions/merge.ts",
+          "src/setup/config.ts",
+          "test/decision-merge.test.ts"
+        ],
+        "files": {
+          "src/decisions/merge.ts": "9d789c6ee3d4468138025a2bd67ed40af22f854c8577734100ba3a54bb92d30a",
+          "src/setup/config.ts": "df000838e200e819b8c4d43088d19df9294917b8a63eb6c7b92bba0433184cb5",
+          "test/decision-merge.test.ts": "b82d4cce0b30a6d1a419c2a5347a9d5c09850a4ca6d830da6e43612849466940"
+        },
+        "complete": true
+      }
+    }
+  ],
+  "capture": {
+    "anchors": [
+      "src/decisions/merge.ts",
+      "src/setup/config.ts",
+      "test/decision-merge.test.ts"
+    ],
+    "files": {
+      "src/decisions/merge.ts": "9d789c6ee3d4468138025a2bd67ed40af22f854c8577734100ba3a54bb92d30a",
+      "src/setup/config.ts": "df000838e200e819b8c4d43088d19df9294917b8a63eb6c7b92bba0433184cb5",
+      "test/decision-merge.test.ts": "b82d4cce0b30a6d1a419c2a5347a9d5c09850a4ca6d830da6e43612849466940"
+    },
+    "complete": true
+  }
+}

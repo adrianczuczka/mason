@@ -8,6 +8,7 @@ import { configPath, automationConfigSchema, AUTOMATION_PATH } from "../automati
 import type { Host } from "../automation/store.js";
 import { readText, managedBlock, type FileEdit } from "./files.js";
 import { hookCommand, mcpCommand } from "./launcher.js";
+import { MERGE_ATTRIBUTE, MERGE_DRIVER_COMMAND, MERGE_DRIVER_NAME } from "../decisions/merge.js";
 
 const object = z.record(z.unknown());
 export const mcpPath = (host: Host) => (host === "codex" ? ".codex/config.toml" : ".mcp.json");
@@ -152,6 +153,7 @@ export async function hookEdits(root: string, host: Host): Promise<FileEdit[]> {
 
 export async function ancillaryEdits(root: string) {
   const ignore = await readText(root, ".gitignore");
+  const attributes = await readText(root, ".gitattributes");
   const rules = [
     "!/.mason/",
     "/.mason/*",
@@ -170,7 +172,57 @@ export async function ancillaryEdits(root: string) {
       before: ignore,
       after: managedBlock(ignore ?? "", "# mason:ignore:start", "# mason:ignore:end", rules),
     },
+    // Unconfigured checkouts keep Git's text merge; mason setup enables the driver locally.
+    {
+      path: ".gitattributes",
+      before: attributes,
+      after: managedBlock(
+        attributes ?? "",
+        "# mason:merge:start",
+        "# mason:merge:end",
+        MERGE_ATTRIBUTE,
+      ),
+    },
   ];
+}
+
+/** Repository-level state of the decision merge driver; linked worktrees share it. */
+export async function decisionMergeStatus(root: string) {
+  const { git } = await import("../automation/evidence.js");
+  const attribute = (
+    await git(root, "check-attr", "merge", "--", ".mason/decisions/record.json")
+  ).trim();
+  const driver = await git(root, "config", "--get", `merge.${MERGE_DRIVER_NAME}.driver`).then(
+    (value) => value.trim(),
+    () => null,
+  );
+  return {
+    attribute: attribute.endsWith(`: merge: ${MERGE_DRIVER_NAME}`),
+    driver: driver === null ? "missing" : driver === MERGE_DRIVER_COMMAND ? "configured" : "custom",
+  } as const;
+}
+
+export function mergeDriverSummary(state: Awaited<ReturnType<typeof decisionMergeStatus>>) {
+  const driver =
+    state.driver === "configured"
+      ? "Decision record merge driver: configured."
+      : state.driver === "custom"
+        ? "Decision record merge driver: customized in Git config; Mason left it unchanged."
+        : "Decision record merge driver: not configured; Git text-merges decision records. Run mason setup to enable it.";
+  return state.attribute
+    ? driver
+    : driver + " The .gitattributes entry is missing; a maintainer can add it with mason init.";
+}
+
+/** Local activation only: Git cannot share driver commands through committed files. */
+export async function configureDecisionMerge(root: string) {
+  const status = await decisionMergeStatus(root);
+  if (status.driver !== "missing") return status;
+  const { git } = await import("../automation/evidence.js");
+  const section = `merge.${MERGE_DRIVER_NAME}`;
+  await git(root, "config", "--local", `${section}.name`, "Mason decision record merge");
+  await git(root, "config", "--local", `${section}.driver`, MERGE_DRIVER_COMMAND);
+  return { ...status, driver: "configured" } as const;
 }
 
 export async function inspectHostConfig(root: string, host: Host, plannedMcp?: string) {

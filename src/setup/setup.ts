@@ -5,6 +5,8 @@ import { writeStoreJson } from "../utils/storage.js";
 import { applyEdit, readText } from "./files.js";
 import {
   ancillaryEdits,
+  configureDecisionMerge,
+  mergeDriverSummary,
   hookEdits,
   instructionEdits,
   mcpEdit,
@@ -136,6 +138,7 @@ export async function setupProject(
       })
     )
       changedFiles.push(SETUP_PATH);
+    const mergeDriver = await configureDecisionMerge(ws.root);
     options.progress?.step("Checking agent configuration");
     for (const input of sharedInputs)
       if ((await readText(ws.root, input.path)) !== input.before)
@@ -159,6 +162,7 @@ export async function setupProject(
       runtime: { kind: "global", command: "mason", version: installed.version },
       changedFiles,
       receiptPath,
+      mergeDriver,
       activation: await setupStatus(ws.root),
       next:
         configured.disabled || configured.mcpDisabled
@@ -176,6 +180,7 @@ export function summarizeSetup(result: Awaited<ReturnType<typeof setupProject>>)
     "  MCP server and lifecycle hooks use mason from PATH.",
     "  Existing shared configuration validated; only local activation state was written.",
     `  ${result.changedFiles.length} files changed.`,
+    "  " + mergeDriverSummary(result.mergeDriver),
     "Activation: " + result.activation.status + ".",
     result.next,
     "If the assistant cannot find mason, restart the desktop app so it picks up PATH.",
