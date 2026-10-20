@@ -2,9 +2,9 @@
 #
 # Runs on `agent/issue-*` branches from this repository, as a separate session
 # that shares no context with the fixer. It posts inline and summary comments
-# only: it cannot push, approve or merge. To act on its findings, re-apply the
-# `agent:fix` label to the issue; the fixer reads this review and continues the
-# same branch.
+# only: it cannot push, approve or merge. To act on its findings, run the
+# Agent fix workflow manually with the issue number; the fixer reads this
+# review and continues the same branch.
 #
 # Both agents act as claude[bot], so findings are comments rather than a
 # "request changes" review (GitHub rejects reviews on a PR by the same
@@ -12,8 +12,9 @@
 #
 # The review builds and runs the PR's own code (Mason MCP server and
 # mason-review) with the OAuth token in scope. That is acceptable only because
-# these branches come from the fixer, which a maintainer starts by label; keep
-# the same-repository and branch-prefix guard below.
+# these branches come from the fixer, which runs only on issues from trusted
+# authors or by manual dispatch; keep the same-repository and branch-prefix
+# guard below.
 #
 # Setup is shared with agent-fix.yml (Claude GitHub App, CLAUDE_CODE_OAUTH_TOKEN).
 
