@@ -11,11 +11,11 @@
 # identity). `allowed_bots: claude` lets the fixer's pushes start a review.
 #
 # The review builds and runs the PR's own code (Mason MCP server and
-# mason-review) with the API key in scope. That is acceptable only because
+# mason-review) with the OAuth token in scope. That is acceptable only because
 # these branches come from the fixer, which a maintainer starts by label; keep
 # the same-repository and branch-prefix guard below.
 #
-# Setup is shared with agent-fix.yml (Claude GitHub App, ANTHROPIC_API_KEY).
+# Setup is shared with agent-fix.yml (Claude GitHub App, CLAUDE_CODE_OAUTH_TOKEN).
 
 name: Agent review
 
@@ -70,7 +70,7 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_bots: claude
           prompt: |
             REPO: ${{ github.repository }}

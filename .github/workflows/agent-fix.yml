@@ -18,7 +18,9 @@
 #      (https://github.com/apps/claude, or `/install-github-app` in Claude Code).
 #      Its token pushes and opens the PR, so CI runs on the agent's PRs; the
 #      default GITHUB_TOKEN would not trigger CI.
-#   2. Add the ANTHROPIC_API_KEY repository secret.
+#   2. Run `claude setup-token` locally (Pro/Max subscription) and store the
+#      result as the CLAUDE_CODE_OAUTH_TOKEN repository secret. Runs count
+#      against that subscription's usage limits.
 #   3. Create the `agent:fix` label.
 #
 # Runs are serialized repository-wide: parallel branches that each save a
@@ -93,7 +95,7 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             You are fixing GitHub issue #${{ github.event.issue.number }} in ${{ github.repository }}.
             You are on branch `${{ env.BRANCH }}` (existing branch: ${{ steps.branch.outputs.existing }}).
