@@ -29,6 +29,8 @@ export const stateSchema = z.object({
       host: hostSchema,
       lastUsed: z.string(),
       notifiedDiagnostics: z.array(z.string()).default([]),
+      /** Digest of the upstream drift notice already shown to this session. */
+      upstreamNotice: z.string().optional(),
       pending: z.record(z.string()),
       stopReview: stopReviewSchema.optional(),
       coverageGaps: z.array(z.string()),

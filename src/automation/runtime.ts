@@ -1,5 +1,6 @@
 import { loadDecisionStore } from "../decisions/decisions.js";
 import { driftExcerpt, formatDriftExcerpt } from "../decisions/excerpts.js";
+import { branchAttribution } from "../decisions/attribution.js";
 import { checkDecisionAnchors } from "../audit/checks/decision-anchor.js";
 import { readAutomationConfig } from "./config.js";
 import {
@@ -66,6 +67,12 @@ export interface AutomationReport {
   reportPath: string;
   findings: RepairFinding[];
   diagnostics: string[];
+  /** Decision drift that arrived only through the default branch; not this checkout's work. */
+  upstreamDrift?: {
+    target: string;
+    mergeBase: string;
+    decisions: Array<{ id: string; title: string; changedFiles: string[] }>;
+  };
   checks: {
     ran: string[];
     reused: string[];
@@ -491,6 +498,17 @@ async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, st
   );
 }
 
+function upstreamDriftNotice(drift: NonNullable<AutomationReport["upstreamDrift"]>) {
+  const listed = drift.decisions
+    .slice(0, 5)
+    .map((decision) => `${JSON.stringify(cleanText(decision.title))} (${cleanText(decision.id)})`);
+  const more = drift.decisions.length - listed.length;
+  return [
+    `Mason: ${drift.decisions.length} decision(s) have anchors changed only by ${cleanText(drift.target)} since this branch's merge-base, not by this branch: ${listed.join(", ")}${more ? ` and ${more} more` : ""}.`,
+    `They are not this checkout's work and do not block. Inspect them on ${cleanText(drift.target)}, where they are reported as usual; inspections recorded here would ride along with this branch.`,
+  ].join("\n");
+}
+
 /** Changed hunks let an agent dismiss irrelevant drift without another tool call. They are
  * optional context: a failed excerpt omits itself and never resolves or hides a finding. */
 async function driftExcerpts(root: string, report: AutomationReport, ids: string[]) {
@@ -528,7 +546,35 @@ async function guidanceAnalysis(ws: Workspace, inputs: Inputs) {
     changesSinceDoc: new Map(),
     decisionsPresent: true,
   });
-  const findings: RepairFinding[] = checked.advisories.map((current) => ({
+  // Drift whose changed anchors this branch never touched came from the default branch, e.g.
+  // through a rebase. It is reported once, separately, and never becomes this checkout's work.
+  const attribution = checked.advisories.length
+    ? await branchAttribution(ws.root).catch(() => null)
+    : null;
+  // Attribute per decision: drift in any revision touched by this branch keeps all of it here.
+  const own = new Set(
+    checked.advisories.flatMap((advisory) =>
+      advisory.evidence.kind === "decision-anchor" &&
+      advisory.evidence.changedFiles.some((file) => attribution?.branchFiles.has(file))
+        ? [advisory.evidence.decisionId]
+        : [],
+    ),
+  );
+  const upstream = new Map<string, { id: string; title: string; changedFiles: string[] }>();
+  const advisories = checked.advisories.filter((advisory) => {
+    const evidence = advisory.evidence;
+    if (!attribution || evidence.kind !== "decision-anchor" || own.has(evidence.decisionId))
+      return true;
+    const entry = upstream.get(evidence.decisionId) ?? {
+      id: evidence.decisionId,
+      title: evidence.title,
+      changedFiles: [],
+    };
+    entry.changedFiles = [...new Set([...entry.changedFiles, ...evidence.changedFiles])].sort();
+    upstream.set(evidence.decisionId, entry);
+    return false;
+  });
+  const findings: RepairFinding[] = advisories.map((current) => ({
     id: findingId(current),
     original: current,
     current,
@@ -550,6 +596,7 @@ async function guidanceAnalysis(ws: Workspace, inputs: Inputs) {
       if (currentIds.has(previous.id) || previous.original.evidence.kind !== "decision-anchor")
         continue;
       const evidence = previous.original.evidence;
+      if (upstream.has(evidence.decisionId)) continue;
       const record = records.find((record) => record.id === evidence.decisionId);
       const capture = record && inputs.decisionEvidence[record.id]?.capture;
       const resolved =
@@ -585,6 +632,15 @@ async function guidanceAnalysis(ws: Workspace, inputs: Inputs) {
     baselinePaths: [],
     reportPath: "",
     findings,
+    ...(attribution && upstream.size
+      ? {
+          upstreamDrift: {
+            target: attribution.target,
+            mergeBase: attribution.mergeBase,
+            decisions: [...upstream.values()],
+          },
+        }
+      : {}),
     diagnostics: [
       ...checked.skipped.map((item) => item.reason),
       ...findings
@@ -754,6 +810,11 @@ async function runAutomation(dir: string, event: AutomationEvent, guidance: bool
                 }),
               ])
             : null;
+          // Shown once per session and set of decisions; it is neither a finding nor a block.
+          const upstream = report.upstreamDrift ? upstreamDriftNotice(report.upstreamDrift) : null;
+          const upstreamNotice =
+            session && upstream && session.upstreamNotice !== hash(upstream) ? upstream : null;
+          if (session) session.upstreamNotice = upstream ? hash(upstream) : undefined;
           const message = !session
             ? summarize(report)
             : [
@@ -761,6 +822,7 @@ async function runAutomation(dir: string, event: AutomationEvent, guidance: bool
                 completionSummary(selected, report.reportPath),
                 completionSummary(feedback, report.reportPath),
                 excerpts,
+                upstreamNotice,
                 ...(diagnostics.length
                   ? [
                       `Mason: verification limited. ${diagnostics.slice(0, 2).map(cleanText).join(" ")} Evidence: ${report.reportPath}.`,

@@ -21,6 +21,7 @@ import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { getChangesWithStatus, getWorkingTree, touchedPaths } from "../drift/drift.js";
 import { anchorMatches, matchingPaths } from "../utils/paths.js";
 import { createFileAccess } from "../utils/files.js";
+import { branchAttribution } from "./attribution.js";
 
 const exec = promisify(execFile);
 const requestSchema = z.object({
@@ -203,8 +204,20 @@ async function previews(
       diffUnavailable = "The diff base is not available locally; inspect the history separately.";
     }
   }
+  // Changes this branch never touched came from the default branch it builds on.
+  const branch = changedSince.length ? await branchAttribution(root).catch(() => null) : null;
   return {
     diffSince: since,
+    ...(branch
+      ? {
+          attribution: {
+            target: branch.target,
+            mergeBase: branch.mergeBase,
+            branchFiles: changedSince.filter((file) => branch.branchFiles.has(file)),
+            targetFiles: changedSince.filter((file) => !branch.branchFiles.has(file)),
+          },
+        }
+      : {}),
     commits: commits.slice(0, MAX_PREVIEW_COMMITS),
     ...(commits.length > MAX_PREVIEW_COMMITS ? { commitsTruncated: true } : {}),
     files,

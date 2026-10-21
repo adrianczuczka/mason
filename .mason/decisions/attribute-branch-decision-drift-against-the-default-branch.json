@@ -1,0 +1,93 @@
+{
+  "version": 2,
+  "id": "attribute-branch-decision-drift-against-the-default-branch",
+  "title": "Attribute branch decision drift against the default branch",
+  "body": "Hook-delivered decision drift is split by origin. Attribute against the repository's default branch (origin/HEAD, else origin/main, origin/master, main, master), not the branch's @{upstream}: a pushed branch's upstream is usually its own remote copy, whose merge-base says nothing. A decision is this branch's drift when any changed anchor appears in the branch's commits since the merge-base or in uncommitted work; attribution is per decision, so a revision touched by the branch keeps all its findings. Otherwise the drift arrived only from the default branch (typically after a rebase): list it once per session as upstream drift, keep it out of findings and Stop blocking, and leave it to be handled on the default branch, where no split applies. Recording inspections for it on a feature branch would ride along with unrelated work, and the same drift would otherwise be multiplied across every rebased branch. Explicit audits still report all drift. Refs are read locally without fetching, so a stale default-branch ref can misattribute drift; that limitation is accepted rather than adding network access to hooks.",
+  "category": "decision",
+  "files": [
+    "src/decisions/attribution.ts",
+    "src/automation/runtime.ts",
+    "src/decisions/review.ts",
+    "test/drift-attribution.test.ts"
+  ],
+  "createdAt": "2026-10-21T08:44:22.421Z",
+  "updatedAt": "2026-10-21T08:44:22.421Z",
+  "refreshedHash": "87b9ad0ae202d90341f8bc3f7190da16cc5506b9",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "issue",
+      "reference": "https://github.com/adrianczuczka/mason/issues/23",
+      "note": "A CI-only branch rebased onto main reported 23 drifted decisions, all caused by main's commits."
+    },
+    {
+      "kind": "document",
+      "reference": "test/drift-attribution.test.ts"
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-10-21T08:44:22.421Z",
+      "actor": "Claude Code session fixing issue #23",
+      "revision": 1,
+      "content": {
+        "title": "Attribute branch decision drift against the default branch",
+        "body": "Hook-delivered decision drift is split by origin. Attribute against the repository's default branch (origin/HEAD, else origin/main, origin/master, main, master), not the branch's @{upstream}: a pushed branch's upstream is usually its own remote copy, whose merge-base says nothing. A decision is this branch's drift when any changed anchor appears in the branch's commits since the merge-base or in uncommitted work; attribution is per decision, so a revision touched by the branch keeps all its findings. Otherwise the drift arrived only from the default branch (typically after a rebase): list it once per session as upstream drift, keep it out of findings and Stop blocking, and leave it to be handled on the default branch, where no split applies. Recording inspections for it on a feature branch would ride along with unrelated work, and the same drift would otherwise be multiplied across every rebased branch. Explicit audits still report all drift. Refs are read locally without fetching, so a stale default-branch ref can misattribute drift; that limitation is accepted rather than adding network access to hooks.",
+        "category": "decision",
+        "files": [
+          "src/decisions/attribution.ts",
+          "src/automation/runtime.ts",
+          "src/decisions/review.ts",
+          "test/drift-attribution.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "issue",
+            "reference": "https://github.com/adrianczuczka/mason/issues/23",
+            "note": "A CI-only branch rebased onto main reported 23 drifted decisions, all caused by main's commits."
+          },
+          {
+            "kind": "document",
+            "reference": "test/drift-attribution.test.ts"
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "87b9ad0ae202d90341f8bc3f7190da16cc5506b9",
+      "capture": {
+        "anchors": [
+          "src/automation/runtime.ts",
+          "src/decisions/attribution.ts",
+          "src/decisions/review.ts",
+          "test/drift-attribution.test.ts"
+        ],
+        "files": {
+          "src/automation/runtime.ts": "2b9d16b8383dba7b8fd1b5b62ba40edd73457bd8e53df90b9c4e4f5406942203",
+          "src/decisions/attribution.ts": "e9875f2809cfb8f3ebf957bcb838ed7295a03c2896ffaf31de47adb19764201f",
+          "src/decisions/review.ts": "dbda7c10b1d9b3f55e6038fd7fd39f21bbb4bf3d6c248efd110f1de3037b8cec",
+          "test/drift-attribution.test.ts": "74f5ca46ebb871a328cfe77d1bdad4cf9f684256e55fb90f07993db5ccb16b15"
+        },
+        "complete": true
+      }
+    }
+  ],
+  "capture": {
+    "anchors": [
+      "src/automation/runtime.ts",
+      "src/decisions/attribution.ts",
+      "src/decisions/review.ts",
+      "test/drift-attribution.test.ts"
+    ],
+    "files": {
+      "src/automation/runtime.ts": "2b9d16b8383dba7b8fd1b5b62ba40edd73457bd8e53df90b9c4e4f5406942203",
+      "src/decisions/attribution.ts": "e9875f2809cfb8f3ebf957bcb838ed7295a03c2896ffaf31de47adb19764201f",
+      "src/decisions/review.ts": "dbda7c10b1d9b3f55e6038fd7fd39f21bbb4bf3d6c248efd110f1de3037b8cec",
+      "test/drift-attribution.test.ts": "74f5ca46ebb871a328cfe77d1bdad4cf9f684256e55fb90f07993db5ccb16b15"
+    },
+    "complete": true
+  }
+}
