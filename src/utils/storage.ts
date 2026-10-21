@@ -40,11 +40,19 @@ export async function storePath(
   return current;
 }
 
-export async function readStoreJson(root: string, relative: string): Promise<unknown | null> {
+export const STORE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** A larger `maxBytes` lets a caller read an oversized store it can shrink. */
+export async function readStoreJson(
+  root: string,
+  relative: string,
+  maxBytes = STORE_MAX_BYTES,
+): Promise<unknown | null> {
   try {
     const file = await storePath(root, relative);
-    const raw = await readBoundedFile(file, 10 * 1024 * 1024);
-    if (raw === null) throw new Error("file is not regular or exceeds 10 MiB");
+    const raw = await readBoundedFile(file, maxBytes);
+    if (raw === null)
+      throw new Error(`file is not regular or exceeds ${maxBytes / 1024 / 1024} MiB`);
     const parsed: unknown = JSON.parse(raw);
     if (parsed === null) throw new Error("expected a JSON object, received null");
     return parsed;
@@ -61,9 +69,10 @@ export async function writeStoreJson(
   root: string,
   relative: string,
   value: unknown,
+  options: { compact?: boolean } = {},
 ): Promise<void> {
-  const payload = JSON.stringify(value, null, 2) + "\n";
-  if (Buffer.byteLength(payload) > 10 * 1024 * 1024) {
+  const payload = JSON.stringify(value, null, options.compact ? undefined : 2) + "\n";
+  if (Buffer.byteLength(payload) > STORE_MAX_BYTES) {
     throw new Error(`Mason store ${relative} exceeds 10 MiB`);
   }
   const file = await storePath(root, relative, true);

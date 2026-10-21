@@ -1,0 +1,115 @@
+{
+  "version": 2,
+  "id": "pending-tool-captures-must-expire-and-never-lock-out",
+  "title": "Pending tool captures must expire and never lock out sessions",
+  "body": "A pre-tool capture waits for the matching post-tool event, but that event is not guaranteed: Claude reports failed calls through PostToolUseFailure rather than PostToolUse, and denied or interrupted calls report nothing. Treating unfinished calls as protected state leaked one entry per failed or denied call; sessions holding any entry were never evicted, so after about a month every new session failed at the 128-session cap, and copied decision evidence in Stop review pending entries pushed state.json past its 10 MiB write limit. Rules: map PostToolUseFailure to after_tool; drop pending captures when the turn ends (Stop) and after 24 idle hours; bound pending entries per session; evict sessions least recently used regardless of pending entries, never the active one; write the state compactly and evict sessions rather than fail when it would exceed the store limit, reading oversized files so they can be shrunk. A dropped capture loses no evidence: a later post-tool event without it records a coverage gap, and drift is still computed from current captures. An attempt still in flight must not make status unavailable. Tentative: Stop review pending entries still copy all decision evidence per call; storing it once by digest was suggested but not implemented.",
+  "category": "gotcha",
+  "files": [
+    "src/automation/store.ts",
+    "src/automation/pending-tools.ts",
+    "src/automation/runtime.ts",
+    "src/automation/adapters.ts",
+    "src/automation/execution.ts",
+    "test/automation-sessions.test.ts"
+  ],
+  "createdAt": "2026-10-21T08:14:56.084Z",
+  "updatedAt": "2026-10-21T08:14:56.084Z",
+  "refreshedHash": "09191c57cea9342b68e157cf9340ab5fc3643911",
+  "status": "active",
+  "approval": "proposed",
+  "revision": 1,
+  "sources": [
+    {
+      "kind": "issue",
+      "reference": "https://github.com/adrianczuczka/mason/issues/19",
+      "note": "128 sessions with 684 leaked pending entries disabled hooks in new sessions; follow-up comments report status masking by in-flight attempts and state.json passing 10 MiB from duplicated Stop review evidence."
+    },
+    {
+      "kind": "document",
+      "reference": "https://code.claude.com/docs/en/hooks",
+      "note": "PostToolUse fires after success and PostToolUseFailure after a failed call; permission-rule denials and interrupts are not documented as firing a post-tool hook."
+    },
+    {
+      "kind": "document",
+      "reference": "test/automation-sessions.test.ts"
+    }
+  ],
+  "history": [
+    {
+      "kind": "created",
+      "at": "2026-10-21T08:14:56.084Z",
+      "actor": "Claude Code session fixing issue #19",
+      "revision": 1,
+      "content": {
+        "title": "Pending tool captures must expire and never lock out sessions",
+        "body": "A pre-tool capture waits for the matching post-tool event, but that event is not guaranteed: Claude reports failed calls through PostToolUseFailure rather than PostToolUse, and denied or interrupted calls report nothing. Treating unfinished calls as protected state leaked one entry per failed or denied call; sessions holding any entry were never evicted, so after about a month every new session failed at the 128-session cap, and copied decision evidence in Stop review pending entries pushed state.json past its 10 MiB write limit. Rules: map PostToolUseFailure to after_tool; drop pending captures when the turn ends (Stop) and after 24 idle hours; bound pending entries per session; evict sessions least recently used regardless of pending entries, never the active one; write the state compactly and evict sessions rather than fail when it would exceed the store limit, reading oversized files so they can be shrunk. A dropped capture loses no evidence: a later post-tool event without it records a coverage gap, and drift is still computed from current captures. An attempt still in flight must not make status unavailable. Tentative: Stop review pending entries still copy all decision evidence per call; storing it once by digest was suggested but not implemented.",
+        "category": "gotcha",
+        "files": [
+          "src/automation/store.ts",
+          "src/automation/pending-tools.ts",
+          "src/automation/runtime.ts",
+          "src/automation/adapters.ts",
+          "src/automation/execution.ts",
+          "test/automation-sessions.test.ts"
+        ],
+        "sources": [
+          {
+            "kind": "issue",
+            "reference": "https://github.com/adrianczuczka/mason/issues/19",
+            "note": "128 sessions with 684 leaked pending entries disabled hooks in new sessions; follow-up comments report status masking by in-flight attempts and state.json passing 10 MiB from duplicated Stop review evidence."
+          },
+          {
+            "kind": "document",
+            "reference": "https://code.claude.com/docs/en/hooks",
+            "note": "PostToolUse fires after success and PostToolUseFailure after a failed call; permission-rule denials and interrupts are not documented as firing a post-tool hook."
+          },
+          {
+            "kind": "document",
+            "reference": "test/automation-sessions.test.ts"
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "09191c57cea9342b68e157cf9340ab5fc3643911",
+      "capture": {
+        "anchors": [
+          "src/automation/adapters.ts",
+          "src/automation/execution.ts",
+          "src/automation/pending-tools.ts",
+          "src/automation/runtime.ts",
+          "src/automation/store.ts",
+          "test/automation-sessions.test.ts"
+        ],
+        "files": {
+          "src/automation/adapters.ts": "b76179d924ac24bda38ae6effe4d84837cf68f06bb3144f6e843db394998d7cb",
+          "src/automation/execution.ts": "1b44a955ec49a864ea751078b3869932a56c1f1d7db651f097879b228e0b4ef8",
+          "src/automation/pending-tools.ts": "9087183273d0be4ced8b23fb7550a24f573f37f2583f87aa70814436afa882fa",
+          "src/automation/runtime.ts": "9e663eace089a7bfaa47743e1e9f679a84b59e84a15171f4149a5ce23c004ce4",
+          "src/automation/store.ts": "d1366f12ee663f4c0d5a8a6ec710cdeacbee02646dc2ea97b52dd06fef656d9a",
+          "test/automation-sessions.test.ts": "db7ebb0af4879a70d9480921654eae912aa105fdb9a27066820e00506bf8e6ae"
+        },
+        "complete": true
+      }
+    }
+  ],
+  "capture": {
+    "anchors": [
+      "src/automation/adapters.ts",
+      "src/automation/execution.ts",
+      "src/automation/pending-tools.ts",
+      "src/automation/runtime.ts",
+      "src/automation/store.ts",
+      "test/automation-sessions.test.ts"
+    ],
+    "files": {
+      "src/automation/adapters.ts": "b76179d924ac24bda38ae6effe4d84837cf68f06bb3144f6e843db394998d7cb",
+      "src/automation/execution.ts": "1b44a955ec49a864ea751078b3869932a56c1f1d7db651f097879b228e0b4ef8",
+      "src/automation/pending-tools.ts": "9087183273d0be4ced8b23fb7550a24f573f37f2583f87aa70814436afa882fa",
+      "src/automation/runtime.ts": "9e663eace089a7bfaa47743e1e9f679a84b59e84a15171f4149a5ce23c004ce4",
+      "src/automation/store.ts": "d1366f12ee663f4c0d5a8a6ec710cdeacbee02646dc2ea97b52dd06fef656d9a",
+      "test/automation-sessions.test.ts": "db7ebb0af4879a70d9480921654eae912aa105fdb9a27066820e00506bf8e6ae"
+    },
+    "complete": true
+  }
+}

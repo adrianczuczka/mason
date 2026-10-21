@@ -295,8 +295,15 @@ export async function executionStatus(root: string, directory: string) {
         ["failed", "unknown"].includes(a.status) &&
         (!completed || (a.finishedAt ?? a.startedAt) >= completed.startedAt),
     );
-  const status = log.attempts.some((a) => a.status === "running")
-    ? "running"
-    : (outstanding?.status ?? log.attempts.at(-1)?.status ?? "not-observed");
-  return { status, attempts: log.attempts, discardedAttempts: log.discardedAttempts };
+  // Hooks overlap the next tool call, so an attempt is usually in flight during healthy use.
+  // It must not hide the latest completed result; dead attempts were already marked unknown.
+  const inFlight = log.attempts.some((a) => a.status === "running");
+  const status =
+    outstanding?.status ??
+    (completed
+      ? "completed"
+      : inFlight
+        ? "running"
+        : (log.attempts.at(-1)?.status ?? "not-observed"));
+  return { status, inFlight, attempts: log.attempts, discardedAttempts: log.discardedAttempts };
 }

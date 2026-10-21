@@ -3,7 +3,7 @@ import { parse, stringify } from "smol-toml";
 import { z } from "zod";
 import { CLAUDE_MD_SECTION } from "../mcp/init.js";
 import { DOC_CANDIDATES } from "../audit/docs.js";
-import { hookConfig, compatibleManagedHookCommands } from "../automation/adapters.js";
+import { HOOK_EVENTS, hookConfig, compatibleManagedHookCommands } from "../automation/adapters.js";
 import { configPath, automationConfigSchema, AUTOMATION_PATH } from "../automation/install.js";
 import type { Host } from "../automation/store.js";
 import { readText, managedBlock, type FileEdit } from "./files.js";
@@ -289,7 +289,13 @@ export async function inspectIntegration(root: string, host: Host) {
   const mcpCompatible =
     isDeepStrictEqual({ command: config.mcp?.command, args: config.mcp?.args }, mcpCommand(host)) &&
     (config.mcp?.type === undefined || config.mcp.type === "stdio");
-  const hooksCompatible = isDeepStrictEqual(normalizedHooks, expectedHooks);
+  // Optional events (Claude's PostToolUseFailure) may be absent from older configuration.
+  const required = new Set<string>(HOOK_EVENTS);
+  const hooksCompatible = Object.entries(expectedHooks).every(
+    ([event, groups]) =>
+      isDeepStrictEqual(normalizedHooks[event], groups) ||
+      (!required.has(event) && !normalizedHooks[event]?.length),
+  );
   return {
     ...config,
     instructions,

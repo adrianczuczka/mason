@@ -192,7 +192,11 @@ it("does not let an overlapping success hide another invocation's failure", asyn
         throw new Error("failed check");
       }),
     ).rejects.toThrow("failed check");
-    expect((await executionStatus(root, ws.directory)).status).toBe("running");
+    // An in-flight attempt is reported separately and never hides the failure.
+    expect(await executionStatus(root, ws.directory)).toMatchObject({
+      status: "failed",
+      inFlight: true,
+    });
   } finally {
     release.resolve();
   }

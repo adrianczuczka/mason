@@ -2,6 +2,7 @@ import { z } from "zod";
 import { anchorCaptureSchema, changedCaptureFiles } from "../decisions/anchors.js";
 import type { Inputs } from "./evidence.js";
 import { digest } from "../audit/findings.js";
+import { boundPending } from "./pending-tools.js";
 import type { State } from "./store.js";
 import type { AutomationEvent, AutomationReport } from "./runtime.js";
 
@@ -19,6 +20,8 @@ export function observeDecisionEdits(session: Session, inputs: Inputs, event: Au
   if (event.host !== "claude" || !event.mutating || !event.toolId) return;
   const state = (session.stopReview ??= empty());
   if (event.event === "before_tool") {
+    // Each entry copies all decision evidence; a call that never completes must not accumulate.
+    boundPending(state.pending);
     state.pending[event.toolId] = { head: inputs.head, evidence: inputs.decisionEvidence };
   } else if (event.event === "after_tool") {
     const before = state.pending[event.toolId];

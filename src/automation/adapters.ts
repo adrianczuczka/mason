@@ -14,6 +14,7 @@ const inputSchema = z.object({
     "UserPromptSubmit",
     "PreToolUse",
     "PostToolUse",
+    "PostToolUseFailure",
     "Stop",
   ]),
   tool_name: z.string().optional(),
@@ -29,6 +30,8 @@ const lifecycle: Record<z.infer<typeof inputSchema>["hook_event_name"], Automati
     UserPromptSubmit: "turn_start",
     PreToolUse: "before_tool",
     PostToolUse: "after_tool",
+    // Claude reports failed calls separately; they still end the paired tool capture.
+    PostToolUseFailure: "after_tool",
     Stop: "task_end",
   };
 
@@ -156,13 +159,20 @@ export async function runAutomationHook(
     // Hook failure is visible but does not turn guidance into an editing permission gate.
     return {
       systemMessage: message,
-      ...(["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"].includes(name)
+      ...([
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+      ].includes(name)
         ? { hookSpecificOutput: { hookEventName: name, additionalContext: message } }
         : {}),
     };
   }
 }
 
+/** Events every compatible installation registers. */
 export const HOOK_EVENTS = [
   "SessionStart",
   "UserPromptSubmit",
@@ -170,6 +180,15 @@ export const HOOK_EVENTS = [
   "PostToolUse",
   "Stop",
 ] as const;
+/** Generated for the host but optional for compatibility, so older shared configuration keeps
+ * working until a maintainer refreshes it with mason init. */
+const OPTIONAL_HOOK_EVENTS: Record<Host, readonly string[]> = {
+  claude: ["PostToolUseFailure"],
+  codex: [],
+};
+export function hookEvents(host: Host): string[] {
+  return [...HOOK_EVENTS, ...OPTIONAL_HOOK_EVENTS[host]];
+}
 /** Only guard Mason's generated launch, never interpret a custom command prefix. */
 export function managedHookCommand(host: Host, platform = process.platform, legacy = false) {
   const command = `mason --setup-host ${host}${legacy ? " auto" : ""} hook --host ${host}`;
@@ -208,11 +227,13 @@ export function hookConfig(host: Host, command = "npx --no-install --package mas
   };
   return {
     hooks: Object.fromEntries(
-      HOOK_EVENTS.map((name) => [
+      hookEvents(host).map((name) => [
         name,
         [
           {
-            ...(["PreToolUse", "PostToolUse"].includes(name) ? { matcher: ".*" } : {}),
+            ...(["PreToolUse", "PostToolUse", "PostToolUseFailure"].includes(name)
+              ? { matcher: ".*" }
+              : {}),
             hooks: [{ ...handler }],
           },
         ],

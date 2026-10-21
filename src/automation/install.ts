@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { readStoreJson, writeStoreJson } from "../utils/storage.js";
 import { workspace } from "./evidence.js";
-import { HOOK_EVENTS, hookConfig, knownManagedHookCommands } from "./adapters.js";
+import { HOOK_EVENTS, hookConfig, hookEvents, knownManagedHookCommands } from "./adapters.js";
 import { withLock, type Host } from "./store.js";
 import { readText } from "../setup/files.js";
 import { OWNERSHIP_PATH, ownershipSchema } from "../setup/ownership.js";
@@ -51,7 +51,7 @@ export async function planAutomationInstall(root: string, host: Host, command?: 
   // A clone has shared hooks but no local ownership receipt.
   const owned = new Set([previous, ...pending, newCommand, ...knownManagedHookCommands(host)]);
   const hooks = existing.hooks ?? {};
-  for (const event of HOOK_EVENTS) {
+  for (const event of hookEvents(host)) {
     hooks[event] = (hooks[event] ?? [])
       .map((group) => ({
         ...group,
@@ -95,7 +95,7 @@ async function installLocked(root: string, host: Host, command?: string) {
     configPath: file,
     status: "configured",
     command: newCommand,
-    events: HOOK_EVENTS,
+    events: hookEvents(host),
     next:
       host === "codex"
         ? "Review/trust these hooks using Codex /hooks and start a new session. mason status reports observed events separately from configuration."
@@ -114,7 +114,7 @@ export async function installedAutomation(dir: string) {
     const current = automationConfigSchema.parse(
       (await readStoreJson(ws.root, configPath(host))) ?? {},
     );
-    const configuredEvents = HOOK_EVENTS.filter((event) =>
+    const configuredEvents = hookEvents(host).filter((event) =>
       current.hooks?.[event]?.some((group) =>
         group.hooks.some(
           (handler) => handler.type === "command" && handler.command === expected.command,
@@ -127,7 +127,7 @@ export async function installedAutomation(dir: string) {
       status:
         current.disableAllHooks === true
           ? "disabled"
-          : configuredEvents.length === HOOK_EVENTS.length
+          : HOOK_EVENTS.every((event) => configuredEvents.includes(event))
             ? "configured"
             : "incomplete",
       runtime:

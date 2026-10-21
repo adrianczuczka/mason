@@ -33,7 +33,19 @@ import {
   workspace,
   type Inputs,
 } from "./evidence.js";
-import { parseState, withLock, type Event, type Host, type State } from "./store.js";
+import { boundPending } from "./pending-tools.js";
+import {
+  clearPendingTools,
+  parseState,
+  pruneSessions,
+  serializeState,
+  SESSION_LIMIT,
+  STATE_READ_MAX_BYTES,
+  withLock,
+  type Event,
+  type Host,
+  type State,
+} from "./store.js";
 
 export interface AutomationEvent {
   event: Event;
@@ -77,7 +89,7 @@ export async function observeReadOnlyTool(dir: string, event: AutomationEvent) {
   const ws = await profilePhase("automation.workspace", () => workspace(dir));
   await withLock(ws.root, ws.directory, async () => {
     const statePath = ws.directory + "/state.json";
-    const raw = await readStoreJson(ws.root, statePath);
+    const raw = await readStoreJson(ws.root, statePath, STATE_READ_MAX_BYTES);
     if (raw === null) return;
     const state = parseState(raw);
     if (state.root !== ws.root || state.gitDir !== ws.gitDir || state.branch !== ws.branch) {
@@ -92,7 +104,14 @@ export async function observeReadOnlyTool(dir: string, event: AutomationEvent) {
     session.lastUsed = now;
     session.events[event.event] = { at: now, count: (session.events[event.event]?.count ?? 0) + 1 };
     // Do not advance the audit fingerprint, report, or execution verdict: no check ran.
-    await writeStoreJson(ws.root, statePath, state);
+    await writeStoreJson(
+      ws.root,
+      statePath,
+      serializeState(state, hash([event.host, event.sessionId])),
+      {
+        compact: true,
+      },
+    );
   });
   return { root: ws.root, directory: ws.directory };
 }
@@ -127,7 +146,7 @@ export function summarize(report: AutomationReport): string {
 type Workspace = Awaited<ReturnType<typeof workspace>>;
 
 async function loadState(ws: Workspace): Promise<State> {
-  const raw = await readStoreJson(ws.root, ws.directory + "/state.json");
+  const raw = await readStoreJson(ws.root, ws.directory + "/state.json", STATE_READ_MAX_BYTES);
   const state =
     raw === null
       ? {
@@ -462,7 +481,9 @@ async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, st
           completedAt: analysis.completedAt,
           path: analysisPath,
         };
-        await writeStoreJson(ws.root, ws.directory + "/state.json", state);
+        await writeStoreJson(ws.root, ws.directory + "/state.json", serializeState(state, null), {
+          compact: true,
+        });
       });
       return { analysis, shared: false };
     },
@@ -648,18 +669,13 @@ async function runAutomation(dir: string, event: AutomationEvent, guidance: bool
           const now = new Date().toISOString();
           const key = event.host && event.sessionId ? hash([event.host, event.sessionId]) : null;
           const newSession = key !== null && !state.sessions[key];
+          pruneSessions(
+            state,
+            new Date(now),
+            newSession ? null : key,
+            newSession ? SESSION_LIMIT - 1 : SESSION_LIMIT,
+          );
           if (key && !state.sessions[key]) {
-            const keys = Object.keys(state.sessions).sort((a, b) =>
-              state.sessions[a].lastUsed.localeCompare(state.sessions[b].lastUsed),
-            );
-            // Pending pre-edit captures cannot be evicted by another session's arrival.
-            const removable = keys.filter((k) => !Object.keys(state.sessions[k].pending).length);
-            for (const expired of removable.slice(0, Math.max(0, keys.length - 31)))
-              delete state.sessions[expired];
-            if (Object.keys(state.sessions).length >= 128)
-              throw new Error(
-                "Too many sessions with unfinished tool calls; original evidence was retained.",
-              );
             state.sessions[key] = {
               host: event.host!,
               notifiedDiagnostics: [],
@@ -679,8 +695,7 @@ async function runAutomation(dir: string, event: AutomationEvent, guidance: bool
               count: (session.events[event.event]?.count ?? 0) + 1,
             };
             if (event.event === "before_tool" && event.mutating && event.toolId) {
-              if (Object.keys(session.pending).length >= 128)
-                throw new Error("Too many unfinished tool calls to track pre-edit evidence.");
+              boundPending(session.pending);
               session.pending[event.toolId] = inputs.fingerprint;
             }
             if (event.event === "after_tool" && event.mutating) {
@@ -773,7 +788,11 @@ async function runAutomation(dir: string, event: AutomationEvent, guidance: bool
             state.latest = report.reportPath;
           }
           if (persistReport) await writeStoreJson(ws.root, report.reportPath, report);
-          await writeStoreJson(ws.root, ws.directory + "/state.json", state);
+          // The turn is over: calls still pending never reported completion.
+          if (session && event.event === "task_end") clearPendingTools(session);
+          await writeStoreJson(ws.root, ws.directory + "/state.json", serializeState(state, key), {
+            compact: true,
+          });
           return {
             report,
             message,
@@ -816,7 +835,7 @@ export async function automationStatus(dir: string) {
   const knowledge = await pendingKnowledge(ws.root);
   const execution = await executionStatus(ws.root, ws.directory);
   const notifications = await failureNotifications(ws.root, ws.directory);
-  const raw = await readStoreJson(ws.root, ws.directory + "/state.json");
+  const raw = await readStoreJson(ws.root, ws.directory + "/state.json", STATE_READ_MAX_BYTES);
   if (raw === null)
     return {
       version: 1,
@@ -846,7 +865,11 @@ export async function automationStatus(dir: string) {
     host.sessions++;
     host.observedEvents = [...new Set([...host.observedEvents, ...Object.keys(session.events)])];
   }
-  const unfinished = ["failed", "unknown", "running"].includes(execution.status);
+  const unfinished = ["failed", "unknown"].includes(execution.status);
+  // Tool calls that have not reported completion; they expire at Stop or after 24 idle hours.
+  const pendingSessions = Object.values(state.sessions).filter(
+    (session) => Object.keys(session.pending).length,
+  );
   return {
     version: 1,
     stopBlock: config.stopBlock,
@@ -863,6 +886,13 @@ export async function automationStatus(dir: string) {
     auditReportPath: state.latest,
     verificationStatus: unfinished ? "unavailable" : (latest?.status ?? "unavailable"),
     hosts,
+    sessions: Object.keys(state.sessions).length,
+    unfinishedToolCalls: pendingSessions.reduce(
+      (total, session) => total + Object.keys(session.pending).length,
+      0,
+    ),
+    oldestUnfinishedSessionUsedAt:
+      pendingSessions.map((session) => session.lastUsed).sort()[0] ?? null,
     execution,
     notifications,
     knowledge,
