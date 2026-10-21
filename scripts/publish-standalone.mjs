@@ -22,7 +22,9 @@ for (const target of ['darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64', 
 await fs.writeFile(path.join(dir, 'SHA256SUMS'), checksums.join('\n') + '\n');
 assets.push(path.join(dir, 'SHA256SUMS'), 'install.sh', 'install.ps1');
 const manifest = Buffer.from(JSON.stringify({ format: 1, version: pkg.version, publishedAt: new Date().toISOString(), assets: signedAssets }) + '\n');
-const signature = await sign(manifest);
+// sigstore's 5 s default lets a slow Rekor write time out after it succeeded; the automatic
+// retry then fails with 409 "entry already exists" (0.23.0 release). Wait for the first write.
+const signature = await sign(manifest, { timeout: 60_000 });
 await verify(signature, manifest, {
   certificateIdentityURI: `https://github.com/adrianczuczka/mason/.github/workflows/publish.yml@refs/tags/${tag}`,
   certificateIssuer: 'https://token.actions.githubusercontent.com',
