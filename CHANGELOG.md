@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Wait up to about 10 minutes for npm to list a new version before publishing it to the official MCP Registry. npm took over a minute for both 0.23.0 and 0.23.1, which failed the registry job each time.
+- Wait up to about 10 minutes for npm to list a new version before publishing it to the official MCP Registry, and allow 60 seconds per registry lookup with retries. npm took over a minute for both 0.23.0 and 0.23.1, and registry lookups took 6-12 seconds during the 0.23.1 release, which failed the registry job.
 
 ## 0.23.1 — 2026-10-21
 

@@ -38,13 +38,29 @@ export function registryAlreadyPublished(server, status, body) {
   return true;
 }
 
+// The official registry took 6-12 s per lookup during the 0.23.1 release; 15 s timed out.
+const REQUEST_TIMEOUT_MS = 60_000;
+
+async function verifyRemoteStatus(url, validate) {
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      return validate(response.status, response.ok ? await response.json() : null);
+    } catch (error) {
+      if (attempt === 5) throw error;
+      console.warn(`Registry lookup ${attempt}/5 failed: ${error.message}. Retrying in 15 seconds.`);
+      await setTimeout(15_000);
+    }
+  }
+}
+
 async function verifyRemote(url, validate) {
   // Allow for registry propagation; fail the job if the expected metadata never appears.
   // npm took over a minute to list both 0.23.0 and 0.23.1 after publishing; wait up to ~10 minutes.
   const attempts = 40;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      const response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
       validate(await response.json());
       return;
@@ -70,8 +86,9 @@ async function main() {
     // Check this exact version so retrying an older release also works.
     const url = `https://registry.modelcontextprotocol.io/v0.1/servers/${encodeURIComponent(server.name)}/versions/${encodeURIComponent(server.version)}`;
     if (mode === '--registry-plan') {
-      const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-      const published = registryAlreadyPublished(server, response.status, response.ok ? await response.json() : null);
+      // A 404 is a valid answer here, so retry only failed lookups, not missing versions.
+      let published;
+      await verifyRemoteStatus(url, (status, body) => { published = registryAlreadyPublished(server, status, body); });
       if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `published=${published}\n`);
       console.log(published ? 'This registry version is already published and verified.' : 'This registry version needs publication.');
     } else {
