@@ -55,6 +55,18 @@ function run(command, args = [], options = {}) {
 }
 const mason = (...args) => windows ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(bin, 'mason-launcher.ps1'), ...args], { allowFailure: args[0] === 'check' }) : run(path.join(bin, 'mason'), args, { allowFailure: args[0] === 'check' });
 const git = (...args) => run('git', args, { cwd: repo });
+// A closed MCP client's server can outlive close() briefly on Windows. Rollback correctly refuses
+// while that server is alive, so wait (bounded) for it to exit instead of weakening the check.
+async function rollbackAfterMcpExit() {
+  const deadline = Date.now() + 30000;
+  for (;;) {
+    try { return await mason('rollback'); }
+    catch (error) {
+      if (!/Close running Mason MCP sessions/.test(String(error)) || Date.now() > deadline) throw error;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+}
 const commit = async message => { await git('add', '-A'); await git('commit', '-m', message); };
 let corrupt = false;
 let downloadRequests = 0;
@@ -270,7 +282,7 @@ try {
   for (const [name, bytes] of Object.entries(baselines)) assert.equal((await baselineBytes())[name], bytes);
   console.log('Global upgrade reached both project hosts with fresh activation evidence; clone setup was clean and idempotent.');
 
-  await mason('rollback');
+  await rollbackAfterMcpExit();
   // Exercise staged activation through real packaged MCP launches. No test
   // endpoint or unsigned fallback is added to the production auto-updater.
   const receiptFile = path.join(home, 'install.json');
@@ -321,7 +333,7 @@ try {
   assert.equal(liveStderr, '', 'MCP update bookkeeping must not emit diagnostics to protocol streams.');
   assert.equal(await context('codex'), nextVersion, 'The first new MCP launch after existing servers exit must activate the staged version.');
   assert.equal((await mason('--version')).stdout.trim(), nextVersion);
-  await mason('rollback');
+  await rollbackAfterMcpExit();
   assert.equal((await mason('--version')).stdout.trim(), original.version);
   assert.equal(JSON.parse((await mason('updates', '--json')).stdout).pinnedVersion, original.version);
   await mason('updates', 'disable');
