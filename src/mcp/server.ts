@@ -223,7 +223,7 @@ export function createMcpServer(): McpServer {
         `Short, specific headline (max ${TITLE_MAX_CHARS} characters). Generates a stable id on creation; revising the title keeps the existing id.`,
       ),
       body: decisionBodySchema.describe(
-        `The knowledge itself: what was tried/decided, why, and what to avoid. Must contain information NOT derivable by reading the code. Aim for ${BODY_RECOMMENDED_CHARS} characters or fewer; up to ${BODY_MAX_CHARS} is accepted with a warning above the target. Matching context and hooks include the full body. Preserve exceptions; use sources for supporting references.`,
+        `The knowledge itself: what was tried/decided, why, and what to avoid. Must contain information NOT derivable by reading the code. Aim for ${BODY_RECOMMENDED_CHARS} characters or fewer; up to ${BODY_MAX_CHARS} is accepted with a warning above the target. Matching context and hooks include the full body. Preserve exceptions; use sources for supporting references. Name the functions, types, or settings the decision constrains in backticks, such as \`refresh()\`; drift notices use those names to judge whether a change is relevant.`,
       ),
       category: z.enum(["decision", "gotcha", "deprecation", "convention"]),
       files: z

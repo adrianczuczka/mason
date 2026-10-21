@@ -23,7 +23,7 @@ Audit, review, decision capture, and task context work without a concept map. Ad
 
 ## Decision records
 
-Capture a lesson with `save_decision`: what happened, why it matters, and the files or directories it applies to. Add `owner`, `sources`, and `actor` when known. None are required to capture a proposal, and missing attribution stays explicit.
+Capture a lesson with `save_decision`: what happened, why it matters, and the files or directories it applies to. Name the functions, types, or settings it constrains in backticks, such as `` `refresh()` ``: drift notices report whether changed lines or their enclosing declarations mention those names. Anchors stay whole files or directories; there are no symbol anchors, and every anchored change still requires inspection. Add `owner`, `sources`, and `actor` when known. None are required to capture a proposal, and missing attribution stays explicit.
 
 Compare matching `get_context` records and any pending proposal before saving. When evidence changes an existing lesson's assumptions, scope, or recommended action, pass that record's `id` to `save_decision`, including when it is accepted. Preserve supported rationale and sources, replace obsolete instructions, and add the new evidence. Use a separate record for a genuinely distinct lesson and skip unchanged restatements. The prior accepted version stays operative until the revision is reviewed.
 

@@ -2,19 +2,20 @@
   "version": 2,
   "id": "drift-relevance-matches-only-identifiers-a-decision-names",
   "title": "Drift relevance matches only identifiers a decision names",
-  "body": "Drift notices show changed hunks diffed against the exact captured content, found in recent Git history by hash, and label relevance by matching code identifiers the decision names (backticked names, calls such as `refresh()`, camelCase, snake_case; kebab-case only in backticks) against changed lines and their enclosing declarations. Matching ordinary decision words was tried first and failed on this repository's own drifted decisions: every one was reported relevant because prose such as 'decision', 'review' and 'only' appears in nearly every change. Counting hyphenated prose ('opt-in', 'draft-only') as identifiers then produced a false low relevance for a change that rewrote the operative-inspection selection the decision governs. Report low relevance only when the decision names identifiers and every changed file was compared; otherwise say relevance was not assessed or is unknown. Relevance is a name match: it never resolves a finding, changes Stop blocking, or replaces inspection. Most existing decisions are prose and name no identifiers, so the hunks carry most of the value; decisions that name the functions they constrain get a useful relevance signal. Symbol anchors and automatic clearing of trivial drift remain unimplemented.",
+  "body": "Drift notices show changed hunks diffed against the exact captured content, found in recent Git history by hash, and label relevance by matching code identifiers the decision names (backticked names, calls such as `refresh()`, camelCase, snake_case; kebab-case only in backticks) against changed lines and their enclosing declarations. Matching ordinary decision words was tried first and failed on this repository's own drifted decisions: every one was reported relevant because prose such as 'decision', 'review' and 'only' appears in nearly every change. Counting hyphenated prose ('opt-in', 'draft-only') as identifiers then produced a false low relevance for a change that rewrote the operative-inspection selection the decision governs. Report low relevance only when the decision names identifiers and every changed file was compared; otherwise say relevance was not assessed or is unknown. Relevance is a name match: it never resolves a finding, changes Stop blocking, or replaces inspection. Most existing decisions are prose and name no identifiers, so the hunks carry most of the value; decisions that name the functions they constrain get a useful relevance signal. Symbol anchors were not adopted: they would change the anchor format read by capture, drift, hooks and the merge driver, `#` is valid in paths, and git's diff-header context misattributes changes at declaration boundaries; naming the constrained symbol in backticks gives the same relevance signal, so save_decision asks authors to do that. The maintainer rejected automatically clearing trivial drift on 2026-10-21: every anchored content change still requires inspection, since whitespace, comments and imports can carry meaning.",
   "category": "decision",
   "files": [
     "src/decisions/excerpts.ts",
     "src/automation/runtime.ts",
-    "test/excerpts.test.ts"
+    "test/excerpts.test.ts",
+    "src/mcp/server.ts"
   ],
   "createdAt": "2026-10-21T08:02:28.628Z",
-  "updatedAt": "2026-10-21T08:02:28.628Z",
+  "updatedAt": "2026-10-21T08:52:48.021Z",
   "refreshedHash": "24dbcd09601016f0ed70730db42c7b4bd206661e",
   "status": "active",
   "approval": "proposed",
-  "revision": 1,
+  "revision": 2,
   "sources": [
     {
       "kind": "issue",
@@ -29,6 +30,11 @@
     {
       "kind": "document",
       "reference": "test/excerpts.test.ts"
+    },
+    {
+      "kind": "discussion",
+      "reference": "Maintainer decision in a Claude Code session, 2026-10-21",
+      "note": "Keep inspection for all anchored changes (no auto-clear); symbol anchors left to the assistant's recommendation, which was not to add them."
     }
   ],
   "history": [
@@ -79,17 +85,75 @@
         },
         "complete": true
       }
+    },
+    {
+      "kind": "revised",
+      "at": "2026-10-21T08:52:48.021Z",
+      "actor": "Claude Code session closing issue #20",
+      "revision": 2,
+      "content": {
+        "title": "Drift relevance matches only identifiers a decision names",
+        "body": "Drift notices show changed hunks diffed against the exact captured content, found in recent Git history by hash, and label relevance by matching code identifiers the decision names (backticked names, calls such as `refresh()`, camelCase, snake_case; kebab-case only in backticks) against changed lines and their enclosing declarations. Matching ordinary decision words was tried first and failed on this repository's own drifted decisions: every one was reported relevant because prose such as 'decision', 'review' and 'only' appears in nearly every change. Counting hyphenated prose ('opt-in', 'draft-only') as identifiers then produced a false low relevance for a change that rewrote the operative-inspection selection the decision governs. Report low relevance only when the decision names identifiers and every changed file was compared; otherwise say relevance was not assessed or is unknown. Relevance is a name match: it never resolves a finding, changes Stop blocking, or replaces inspection. Most existing decisions are prose and name no identifiers, so the hunks carry most of the value; decisions that name the functions they constrain get a useful relevance signal. Symbol anchors were not adopted: they would change the anchor format read by capture, drift, hooks and the merge driver, `#` is valid in paths, and git's diff-header context misattributes changes at declaration boundaries; naming the constrained symbol in backticks gives the same relevance signal, so save_decision asks authors to do that. The maintainer rejected automatically clearing trivial drift on 2026-10-21: every anchored content change still requires inspection, since whitespace, comments and imports can carry meaning.",
+        "category": "decision",
+        "files": [
+          "src/decisions/excerpts.ts",
+          "src/automation/runtime.ts",
+          "test/excerpts.test.ts",
+          "src/mcp/server.ts"
+        ],
+        "sources": [
+          {
+            "kind": "issue",
+            "reference": "https://github.com/adrianczuczka/mason/issues/20",
+            "note": "Drift advisories fire on any anchored-file change; suggested inline hunks and relevance by identifiers named in the decision body."
+          },
+          {
+            "kind": "other",
+            "reference": "Excerpt trial on this repository's drifted decisions, 2026-10-21",
+            "note": "Prose-word matching marked all assessed decisions relevant; hyphenated prose caused a false low for scope-source-inspections-without-clearing-pending-draft. Identifier matching left 2 of 11 assessed, both judged correctly."
+          },
+          {
+            "kind": "document",
+            "reference": "test/excerpts.test.ts"
+          },
+          {
+            "kind": "discussion",
+            "reference": "Maintainer decision in a Claude Code session, 2026-10-21",
+            "note": "Keep inspection for all anchored changes (no auto-clear); symbol anchors left to the assistant's recommendation, which was not to add them."
+          }
+        ]
+      },
+      "approval": "proposed",
+      "status": "active",
+      "refreshedHash": "24dbcd09601016f0ed70730db42c7b4bd206661e",
+      "capture": {
+        "anchors": [
+          "src/automation/runtime.ts",
+          "src/decisions/excerpts.ts",
+          "src/mcp/server.ts",
+          "test/excerpts.test.ts"
+        ],
+        "files": {
+          "src/automation/runtime.ts": "2b9d16b8383dba7b8fd1b5b62ba40edd73457bd8e53df90b9c4e4f5406942203",
+          "src/decisions/excerpts.ts": "9c542960ceeb58650d6b32ba509b1dc1b6c10f4c2305af26ba8e4d7205efa76c",
+          "src/mcp/server.ts": "0c37b7ae8f6c4100a3f020ac99f1a88afc620b1aba35bc3438b9b0768f8ed779",
+          "test/excerpts.test.ts": "e2477941facccd78e730c1d9e9f3f61c610a800d56194fffb5ab9ab9ef43a023"
+        },
+        "complete": true
+      }
     }
   ],
   "capture": {
     "anchors": [
       "src/automation/runtime.ts",
       "src/decisions/excerpts.ts",
+      "src/mcp/server.ts",
       "test/excerpts.test.ts"
     ],
     "files": {
-      "src/automation/runtime.ts": "7d157085fc6d421329a8bfb8a6e40ae777743c72e210180de99c97a1d0d5a15d",
+      "src/automation/runtime.ts": "2b9d16b8383dba7b8fd1b5b62ba40edd73457bd8e53df90b9c4e4f5406942203",
       "src/decisions/excerpts.ts": "9c542960ceeb58650d6b32ba509b1dc1b6c10f4c2305af26ba8e4d7205efa76c",
+      "src/mcp/server.ts": "0c37b7ae8f6c4100a3f020ac99f1a88afc620b1aba35bc3438b9b0768f8ed779",
       "test/excerpts.test.ts": "e2477941facccd78e730c1d9e9f3f61c610a800d56194fffb5ab9ab9ef43a023"
     },
     "complete": true
