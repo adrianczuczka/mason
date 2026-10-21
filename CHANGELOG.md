@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stop publishing to Smithery on release: Smithery now rejects server updates (`403 Updating servers has been removed`). Releases continue to npm, the official MCP Registry and GitHub release downloads; the existing Smithery listing is no longer updated.
+
 ## 0.23.0 — 2026-10-21
 
 - `save_decision` guidance asks for the constrained functions, types, or settings to be named in backticks, so drift notices can judge relevance. Anchors remain whole files or directories, and anchored changes still require inspection; symbol anchors and automatic clearing of trivial drift were considered and not adopted.
