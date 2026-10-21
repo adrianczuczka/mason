@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Wait up to about 10 minutes for npm to list a new version before publishing it to the official MCP Registry. npm took over a minute for both 0.23.0 and 0.23.1, which failed the registry job each time.
+
 ## 0.23.1 — 2026-10-21
 
 - Wait up to 60 seconds for the transparency log when signing the standalone update manifest. With the 5-second default, a slow log write timed out after succeeding and the retry failed with `409 entry already exists`, so the 0.23.0 release produced no GitHub release downloads.

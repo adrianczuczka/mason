@@ -40,16 +40,18 @@ export function registryAlreadyPublished(server, status, body) {
 
 async function verifyRemote(url, validate) {
   // Allow for registry propagation; fail the job if the expected metadata never appears.
-  for (let attempt = 1; attempt <= 6; attempt++) {
+  // npm took over a minute to list both 0.23.0 and 0.23.1 after publishing; wait up to ~10 minutes.
+  const attempts = 40;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
       validate(await response.json());
       return;
     } catch (error) {
-      if (attempt === 6) throw error;
-      console.warn(`Metadata check ${attempt}/6 failed: ${error.message}. Retrying in 10 seconds.`);
-      await setTimeout(10_000);
+      if (attempt === attempts) throw error;
+      console.warn(`Metadata check ${attempt}/${attempts} failed: ${error.message}. Retrying in 15 seconds.`);
+      await setTimeout(15_000);
     }
   }
 }

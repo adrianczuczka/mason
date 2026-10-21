@@ -27,7 +27,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       RELEASE_TAG: ${{ inputs.tag }}
     steps:
