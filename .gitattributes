@@ -1,0 +1,3 @@
+# mason:merge:start
+.mason/decisions/*.json merge=mason-decision
+# mason:merge:end
