@@ -290,6 +290,8 @@ Add to your VS Code settings (`settings.json`):
 
 ## Upgrading from earlier versions
 
+**0.23.0:** Upgrade Mason and restart running assistants. Automation stores that stopped working on 0.22.0 after many sessions, with unfinished tool calls or over 10 MiB, recover on the next hook without manual edits. Run `mason init --host claude` or `--host codex` to add the decision merge attribute to `.gitattributes`, and for Claude the `PostToolUseFailure` hook; review and commit those changes, then run `mason setup` in each checkout to enable the local merge driver. Earlier shared configuration stays compatible without them.
+
 **0.17.1:** Upgrade Mason and restart running assistants to receive the audit, MCP and hook fixes. With the current CLI, run `mason init --host codex` or `--host claude` to refresh the Git ignore allowlist and Claude's explicit stdio entry; review and commit those configuration changes. A fresh clone can connect to MCP before local setup, but automatic hooks still require setup in each checkout. Existing decisions and repair evidence are retained.
 
 **0.17.0:** Upgrade Mason and restart running assistants. Existing PATH-based integrations immediately use the upgraded binary. With the current CLI, run `mason init --host codex` or `--host claude` in each project to refresh the managed guidance for revising existing lessons and the Git ignore rules that retain `.mason/reviews/`. Review and commit these project changes. Existing decisions and repair evidence are preserved; no decision-store migration is required, and setup does not approve findings or decisions.

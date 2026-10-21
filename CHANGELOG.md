@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.23.0 — 2026-10-21
+
 - `save_decision` guidance asks for the constrained functions, types, or settings to be named in backticks, so drift notices can judge relevance. Anchors remain whole files or directories, and anchored changes still require inspection; symbol anchors and automatic clearing of trivial drift were considered and not adopted.
 - Attribute decision drift on a branch to the branch or to the default branch it builds on. Previously a rebase made every decision the default branch had changed look like this checkout's unchecked work. Drift in anchors this branch touched is reported as before; drift that arrived only from the default branch is listed once per session, never blocks Stop, and is reported as usual on the default branch. `review_decision(prepare)` reports the same split in `previews.attribution`. Explicit audits still report all drift.
 - `review_decision(action: "prepare")` previews source, diff and anchor commits since the latest inspection still valid for the record and scope, instead of since the original evidence baseline, and reports the commit used in `previews.diffSince`. Earlier changes were already inspected, so long-lived records no longer return months of truncated history. Pass `diffFrom: "capture"` for the full history. Responses include the latest two inspections and count older ones; the record file keeps them all. Review evidence, tokens and verdict requirements are unchanged.
