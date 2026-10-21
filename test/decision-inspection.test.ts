@@ -304,6 +304,58 @@ describe("captured anchors and separate source inspections", () => {
     expect((await inspect(id)).status).toBe("error");
   });
 
+  it("previews changes since the latest inspection and trims older inspections", async () => {
+    const id = await create();
+    await commitAll(root, "proposal");
+    await write("src/client.ts", "export const retries = 2;\n");
+    const inspected = await commitAll(root, "first change");
+    expect((await inspect(id)).status).toBe("inspected");
+    await write("src/client.ts", "export const retries = 3;\n");
+    await commitAll(root, "second change");
+
+    const prepared = await reviewDecision(root, { id });
+    expect(prepared.previews.diffSince).toMatchObject({ from: "inspection", commit: inspected });
+    expect(prepared.previews.diff).toContain("-export const retries = 2;");
+    expect(prepared.previews.diff).not.toContain("retries = 1");
+    expect(prepared.previews.commits).toEqual([expect.stringContaining("second change")]);
+    // Review evidence and its token still cover the whole baseline.
+    expect(prepared.evidence.changedFiles).toEqual(["src/client.ts"]);
+
+    const full = await reviewDecision(root, { id, diffFrom: "capture" });
+    expect(full.previews.diffSince.from).toBe("baseline");
+    expect(full.previews.diff).toContain("-export const retries = 1;");
+    // Only commits touching the anchors are listed; the record-only commit is not.
+    expect(full.previews.commits.map((line: string) => line.split(" ").slice(1).join(" "))).toEqual(
+      ["second change", "first change"],
+    );
+    expect(full.reviewToken).toBe(prepared.reviewToken);
+
+    await inspect(id);
+    await inspect(id);
+    const trimmed = await reviewDecision(root, { id });
+    expect(trimmed.record.inspections).toHaveLength(2);
+    expect(trimmed.omittedInspections).toBe(1);
+    expect((await get()).inspections).toHaveLength(3);
+  });
+
+  it("falls back to the evidence baseline when the inspected commit is unavailable", async () => {
+    const id = await create();
+    await commitAll(root, "proposal");
+    expect((await inspect(id)).status).toBe("inspected");
+    const file = path.join(root, `.mason/decisions/${id}.json`);
+    const record = JSON.parse(await fs.readFile(file, "utf8"));
+    record.inspections[0].headHash = "f".repeat(40);
+    await fs.writeFile(file, JSON.stringify(record, null, 2) + "\n");
+    await write("src/client.ts", "export const retries = 2;\n");
+    await commitAll(root, "change");
+    const prepared = await reviewDecision(root, { id });
+    expect(prepared.previews.diffSince).toMatchObject({
+      from: "baseline",
+      note: expect.stringContaining("not available locally"),
+    });
+    expect(prepared.previews.diff).toContain("+export const retries = 2;");
+  });
+
   it("leaves ignored files beneath a directory anchor out of its evidence", async () => {
     await fs.mkdir(path.join(root, "web/node_modules"), { recursive: true });
     await write("web/app.js", "console.log(1);\n");

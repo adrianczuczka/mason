@@ -6,6 +6,7 @@ import { z } from "zod";
 import { loadDecisionStore, saveDecisionRecord, withDecisionWrite } from "./decisions.js";
 import {
   decisionInspectionDigest,
+  latestDecisionInspection,
   decisionApproval,
   decisionAnchors,
   decisionContent,
@@ -26,6 +27,7 @@ const requestSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
   action: z.enum(["prepare", "inspect", "accept", "reaffirm", "retire"]).default("prepare"),
   inspectionScope: z.enum(["all", "operative"]).default("all"),
+  diffFrom: z.enum(["lastReview", "capture"]).default("lastReview"),
   inspector: z.string().trim().min(1).max(200).optional(),
   reviewer: z.string().trim().min(1).max(200).optional(),
   note: z.string().trim().min(1).max(1500).optional(),
@@ -71,15 +73,82 @@ async function reviewState(root: string, record: DecisionRecord, scope: Inspecti
   return { reviewToken, evidence, capture, committed, workingTreeAvailable: workingTree.available };
 }
 
-async function previews(
+const RETURNED_INSPECTIONS = 2;
+const MAX_PREVIEW_COMMITS = 20;
+
+/** Earlier inspections already checked older changes, so preview from the latest inspection
+ * still valid for this record and scope. Its commit may be gone after a rebase or prune. */
+async function diffSince(
   root: string,
   record: DecisionRecord,
+  scope: InspectionScope,
+  diffFrom: "lastReview" | "capture",
+) {
+  const baseline = (scope === "operative" ? effectiveDecision(record) : record).refreshedHash;
+  const inspection =
+    diffFrom === "lastReview" ? latestDecisionInspection(record, scope) : undefined;
+  if (inspection && /^[a-f0-9]{40,64}$/.test(inspection.headHash)) {
+    try {
+      await exec("git", ["cat-file", "-e", `${inspection.headHash}^{commit}`], { cwd: root });
+      return { from: "inspection" as const, commit: inspection.headHash, at: inspection.at };
+    } catch {
+      return {
+        from: "baseline" as const,
+        commit: baseline,
+        note: "The latest inspection's commit is not available locally; the diff starts at the evidence baseline.",
+      };
+    }
+  }
+  return { from: "baseline" as const, commit: baseline };
+}
+
+/** Keep the latest inspections in responses; every inspection's capture repeats all anchor
+ * hashes, and the complete list remains in the record file. */
+function trimInspections(record: DecisionRecord): DecisionRecord {
+  return record.version === 2 && (record.inspections?.length ?? 0) > RETURNED_INSPECTIONS
+    ? { ...record, inspections: record.inspections!.slice(-RETURNED_INSPECTIONS) }
+    : record;
+}
+
+async function previews(
+  root: string,
   state: Awaited<ReturnType<typeof reviewState>>,
+  since: Awaited<ReturnType<typeof diffSince>>,
 ) {
   const access = await createFileAccess(root);
   const anchors = state.capture.anchors;
+  const git = (args: string[]) =>
+    exec("git", ["--literal-pathspecs", ...args, "--", ...anchors], {
+      cwd: root,
+      maxBuffer: 1024 * 1024,
+    }).then(({ stdout }) => stdout);
+  const range =
+    state.evidence.headHash === "unknown" ? null : [since.commit, state.evidence.headHash];
+  let changedSince: string[] = [];
+  let commits: string[] = [];
+  if (range && anchors.length)
+    try {
+      changedSince = (await git(["diff", "--name-only", "--no-renames", ...range]))
+        .split("\n")
+        .filter(Boolean);
+      commits = (
+        await git([
+          "log",
+          "--oneline",
+          "--no-decorate",
+          "-n",
+          String(MAX_PREVIEW_COMMITS + 1),
+          `${range[0]}..${range[1]}`,
+        ])
+      )
+        .split("\n")
+        .filter(Boolean);
+    } catch {
+      /* Reported below as an unavailable diff. */
+    }
   const candidates = [
     ...new Set([
+      ...changedSince,
       ...state.evidence.changedFiles,
       ...state.evidence.localChanges,
       ...anchors,
@@ -90,7 +159,6 @@ async function previews(
   ];
   const files: Array<{ path: string; preview: string; totalLines: number }> = [];
   const omittedFiles: string[] = [];
-  const diffPaths: string[] = [];
   for (const file of candidates) {
     if (files.length >= 6) {
       omittedFiles.push(file);
@@ -106,29 +174,20 @@ async function previews(
       preview: source.content.slice(0, 2000),
       totalLines: source.totalLines,
     });
-    if (state.evidence.changedFiles.includes(file)) diffPaths.push(file);
   }
   let diff: string | null = null;
   let diffUnavailable: string | undefined;
-  if (state.evidence.historyAvailable && diffPaths.length) {
+  if (range && changedSince.length) {
     try {
-      const { stdout } = await exec(
-        "git",
-        [
-          "--literal-pathspecs",
-          "diff",
-          "--no-ext-diff",
-          "--no-textconv",
-          "--no-color",
-          "--no-renames",
-          "-U3",
-          record.refreshedHash,
-          state.evidence.headHash,
-          "--",
-          ...diffPaths,
-        ],
-        { cwd: root, maxBuffer: 1024 * 1024 },
-      );
+      const stdout = await git([
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-color",
+        "--no-renames",
+        "-U3",
+        ...range,
+      ]);
       diff = stdout.slice(0, 16000);
       if (stdout.length > diff.length)
         diffUnavailable = "Diff preview was truncated; inspect the full diff before reviewing.";
@@ -136,8 +195,18 @@ async function previews(
       diffUnavailable =
         "Diff preview could not be read within its size bound; inspect the diff separately.";
     }
+  } else if (range && !changedSince.length && since.commit !== state.evidence.headHash) {
+    // An unreadable range must not look like an unchanged one.
+    try {
+      await exec("git", ["cat-file", "-e", `${since.commit}^{commit}`], { cwd: root });
+    } catch {
+      diffUnavailable = "The diff base is not available locally; inspect the history separately.";
+    }
   }
   return {
+    diffSince: since,
+    commits: commits.slice(0, MAX_PREVIEW_COMMITS),
+    ...(commits.length > MAX_PREVIEW_COMMITS ? { commitsTruncated: true } : {}),
     files,
     diff,
     diffUnavailable,
@@ -180,11 +249,15 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
       };
     const state = await reviewState(root, record, request.inspectionScope);
     const operativeDecision = effectiveDecision(record);
+    const inspections = record.version === 2 ? (record.inspections?.length ?? 0) : 0;
     return {
       status: "prepared",
-      record,
+      record: trimInspections(record),
+      ...(inspections > RETURNED_INSPECTIONS
+        ? { omittedInspections: inspections - RETURNED_INSPECTIONS }
+        : {}),
       ...(operativeDecision !== record && request.inspectionScope === "all"
-        ? { operativeDecision }
+        ? { operativeDecision: trimInspections(operativeDecision) }
         : {}),
       inspectionScope: request.inspectionScope,
       ...(request.inspectionScope === "operative"
@@ -210,8 +283,8 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
       diagnostics,
       previews: await previews(
         root,
-        request.inspectionScope === "operative" ? operativeDecision : record,
         state,
+        await diffSince(root, record, request.inspectionScope, request.diffFrom),
       ),
       hint:
         request.inspectionScope === "operative"
