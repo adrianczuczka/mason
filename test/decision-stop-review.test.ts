@@ -74,6 +74,18 @@ describe("Claude decision Stop review", { timeout: 30000 }, () => {
     ).toBeGreaterThan(0);
   });
 
+  it("includes the changed lines and decision terms in the Stop review", async () => {
+    await edit("export const retries = 2;\n");
+    const output = await hook("Stop");
+    expect(output).toMatchObject({ decision: "block" });
+    expect(output?.reason).toContain(`Changed lines for decision "Bound retries" (${id}):`);
+    expect(output?.reason).toContain(
+      "Relevance not assessed: the decision names no code identifiers",
+    );
+    expect(output?.reason).toContain("    -export const retries = 1;");
+    expect(output?.reason).toContain("    +export const retries = 2;");
+  });
+
   it("honors stop_hook_active even on the first Stop and keeps subsequent delivery advisory", async () => {
     await edit("export const retries = 2;\n");
     expect(await hook("Stop", { stop_hook_active: true })).toMatchObject({

@@ -6,6 +6,7 @@ import type { Freshness } from "../context/trust.js";
 import type { StoreDiagnostic } from "../utils/storage.js";
 import { getCurrentGitHash } from "../snapshot/snapshot.js";
 import { loadDecisionStore } from "./decisions.js";
+import { driftBaseline } from "./excerpts.js";
 import type { DecisionRecord } from "./decisions.js";
 import { decisionApproval, effectiveDecision, latestDecisionInspection } from "./provenance.js";
 
@@ -115,15 +116,12 @@ export async function computeDecisionDrift(
   };
   for (const record of store.records) {
     if (record.status !== "active") continue;
-    const effective = effectiveDecision(record);
-    const inspection = latestDecisionInspection(
-      record,
-      decisionApproval(effective) === "accepted" ? "operative" : "all",
-    );
-    const state = await inspect(effective, inspection?.capture);
+    // Shared with drift excerpts so hunks are shown against the same captured baseline.
+    const baseline = driftBaseline(record);
+    const state = await inspect(baseline.record, baseline.capture);
     report.freshness![record.id] = state.freshness;
     if (state.changedFiles.length) report.staleDecisions[record.id] = state.changedFiles;
-    if (effective !== record)
+    if (baseline.record !== record)
       (report.pendingProposals ??= {})[record.id] = await inspect(
         record,
         latestDecisionInspection(record)?.capture,

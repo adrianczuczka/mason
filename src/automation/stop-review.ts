@@ -109,7 +109,7 @@ export function decisionStopReview(
     }
     decisions.set(evidence.decisionId, value);
   }
-  if (!decisions.size) return { reason: null, block: false };
+  if (!decisions.size) return { reason: null, block: false, decisions: [] as string[] };
   let fresh = false;
   for (const [id, value] of decisions) {
     const previous = state.delivered[id];
@@ -137,5 +137,5 @@ export function decisionStopReview(
     "If contradicted or uncertain, explain the mismatch to the user and request direction. Do not accept, reaffirm, or retire a decision without authorized human review. A revised proposal leaves the accepted revision operative until reviewed.",
     `Evidence: ${report.reportPath}. Concurrent changes can contribute; captures do not prove authorship. This reminder does not resolve the finding.`,
   ].join("\n");
-  return { reason, block: !reentry && fresh };
+  return { reason, block: !reentry && fresh, decisions: [...decisions.keys()] };
 }

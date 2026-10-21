@@ -1,4 +1,5 @@
 import { loadDecisionStore } from "../decisions/decisions.js";
+import { driftExcerpt, formatDriftExcerpt } from "../decisions/excerpts.js";
 import { checkDecisionAnchors } from "../audit/checks/decision-anchor.js";
 import { readAutomationConfig } from "./config.js";
 import {
@@ -469,6 +470,34 @@ async function analyze(ws: Workspace, inputs: Inputs, event: AutomationEvent, st
   );
 }
 
+/** Changed hunks let an agent dismiss irrelevant drift without another tool call. They are
+ * optional context: a failed excerpt omits itself and never resolves or hides a finding. */
+async function driftExcerpts(root: string, report: AutomationReport, ids: string[]) {
+  const unique = [...new Set(ids)].slice(0, 4);
+  if (!unique.length) return null;
+  const records = (await loadDecisionStore(root)).records;
+  const sections: string[] = [];
+  for (const id of unique) {
+    const record = records.find((candidate) => candidate.id === id);
+    const changed = new Set<string>();
+    let title = record?.title ?? id;
+    for (const finding of report.findings) {
+      const evidence = finding.current?.evidence;
+      if (finding.status === "resolved" || evidence?.kind !== "decision-anchor") continue;
+      if (evidence.decisionId !== id) continue;
+      title = evidence.title;
+      for (const file of evidence.changedFiles) changed.add(file);
+    }
+    if (!record || !changed.size) continue;
+    try {
+      sections.push(formatDriftExcerpt(title, id, await driftExcerpt(root, record, [...changed])));
+    } catch {
+      // Excerpts are a convenience; the finding and its inspection request remain.
+    }
+  }
+  return sections.join("\n") || null;
+}
+
 /** Current decision evidence uses the same publication/receipt path, without repair baselines. */
 async function guidanceAnalysis(ws: Workspace, inputs: Inputs) {
   const checked = await checkDecisionAnchors({
@@ -700,13 +729,23 @@ async function runAutomation(dir: string, event: AutomationEvent, guidance: bool
             event.event === "task_end" &&
             config.stopBlock === "drift"
               ? decisionStopReview(session, inputs, report, !!event.stopHookActive)
-              : { reason: null, block: false };
+              : { reason: null, block: false, decisions: [] };
+          const excerpts = session
+            ? await driftExcerpts(ws.root, report, [
+                ...stopReview.decisions,
+                ...[...selected, ...feedback].flatMap((finding) => {
+                  const evidence = (finding.current ?? finding.original).evidence;
+                  return evidence.kind === "decision-anchor" ? [evidence.decisionId] : [];
+                }),
+              ])
+            : null;
           const message = !session
             ? summarize(report)
             : [
                 stopReview.reason,
                 completionSummary(selected, report.reportPath),
                 completionSummary(feedback, report.reportPath),
+                excerpts,
                 ...(diagnostics.length
                   ? [
                       `Mason: verification limited. ${diagnostics.slice(0, 2).map(cleanText).join(" ")} Evidence: ${report.reportPath}.`,
