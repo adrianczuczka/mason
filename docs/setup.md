@@ -290,6 +290,8 @@ Add to your VS Code settings (`settings.json`):
 
 ## Upgrading from earlier versions
 
+**0.23.1:** Delivers the 0.23.0 changes to standalone installers and automatic updates; 0.23.0 reached only npm and the MCP Registry. The 0.23.0 upgrade steps below apply.
+
 **0.23.0:** Upgrade Mason and restart running assistants. Automation stores that stopped working on 0.22.0 after many sessions, with unfinished tool calls or over 10 MiB, recover on the next hook without manual edits. Run `mason init --host claude` or `--host codex` to add the decision merge attribute to `.gitattributes`, and for Claude the `PostToolUseFailure` hook; review and commit those changes, then run `mason setup` in each checkout to enable the local merge driver. Earlier shared configuration stays compatible without them.
 
 **0.17.1:** Upgrade Mason and restart running assistants to receive the audit, MCP and hook fixes. With the current CLI, run `mason init --host codex` or `--host claude` to refresh the Git ignore allowlist and Claude's explicit stdio entry; review and commit those configuration changes. A fresh clone can connect to MCP before local setup, but automatic hooks still require setup in each checkout. Existing decisions and repair evidence are retained.

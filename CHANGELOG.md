@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.23.1 — 2026-10-21
+
 - Wait up to 60 seconds for the transparency log when signing the standalone update manifest. With the 5-second default, a slow log write timed out after succeeding and the retry failed with `409 entry already exists`, so the 0.23.0 release produced no GitHub release downloads.
 - Stop publishing to Smithery on release: Smithery now rejects server updates (`403 Updating servers has been removed`). Releases continue to npm, the official MCP Registry and GitHub release downloads; the existing Smithery listing is no longer updated.
 
