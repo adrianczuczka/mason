@@ -338,7 +338,7 @@ describe("decision provenance and reviews", () => {
       body: "Schedule using the new queue.",
       files: ["src/queue.ts"],
     });
-    const prepared = await reviewDecision(repo, { id: record.id });
+    const prepared = await reviewDecision(repo, { id: record.id, include: ["files"] });
     expect(prepared.operativeDecision).toMatchObject({ approval: "accepted", body: lesson.body });
     expect(prepared.record).toMatchObject({ approval: "proposed", files: ["src/queue.ts"] });
     expect(prepared.previews.files.map((f) => f.path)).toEqual(
@@ -565,7 +565,7 @@ describe("decision provenance and reviews", () => {
     await verdict(record.id, "accept");
     await write("src/delivery.ts", "export const retries = 5;\n");
     const changed = await commitAll(repo, "change source after acceptance");
-    const prepared = await reviewDecision(repo, { id: record.id });
+    const prepared = await reviewDecision(repo, { id: record.id, include: ["diff"] });
     expect(prepared.evidence.changedFiles).toContain("src/delivery.ts");
     expect(prepared.previews.diff).toContain("+export const retries = 5;");
     expect((await verdict(record.id, "reaffirm")).status).toBe("reaffirmed");

@@ -22,6 +22,7 @@ import { getChangesWithStatus, getWorkingTree, touchedPaths } from "../drift/dri
 import { anchorMatches, matchingPaths } from "../utils/paths.js";
 import { createFileAccess } from "../utils/files.js";
 import { branchAttribution } from "./attribution.js";
+import type { AnchorCapture } from "./anchors.js";
 
 const exec = promisify(execFile);
 const requestSchema = z.object({
@@ -36,6 +37,11 @@ const requestSchema = z.object({
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
+  include: z
+    .array(z.enum(["diff", "files", "history"]))
+    .max(3)
+    .optional(),
+  diffFiles: z.array(z.string().min(1).max(500)).max(20).optional(),
 });
 export type ReviewDecisionInput = z.input<typeof requestSchema>;
 
@@ -76,6 +82,8 @@ async function reviewState(root: string, record: DecisionRecord, scope: Inspecti
 
 const RETURNED_INSPECTIONS = 2;
 const MAX_PREVIEW_COMMITS = 20;
+const MAX_LISTED_FILES = 30;
+const NOTE_HEAD_CHARS = 300;
 
 /** Earlier inspections already checked older changes, so preview from the latest inspection
  * still valid for this record and scope. Its commit may be gone after a rebase or prune. */
@@ -103,18 +111,125 @@ async function diffSince(
   return { from: "baseline" as const, commit: baseline };
 }
 
-/** Keep the latest inspections in responses; every inspection's capture repeats all anchor
- * hashes, and the complete list remains in the record file. */
-function trimInspections(record: DecisionRecord): DecisionRecord {
-  return record.version === 2 && (record.inspections?.length ?? 0) > RETURNED_INSPECTIONS
-    ? { ...record, inspections: record.inspections!.slice(-RETURNED_INSPECTIONS) }
-    : record;
+const head = (text: string) =>
+  text.length > NOTE_HEAD_CHARS ? text.slice(0, NOTE_HEAD_CHARS) + "…" : text;
+
+/** Anchor hashes repeat in every capture; a count is enough to judge completeness. */
+function captureSummary(capture: AnchorCapture | undefined) {
+  return capture
+    ? {
+        anchors: capture.anchors,
+        files: Object.keys(capture.files).length,
+        complete: capture.complete,
+      }
+    : undefined;
+}
+
+/** The claim under review. Owner and sources are reported once, in provenance. */
+function revisionSummary(record: DecisionRecord) {
+  return {
+    id: record.id,
+    title: record.title,
+    body: record.body,
+    category: record.category,
+    files: record.files,
+    status: record.status,
+    approval: decisionApproval(record),
+    revision: record.version === 2 ? record.revision : 0,
+    refreshedHash: record.refreshedHash,
+  };
+}
+
+function inspectionSummary(record: DecisionRecord) {
+  const inspections = record.version === 2 ? (record.inspections ?? []) : [];
+  const latest = inspections.at(-1);
+  return {
+    total: inspections.length,
+    ...(latest
+      ? {
+          latest: {
+            at: latest.at,
+            inspector: latest.inspector,
+            outcome: latest.outcome,
+            headHash: latest.headHash,
+            ...(latest.scope ? { scope: latest.scope } : {}),
+            note: head(latest.note),
+          },
+        }
+      : {}),
+  };
+}
+
+function historySummary(record: DecisionRecord) {
+  const history = record.version === 2 ? record.history : [];
+  const latest = history.at(-1);
+  return {
+    events: history.length,
+    ...(latest
+      ? {
+          latest: {
+            kind: latest.kind,
+            at: latest.at,
+            revision: latest.revision,
+            ...(latest.actor ? { actor: latest.actor } : {}),
+            ...(latest.note ? { note: head(latest.note) } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/** Requested history: every event and the latest inspections, with captures summarized.
+ * The complete inspection list remains in the record file. */
+function fullHistory(record: DecisionRecord) {
+  if (record.version !== 2) return { record };
+  const inspections = record.inspections ?? [];
+  return {
+    record: {
+      ...record,
+      capture: captureSummary(record.capture),
+      history: record.history.map((event) => ({
+        ...event,
+        capture: captureSummary(event.capture),
+      })),
+      inspections: inspections
+        .slice(-RETURNED_INSPECTIONS)
+        .map((inspection) => ({ ...inspection, capture: captureSummary(inspection.capture) })),
+    },
+    ...(inspections.length > RETURNED_INSPECTIONS
+      ? { omittedInspections: inspections.length - RETURNED_INSPECTIONS }
+      : {}),
+  };
+}
+
+/** Per-file hunk and line counts from a unified diff. */
+function diffStats(diff: string) {
+  const stats: Array<{ path: string; hunks: number; added: number; removed: number }> = [];
+  let current: (typeof stats)[number] | undefined;
+  for (const line of diff.split("\n")) {
+    const header = /^diff --git a\/(.*) b\/(.*)$/.exec(line);
+    if (header) {
+      current = { path: header[2], hunks: 0, added: 0, removed: 0 };
+      stats.push(current);
+    } else if (!current || line.startsWith("+++ ") || line.startsWith("--- ")) continue;
+    else if (line.startsWith("@@")) current.hunks++;
+    else if (line.startsWith("+")) current.added++;
+    else if (line.startsWith("-")) current.removed++;
+  }
+  return stats;
+}
+
+function listed<T>(items: T[]) {
+  return items.length > MAX_LISTED_FILES
+    ? { items: items.slice(0, MAX_LISTED_FILES), omitted: items.length - MAX_LISTED_FILES }
+    : { items };
 }
 
 async function previews(
   root: string,
   state: Awaited<ReturnType<typeof reviewState>>,
   since: Awaited<ReturnType<typeof diffSince>>,
+  options: { diff: boolean; files: boolean; diffFiles?: string[] },
 ) {
   const access = await createFileAccess(root);
   const anchors = state.capture.anchors;
@@ -160,7 +275,7 @@ async function previews(
   ];
   const files: Array<{ path: string; preview: string; totalLines: number }> = [];
   const omittedFiles: string[] = [];
-  for (const file of candidates) {
+  for (const file of options.files ? candidates : []) {
     if (files.length >= 6) {
       omittedFiles.push(file);
       continue;
@@ -178,6 +293,7 @@ async function previews(
   }
   let diff: string | null = null;
   let diffUnavailable: string | undefined;
+  let changed: ReturnType<typeof diffStats> = [];
   if (range && changedSince.length) {
     try {
       const stdout = await git([
@@ -189,9 +305,23 @@ async function previews(
         "-U3",
         ...range,
       ]);
-      diff = stdout.slice(0, 16000);
-      if (stdout.length > diff.length)
-        diffUnavailable = "Diff preview was truncated; inspect the full diff before reviewing.";
+      changed = diffStats(stdout);
+      if (options.diff) {
+        const requested = options.diffFiles?.length
+          ? stdout
+              .split(/^(?=diff --git )/m)
+              .filter((section) =>
+                options.diffFiles!.some((file) =>
+                  section.startsWith(`diff --git a/${file} b/${file}\n`),
+                ),
+              )
+              .join("")
+          : stdout;
+        diff = requested.slice(0, 16000);
+        if (requested.length > diff.length)
+          diffUnavailable =
+            "Diff preview was truncated; request fewer diffFiles or inspect the full diff before reviewing.";
+      }
     } catch {
       diffUnavailable =
         "Diff preview could not be read within its size bound; inspect the diff separately.";
@@ -220,11 +350,18 @@ async function previews(
       : {}),
     commits: commits.slice(0, MAX_PREVIEW_COMMITS),
     ...(commits.length > MAX_PREVIEW_COMMITS ? { commitsTruncated: true } : {}),
-    files,
-    diff,
-    diffUnavailable,
-    omittedFiles,
-    hint: "Bounded source and diff previews only. Deleted, excluded, sensitive, oversized, or additional files may be omitted. Inspect relevant evidence beyond these previews before recording a verdict.",
+    changedAnchors: listed(changed).items,
+    ...(changed.length > MAX_LISTED_FILES
+      ? { changedAnchorsOmitted: changed.length - MAX_LISTED_FILES }
+      : {}),
+    ...(options.files ? { files, omittedFiles } : {}),
+    ...(options.diff ? { diff } : {}),
+    ...(diffUnavailable ? { diffUnavailable } : {}),
+    hint:
+      (options.diff || options.files
+        ? "Bounded source and diff previews only. Deleted, excluded, sensitive, oversized, or additional files may be omitted. "
+        : 'changedAnchors counts hunks and lines per changed file. Prepare again with include: ["diff"] (optionally diffFiles) for the diff, ["files"] for source previews, or ["history"] for review history; the reviewToken is unchanged. ') +
+      "Inspect relevant evidence beyond these previews before recording a verdict.",
   };
 }
 
@@ -262,15 +399,19 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
       };
     const state = await reviewState(root, record, request.inspectionScope);
     const operativeDecision = effectiveDecision(record);
-    const inspections = record.version === 2 ? (record.inspections?.length ?? 0) : 0;
+    const include = new Set(request.include ?? []);
+    const { committed: _committed, capture, ...review } = state;
     return {
       status: "prepared",
-      record: trimInspections(record),
-      ...(inspections > RETURNED_INSPECTIONS
-        ? { omittedInspections: inspections - RETURNED_INSPECTIONS }
-        : {}),
+      ...(include.has("history")
+        ? fullHistory(record)
+        : {
+            record: revisionSummary(record),
+            inspections: inspectionSummary(record),
+            history: historySummary(record),
+          }),
       ...(operativeDecision !== record && request.inspectionScope === "all"
-        ? { operativeDecision: trimInspections(operativeDecision) }
+        ? { operativeDecision: revisionSummary(operativeDecision) }
         : {}),
       inspectionScope: request.inspectionScope,
       ...(request.inspectionScope === "operative"
@@ -292,12 +433,29 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
           }
         : {}),
       provenance: decisionProvenance(record),
-      ...state,
+      ...review,
+      evidence: {
+        ...review.evidence,
+        changedFiles: listed(review.evidence.changedFiles).items,
+        ...(review.evidence.changedFiles.length > MAX_LISTED_FILES
+          ? { changedFilesOmitted: review.evidence.changedFiles.length - MAX_LISTED_FILES }
+          : {}),
+        localChanges: listed(review.evidence.localChanges).items,
+        ...(review.evidence.localChanges.length > MAX_LISTED_FILES
+          ? { localChangesOmitted: review.evidence.localChanges.length - MAX_LISTED_FILES }
+          : {}),
+      },
+      capture: captureSummary(capture),
       diagnostics,
       previews: await previews(
         root,
         state,
         await diffSince(root, record, request.inspectionScope, request.diffFrom),
+        {
+          diff: include.has("diff"),
+          files: include.has("files"),
+          diffFiles: request.diffFiles,
+        },
       ),
       hint:
         request.inspectionScope === "operative"
@@ -385,7 +543,7 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
       return {
         status: "inspected",
         id: record.id,
-        inspection,
+        inspection: { ...inspection, capture: captureSummary(inspection.capture) },
         approval: record.approval,
         ...(request.inspectionScope === "operative" && effectiveDecision(record) !== record
           ? { pendingProposal: { revision: record.revision, assessment: "not_assessed" } }
@@ -464,10 +622,20 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
         error: "Code changed while the review was being recorded. Prepare a new review.",
       };
     await saveDecisionRecord(root, updated);
+    // The saved record holds the reviewed content, evidence and capture.
+    const { content: _content, capture: savedCapture, evidence, ...recorded } = event;
     return {
       status: event.kind,
       id: record.id,
-      event,
+      event: {
+        ...recorded,
+        evidence: {
+          baseHash: evidence.baseHash,
+          headHash: evidence.headHash,
+          changedFiles: evidence.changedFiles.length,
+        },
+        capture: captureSummary(savedCapture),
+      },
       hint: "Review recorded locally. Review and commit the decision file through the normal project workflow.",
     };
   });

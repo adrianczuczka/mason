@@ -313,7 +313,7 @@ describe("captured anchors and separate source inspections", () => {
     await write("src/client.ts", "export const retries = 3;\n");
     await commitAll(root, "second change");
 
-    const prepared = await reviewDecision(root, { id });
+    const prepared = await reviewDecision(root, { id, include: ["diff"] });
     expect(prepared.previews.diffSince).toMatchObject({ from: "inspection", commit: inspected });
     expect(prepared.previews.diff).toContain("-export const retries = 2;");
     expect(prepared.previews.diff).not.toContain("retries = 1");
@@ -321,7 +321,7 @@ describe("captured anchors and separate source inspections", () => {
     // Review evidence and its token still cover the whole baseline.
     expect(prepared.evidence.changedFiles).toEqual(["src/client.ts"]);
 
-    const full = await reviewDecision(root, { id, diffFrom: "capture" });
+    const full = await reviewDecision(root, { id, diffFrom: "capture", include: ["diff"] });
     expect(full.previews.diffSince.from).toBe("baseline");
     expect(full.previews.diff).toContain("-export const retries = 1;");
     // Only commits touching the anchors are listed; the record-only commit is not.
@@ -332,11 +332,78 @@ describe("captured anchors and separate source inspections", () => {
 
     await inspect(id);
     await inspect(id);
-    const trimmed = await reviewDecision(root, { id });
+    const trimmed = await reviewDecision(root, { id, include: ["history"] });
     expect(trimmed.record.inspections).toHaveLength(2);
     expect(trimmed.omittedInspections).toBe(1);
     expect((await get()).inspections).toHaveLength(3);
   });
+
+  it("keeps a long-lived review preparation compact and returns detail on request", async () => {
+    const sourceFile = (n: number) => `src/module-${n}.ts`;
+    const body = (version: number) =>
+      Array.from({ length: 60 }, (_, line) => `export const value${line} = ${version};`).join("\n");
+    for (let n = 0; n < 30; n++) await write(sourceFile(n), body(1));
+    await commitAll(root, "modules");
+    const id = await create({
+      body: "Retries stay bounded. ".repeat(100),
+      files: ["src"],
+      owner: "Client team",
+      sources: [{ kind: "document", reference: "README.md" }],
+    });
+    await commitAll(root, "proposal");
+    for (let n = 0; n < 5; n++) {
+      const prepared = await reviewDecision(root, { id });
+      await reviewDecision(root, {
+        id,
+        action: "inspect",
+        inspector: "Codex",
+        note: `Inspection ${n}: ` + "checked every retry path. ".repeat(50),
+        reviewToken: prepared.reviewToken,
+      });
+    }
+    for (let n = 0; n < 30; n++) await write(sourceFile(n), body(2));
+    await commitAll(root, "rewrite modules");
+
+    const prepared = await reviewDecision(root, { id });
+    expect(prepared.status).toBe("prepared");
+    expect(JSON.stringify(prepared).length).toBeLessThan(8000);
+    expect(prepared.reviewToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(prepared.record.body).toContain("Retries stay bounded.");
+    expect(prepared.provenance.owner).toBe("Client team");
+    expect(prepared.inspections.total).toBe(5);
+    expect(prepared.inspections.latest.note.length).toBeLessThanOrEqual(301);
+    expect(prepared.previews.changedAnchors).toContainEqual({
+      path: sourceFile(0),
+      hunks: 1,
+      added: 60,
+      removed: 60,
+    });
+    expect(prepared.previews.diff).toBeUndefined();
+    expect(prepared.previews.files).toBeUndefined();
+
+    const detailed = await reviewDecision(root, {
+      id,
+      include: ["diff", "history"],
+      diffFiles: [sourceFile(3)],
+    });
+    expect(detailed.reviewToken).toBe(prepared.reviewToken);
+    expect(detailed.previews.diff).toContain(`+++ b/${sourceFile(3)}`);
+    expect(detailed.previews.diff).not.toContain(sourceFile(4));
+    expect(detailed.record.history.length).toBeGreaterThan(0);
+    expect(detailed.record.inspections).toHaveLength(2);
+    expect(detailed.omittedInspections).toBe(3);
+
+    const accepted = await reviewDecision(root, {
+      id,
+      action: "accept",
+      reviewer: "Maintainer",
+      note: "Reviewed the rewrite against the retry bound.",
+      reviewToken: prepared.reviewToken,
+    });
+    expect(accepted.status).toBe("accepted");
+    expect(JSON.stringify(accepted).length).toBeLessThan(2000);
+    expect(accepted.event.content).toBeUndefined();
+  }, 30000);
 
   it("falls back to the evidence baseline when the inspected commit is unavailable", async () => {
     const id = await create();
@@ -348,7 +415,7 @@ describe("captured anchors and separate source inspections", () => {
     await fs.writeFile(file, JSON.stringify(record, null, 2) + "\n");
     await write("src/client.ts", "export const retries = 2;\n");
     await commitAll(root, "change");
-    const prepared = await reviewDecision(root, { id });
+    const prepared = await reviewDecision(root, { id, include: ["diff"] });
     expect(prepared.previews.diffSince).toMatchObject({
       from: "baseline",
       note: expect.stringContaining("not available locally"),

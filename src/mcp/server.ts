@@ -274,7 +274,7 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "review_decision",
-    "Prepare a decision review: returns the record and history with its latest two inspections (older ones are counted), any operative accepted revision, provenance, changes, and source, diff and commit previews since the latest valid inspection for both sets of anchors, and a reviewToken. For accepted-guidance inspection use inspectionScope operative on both prepare and inspect; pending proposals remain unassessed. Default all scope covers both revisions. After source inspection, record inspect with inspector, note and token to report no contradiction found without human acceptance. For human review, prepare with all scope, then record accept, reaffirm, or retire with its token, the authorized reviewer, and a reason. Acceptance replaces the operative revision; retirement withdraws the entire record including its proposal. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
+    "Prepare a decision review: returns the claim and any operative accepted revision, provenance, the latest inspection and history event (notes shortened), changed files with hunk and line counts and anchor commits since the latest valid inspection for both sets of anchors, and a reviewToken. Request the diff (optionally for specific diffFiles), source previews or full history with include; the token is unchanged. For accepted-guidance inspection use inspectionScope operative on both prepare and inspect; pending proposals remain unassessed. Default all scope covers both revisions. After source inspection, record inspect with inspector, note and token to report no contradiction found without human acceptance. For human review, prepare with all scope, then record accept, reaffirm, or retire with its token, the authorized reviewer, and a reason. Acceptance replaces the operative revision; retirement withdraws the entire record including its proposal. Acceptance requires owner, source, readable Git HEAD, and committed anchor changes. Changed records or code invalidate the token. Identities and approvals are recorded assertions for normal PR review, not authenticated proof.",
     {
       dir: z.string().describe("Absolute path to the project root directory"),
       id: z
@@ -330,6 +330,18 @@ export function createMcpServer(): McpServer {
         .regex(/^[a-f0-9]{64}$/)
         .optional()
         .describe("Token from the prepared review; rejects stale record or code revisions"),
+      include: z
+        .array(z.enum(["diff", "files", "history"]))
+        .max(3)
+        .optional()
+        .describe(
+          "For prepare only: diff returns the bounded diff since the latest valid inspection, files returns source previews, history returns all review events and the latest two inspections. Omit for a compact preparation.",
+        ),
+      diffFiles: z
+        .array(z.string().min(1).max(500))
+        .max(20)
+        .optional()
+        .describe("For prepare with include diff: limit the diff to these changed files."),
     },
     async ({ dir, ...input }) => {
       const result = await reviewDecision(dir, input);
