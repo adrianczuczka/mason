@@ -290,6 +290,8 @@ Add to your VS Code settings (`settings.json`):
 
 ## Upgrading from earlier versions
 
+**0.24.0:** Upgrade Mason and restart running assistants. Run `mason status`: it now exits 1 when a host's managed instruction block still names removed tools, and `mason init --host <host>` regenerates the block for review and commit. Claude Stop review blocking is now off by default; run `mason config --stop-block drift` in a checkout to keep it. `mason stats` combines all branches and linked worktrees; observations recorded per branch by earlier versions are read as they are. Pass the files you will edit to `get_context`, which no longer returns weak lexical matches, and request `review_decision` diffs, source previews or history with `include`.
+
 **0.23.1:** Delivers the 0.23.0 changes to standalone installers and automatic updates; 0.23.0 reached only npm and the MCP Registry. The 0.23.0 upgrade steps below apply.
 
 **0.23.0:** Upgrade Mason and restart running assistants. Automation stores that stopped working on 0.22.0 after many sessions, with unfinished tool calls or over 10 MiB, recover on the next hook without manual edits. Run `mason init --host claude` or `--host codex` to add the decision merge attribute to `.gitattributes`, and for Claude the `PostToolUseFailure` hook; review and commit those changes, then run `mason setup` in each checkout to enable the local merge driver. Earlier shared configuration stays compatible without them.
