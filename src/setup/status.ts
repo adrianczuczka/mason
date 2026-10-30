@@ -103,6 +103,10 @@ export async function setupStatus(dir: string) {
     const observedEvents = complete?.events ?? sessions[0]?.events ?? [];
     const pending: string[] = [];
     if (!installed.available) pending.push(installed.message!);
+    if (config.instructionRemovedNames.length)
+      pending.push(
+        `The Mason instruction block names removed ${config.instructionRemovedNames.join(", ")}. A maintainer can run mason init --host ${host} to regenerate it; review and commit the change.`,
+      );
     if (!mcp || !hooks || !config.instructionCompatible || !configured)
       pending.push(
         "Run mason setup to activate existing configuration; incompatible shared configuration needs mason init and review. Inspect any disabled host settings.",
@@ -163,6 +167,9 @@ export async function setupStatus(dir: string) {
     };
   }
   const statuses = Object.values(hosts).map((host) => host.status);
+  const incompatibleInstructions = Object.entries(hosts)
+    .filter(([, state]) => state.instructions === "incompatible")
+    .map(([host]) => host);
   const decisions = await loadDecisionStore(ws.root);
   return {
     version: 1,
@@ -174,6 +181,7 @@ export async function setupStatus(dir: string) {
           : "pending",
     root: ws.root,
     hosts,
+    incompatibleInstructions,
     activationRoot: activation.root,
     decisionRecords: decisions.records.length,
     mergeDriver,

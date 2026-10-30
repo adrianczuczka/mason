@@ -556,6 +556,41 @@ describe("unified setup", { timeout: 20000 }, () => {
     expect((await setupStatus(root)).hosts.codex.status).not.toBe("active");
   }, 60000);
 
+  it.each(["mason_repair", "review_advisory", "mason-auto"])(
+    "reports a managed instruction block naming removed %s as incompatible and exits 1",
+    async (removed) => {
+      await configureProject(root, { host: "codex" });
+      const io = { out: () => {}, err: () => {} };
+      expect(await runAutomationCli(["status", "--dir", root, "--json"], "", io)).toBe(0);
+      const agents = await fs.readFile(path.join(root, "AGENTS.md"), "utf8");
+      await write(
+        "AGENTS.md",
+        agents.replace(
+          "<!-- mason:end -->",
+          `Run \`${removed}\` after each repair.\n<!-- mason:end -->`,
+        ),
+      );
+      const status = await setupStatus(root);
+      expect(status.hosts.codex).toMatchObject({
+        status: "attention",
+        instructions: "incompatible",
+      });
+      expect(status.hosts.codex.pending.join(" ")).toContain(removed);
+      expect(status.incompatibleInstructions).toEqual(["codex"]);
+      const output: string[] = [];
+      expect(
+        await runAutomationCli(["status", "--dir", root, "--json"], "", {
+          out: (line) => output.push(line),
+          err: () => {},
+        }),
+      ).toBe(1);
+      expect(JSON.parse(output.join("\n")).setup.incompatibleInstructions).toEqual(["codex"]);
+      await initializeProject(root, { host: "codex" });
+      expect(await fs.readFile(path.join(root, "AGENTS.md"), "utf8")).not.toContain(removed);
+      expect(await runAutomationCli(["status", "--dir", root, "--json"], "", io)).toBe(0);
+    },
+  );
+
   it("detects a missing global command without treating earlier activation as healthy", async () => {
     await configureProject(root, { host: "codex" });
     vi.mocked(launcher.installedCommand).mockResolvedValue({

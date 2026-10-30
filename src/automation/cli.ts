@@ -51,7 +51,7 @@ const USAGE = `Usage: mason <init|setup|teardown|install|config|status|check|hoo
   install --host claude|codex  Merge lifecycle hooks into this project's host config
   config --host claude|codex   Print the host config without writing
   config --stop-block off|drift Set local Claude Stop review behavior (default: drift)
-  status                      Read configured hooks and observed runtime events
+  status                      Read configured hooks and observed runtime events (exit 1: stale instructions)
   stats                       Aggregate local observations; --enable/--disable to configure
                               Rate with --session <id> --finding <id> --rating helpful|already-knew|irrelevant|deferred
   check                       Capture/resume and verify retained audit evidence
@@ -264,7 +264,8 @@ export async function runAutomationCli(
               .filter(Boolean)
               .join("\n\n"),
       );
-      return 0;
+      // Instructions an agent follows must not direct it to removed tools.
+      return "incompatibleInstructions" in setup && setup.incompatibleInstructions?.length ? 1 : 0;
     }
     if (action !== "check") throw new Error("Unknown automation command: " + action);
     const { report } = await measured(() => automate(dir, { event: "task_end" }));

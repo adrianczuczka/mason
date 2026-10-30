@@ -257,6 +257,13 @@ export async function inspectHostConfig(root: string, host: Host, plannedMcp?: s
   };
 }
 
+/** Tools and commands removed in earlier releases; a block naming them misdirects agents. */
+const REMOVED_INSTRUCTION_NAMES: Array<[string, RegExp]> = [
+  ["mason_repair", /\bmason_repair\b/],
+  ["review_advisory", /\breview_advisory\b/],
+  ["mason-auto", /\bmason-auto\b/],
+];
+
 /** Runtime compatibility is independent of the current generated template. */
 export async function inspectIntegration(root: string, host: Host) {
   const config = await inspectHostConfig(root, host);
@@ -264,8 +271,14 @@ export async function inspectIntegration(root: string, host: Host) {
   const primary = instructions[0]?.before ?? "";
   const { blockSpan } = await import("./ownership.js");
   const block = blockSpan(primary, "<!-- mason:start -->", "<!-- mason:end -->");
+  const removedNames = block
+    ? REMOVED_INSTRUCTION_NAMES.filter(([, pattern]) => pattern.test(block.text)).map(
+        ([name]) => name,
+      )
+    : [];
   const instructionCompatible =
     !!block &&
+    !removedNames.length &&
     ["get_context", "save_decision", "review_decision"].every((tool) =>
       block.text.includes(tool),
     ) &&
@@ -300,6 +313,7 @@ export async function inspectIntegration(root: string, host: Host) {
     ...config,
     instructions,
     instructionCompatible,
+    instructionRemovedNames: removedNames,
     instructionsCurrent: instructions.every((edit) => edit.before === edit.after),
     mcpCompatible,
     hooksCompatible,
