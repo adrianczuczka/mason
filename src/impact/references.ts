@@ -194,9 +194,12 @@ function resolveImport(file: string, specifier: string, available: Set<string>):
   return found.length === 1 ? found[0] : null;
 }
 
-/** Explicit paths are textual evidence, not proof of a dependency. */
+/** Explicit paths are textual evidence, not proof of a dependency. A trailing period ends a
+ * sentence unless a path character follows it (`settings.json.bak`). */
 function mentionsPath(content: string, target: string): boolean {
-  return new RegExp(`(?<![\\w./\\\\-])(?:\\./)?${escape(target)}(?![\\w./\\\\-])`).test(content);
+  return new RegExp(
+    `(?<![\\w./\\\\-])(?:\\./)?${escape(target)}(?![\\w/\\\\-]|\\.[\\w./\\\\-])`,
+  ).test(content);
 }
 
 export function createReferenceMatcher(

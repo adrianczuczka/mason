@@ -101,6 +101,20 @@ describe("analyzeImpact references", () => {
     ]);
   });
 
+  it("accepts an explicit path that ends a sentence", async () => {
+    await write(tmpDir, "config/retry.json", "{}\n");
+    await write(tmpDir, "src/notes.ts", "// Retry limits are read from config/retry.json.\n");
+    await write(tmpDir, "src/other.ts", "// See config/retry.json.bak and config/retry.json.d/x\n");
+    expect((await analyzeImpact(tmpDir, ["config/retry.json"])).references).toEqual([
+      {
+        file: "src/notes.ts",
+        matches: ["config/retry.json"],
+        kind: "mention",
+        evidence: "explicit-path",
+      },
+    ]);
+  });
+
   it("resolves the full import path when two modules share a basename", async () => {
     await write(tmpDir, "src/one/auth.ts", "export const auth = 1;\n");
     await write(tmpDir, "src/two/auth.ts", "export const auth = 2;\n");

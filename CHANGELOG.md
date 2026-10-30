@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Count an explicit path at the end of a sentence (`… read from config/retry.json.`) as an `explicit-path` reference. The trailing period was treated as part of a longer path, so the mention was dropped; `config/retry.json.bak` still does not match.
 - Make Claude Stop review blocking opt-in. `stopBlock` now defaults to `off`, so drift notices stay advisory; in field use most blocked Stops concerned drift that was irrelevant or already known. Run `mason config --stop-block drift` to restore blocking in a checkout. Existing explicit preferences are unchanged.
 - Report a managed instruction block that still names removed tools (`mason_repair`, `review_advisory`, `mason-auto`) as incompatible. `mason status` reported such blocks as compatible, so agents kept following instructions for tools that no longer exist. Status now names the removed tools, suggests `mason init --host <host>`, lists the hosts in `incompatibleInstructions`, and exits 1.
 - Keep an anchor capture when a decision is accepted or reaffirmed. Acceptance dropped the capture, so freshness depended on the review commit alone and an accepted record showed unknown freshness in a shallow clone or after a squash merge. The capture now records the committed anchor content at review; incomplete captures are not kept, and records accepted by earlier versions keep their Git-based freshness until reviewed again.
