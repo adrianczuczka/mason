@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Prune lifecycle check reports. Hooks write a report under `.mason/reports/automation/<id>/checks/` whenever they notify, and nothing removed them; one long-lived checkout held 1,869 files (188 MB). Once more than 150 accumulate, the newest 100 are kept along with any report still referenced by automation state or a setup receipt. Repair baselines and other files are untouched.
 - Count an explicit path at the end of a sentence (`… read from config/retry.json.`) as an `explicit-path` reference. The trailing period was treated as part of a longer path, so the mention was dropped; `config/retry.json.bak` still does not match.
 - Make Claude Stop review blocking opt-in. `stopBlock` now defaults to `off`, so drift notices stay advisory; in field use most blocked Stops concerned drift that was irrelevant or already known. Run `mason config --stop-block drift` to restore blocking in a checkout. Existing explicit preferences are unchanged.
 - Report a managed instruction block that still names removed tools (`mason_repair`, `review_advisory`, `mason-auto`) as incompatible. `mason status` reported such blocks as compatible, so agents kept following instructions for tools that no longer exist. Status now names the removed tools, suggests `mason init --host <host>`, lists the hosts in `incompatibleInstructions`, and exits 1.

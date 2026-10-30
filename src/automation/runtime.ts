@@ -3,6 +3,7 @@ import { driftExcerpt, formatDriftExcerpt } from "../decisions/excerpts.js";
 import { branchAttribution } from "../decisions/attribution.js";
 import { checkDecisionAnchors } from "../audit/checks/decision-anchor.js";
 import { readAutomationConfig } from "./config.js";
+import { pruneCheckReports } from "./retention.js";
 import {
   observeDecisionEdits,
   decisionStopReview,
@@ -849,7 +850,16 @@ async function runAutomation(dir: string, event: AutomationEvent, guidance: bool
             state.fingerprint = inputs.fingerprint;
             state.latest = report.reportPath;
           }
-          if (persistReport) await writeStoreJson(ws.root, report.reportPath, report);
+          if (persistReport) {
+            await writeStoreJson(ws.root, report.reportPath, report);
+            // Retention is housekeeping; a failure must not hide this check's result.
+            await pruneCheckReports(ws.root, ws.directory, [
+              report.reportPath,
+              state.latest,
+              state.guidance?.path,
+              state.analysis?.path,
+            ]).catch(() => 0);
+          }
           // The turn is over: calls still pending never reported completion.
           if (session && event.event === "task_end") clearPendingTools(session);
           await writeStoreJson(ws.root, ws.directory + "/state.json", serializeState(state, key), {
