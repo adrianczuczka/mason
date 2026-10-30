@@ -50,7 +50,7 @@ const USAGE = `Usage: mason <init|setup|teardown|install|config|status|check|hoo
   teardown [--host claude|codex] Disconnect locally; --project removes shared configuration
   install --host claude|codex  Merge lifecycle hooks into this project's host config
   config --host claude|codex   Print the host config without writing
-  config --stop-block off|drift Set local Claude Stop review behavior (default: drift)
+  config --stop-block off|drift Set local Claude Stop review behavior (default: off)
   status                      Read configured hooks and observed runtime events (exit 1: stale instructions)
   stats                       Aggregate local observations; --enable/--disable to configure
                               Rate with --session <id> --finding <id> --rating helpful|already-knew|irrelevant|deferred
@@ -66,7 +66,7 @@ const USAGE = `Usage: mason <init|setup|teardown|install|config|status|check|hoo
 check exits 0 for verified checks, 1 for issues, 2 for incomplete/unavailable.
 teardown exits 0 for complete/no-op, 2 when cleanup needs attention (also in dry runs).
 Hooks check decision anchors only, without creating or verifying repair baselines.
-Hooks exit 0; Claude Stop can block once for uninspected session anchor edits.
+Hooks exit 0; with --stop-block drift, Claude Stop can block once for uninspected session anchor edits.
 Re-entry and Codex remain advisory; failed captures are reported explicitly.
 Local evidence is written under .mason/reports/. No LLM calls or source edits.`;
 

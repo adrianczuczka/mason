@@ -98,7 +98,7 @@ To inspect the operative accepted revision while leaving its pending replacement
 
 Default `inspectionScope: "all"` retains the combined record/both-anchor behavior and existing receipts. Operative scope requires an active accepted revision; proposal-only and legacy records use all scope. Human acceptance, reaffirmation and retirement require preparation with all scope and an authorized reviewer. Tokens from different scopes are not interchangeable. Older Mason clients can read the additional receipt metadata conservatively but cannot perform scoped inspections; upgrade before relying on their interpretation.
 
-Claude Stop hooks can request one continuation to inspect outstanding drift overlapping observed session edits. A successful inspection clears the covered advisory without changing human approval; unresolved or uncertain conflicts should be explained to the user. See [Stop review behavior and opt-out](setup.md#automatic-documentation-checks-mason).
+With `mason config --stop-block drift`, Claude Stop hooks can request one continuation to inspect outstanding drift overlapping observed session edits; by default the notice is advisory. A successful inspection clears the covered advisory without changing human approval; unresolved or uncertain conflicts should be explained to the user. See [Stop review behavior and opt-in](setup.md#automatic-documentation-checks-mason).
 
 Inspection can cover uncommitted anchor content. Commit the inspection record through the normal project workflow when it should be shared. Inspection is an assessment by its named inspector, not a deterministic proof of consistency. `accept`, `reaffirm` and `retire` still require an authorized reviewer; a proposal must be accepted before it can be reaffirmed.
 

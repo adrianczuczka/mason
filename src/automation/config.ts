@@ -11,7 +11,7 @@ const configPath = directory + "/config.json";
 export async function readAutomationConfig(root: string) {
   const raw = await readStoreJson(root, configPath);
   return raw === null
-    ? { version: 1 as const, stopBlock: "drift" as const }
+    ? { version: 1 as const, stopBlock: "off" as const }
     : configSchema.parse(raw);
 }
 

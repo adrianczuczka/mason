@@ -7,6 +7,7 @@ import { runAutomationHook } from "../src/automation/adapters.js";
 import { installAutomation, installedAutomation } from "../src/automation/install.js";
 import { workspace } from "../src/automation/evidence.js";
 import { runAutomationCli } from "../src/automation/cli.js";
+import { configureStopBlock } from "../src/automation/config.js";
 import { masonAutomation } from "../src/mcp/tools.js";
 import { upsertDecision } from "../src/decisions/decisions.js";
 import { CHECKS } from "../src/audit/checks/index.js";
@@ -220,6 +221,7 @@ describe("portable automation", { timeout: 20000 }, () => {
       category: "decision",
       files: ["old-module/index.js"],
     });
+    await configureStopBlock(root, "drift");
     await hook("claude", "PreToolUse", { tool_name: "Bash", tool_use_id: "source" });
     await write("old-module/index.js", "export const greeting = 'changed';\n");
     await hook("claude", "PostToolUse", { tool_name: "Bash", tool_use_id: "source" });

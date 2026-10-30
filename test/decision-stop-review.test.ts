@@ -8,6 +8,7 @@ import { reviewDecision } from "../src/decisions/review.js";
 import { runAutomationHook } from "../src/automation/adapters.js";
 import { automate, automationStatus } from "../src/automation/runtime.js";
 import { runAutomationCli } from "../src/automation/cli.js";
+import { configureStopBlock } from "../src/automation/config.js";
 
 let root: string;
 let id: string;
@@ -52,12 +53,24 @@ beforeEach(async () => {
     files: ["src"],
   });
   id = (await loadDecisions(root))[0].id;
+  // Blocking is opt-in; these tests exercise it.
+  await configureStopBlock(root, "drift");
 });
 afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
 describe("Claude decision Stop review", { timeout: 30000 }, () => {
+  it("does not block Stop unless drift blocking is configured", async () => {
+    await fs.rm(path.join(root, ".mason/reports/automation/config.json"));
+    expect((await automationStatus(root)).stopBlock).toBe("off");
+    await hook("SessionStart");
+    await edit("export const retries = 2;\n");
+    const output = await hook("Stop");
+    expect(output?.decision).toBeUndefined();
+    expect(output).toMatchObject({ systemMessage: expect.stringContaining(id) });
+  });
+
   it("blocks once, preserves the advisory, and reopens on another edit to the same dirty file", async () => {
     await hook("SessionStart");
     await edit("export const retries = 2;\n");
