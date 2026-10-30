@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { initGitRepo, commitAll } from "./helpers.js";
 import {
   upsertDecision,
@@ -17,6 +19,8 @@ import { runHook } from "../src/hook/hook.js";
 import { computeAudit } from "../src/audit/audit.js";
 import { computeDecisionDrift } from "../src/decisions/drift.js";
 import { inspectOnboarding } from "../src/mcp/onboarding.js";
+
+const execGit = (args: string[]) => promisify(execFile)("git", args);
 
 describe("decision provenance and reviews", () => {
   let repo: string;
@@ -95,6 +99,35 @@ describe("decision provenance and reviews", () => {
       reviewRequired: true,
       trust: { verification: "unverified" },
     });
+  });
+
+  it("keeps a capture on acceptance so a clone without the review commit stays current", async () => {
+    const record = await create();
+    await commitAll(repo, "proposal");
+    expect((await verdict(record.id, "accept")).status).toBe("accepted");
+    const accepted = await get();
+    expect(accepted.version === 2 && accepted.capture).toMatchObject({
+      anchors: ["src/delivery.ts"],
+      complete: true,
+    });
+    await commitAll(repo, "commit review metadata");
+    const clone = repo + "-clone";
+    await execGit(["clone", "--quiet", "--depth", "1", "file://" + repo, clone]);
+    try {
+      expect((await computeDecisionDrift(clone)).freshness?.[record.id]).toBe("current");
+      await fs.writeFile(path.join(clone, "src/delivery.ts"), "export const retries = 9;\n");
+      expect((await computeDecisionDrift(clone)).freshness?.[record.id]).toBe("changed");
+    } finally {
+      await fs.rm(clone, { recursive: true, force: true });
+    }
+    await write("src/delivery.ts", "export const retries = 2;\n");
+    await commitAll(repo, "change delivery");
+    expect((await verdict(record.id, "reaffirm")).status).toBe("reaffirmed");
+    const reaffirmed = await get();
+    expect(reaffirmed.version === 2 && reaffirmed.capture?.files["src/delivery.ts"]).not.toBe(
+      accepted.version === 2 && accepted.capture?.files["src/delivery.ts"],
+    );
+    expect((await computeDecisionDrift(repo)).freshness?.[record.id]).toBe("current");
   });
 
   it("keeps legacy knowledge unreviewed and leaves its bytes untouched on read", async () => {
@@ -309,6 +342,9 @@ describe("decision provenance and reviews", () => {
     accepted.refreshedHash = unreachable;
     accepted.history[1].refreshedHash = unreachable;
     accepted.history[1].evidence.headHash = unreachable;
+    // Accepted before captures were kept: only the unreachable commit is evidence.
+    delete accepted.capture;
+    delete accepted.history[1].capture;
     await saveDecisionRecord(repo, accepted);
     await upsertDecision(repo, {
       ...lesson,

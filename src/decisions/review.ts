@@ -584,6 +584,15 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
           evidence: state.evidence,
         };
     }
+    // Acceptance requires committed anchors, so this capture is the reviewed HEAD content.
+    // It keeps freshness readable where the review commit is missing (shallow clones,
+    // squash merges). An incomplete capture would only report unknown; Git history stays.
+    const reviewedCapture =
+      request.action === "retire"
+        ? record.capture
+        : await captureAnchors(root, record.files).then((capture) =>
+            capture.complete ? capture : undefined,
+          );
     const status = request.action === "retire" ? "retired" : "active";
     const nextApproval = request.action === "retire" ? record.approval : "accepted";
     const refreshedHash =
@@ -604,7 +613,7 @@ export async function reviewDecision(root: string, input: ReviewDecisionInput) {
       status,
       refreshedHash,
       evidence: state.evidence,
-      capture: request.action === "retire" ? record.capture : undefined,
+      capture: reviewedCapture,
     } as const;
     const updated: ReviewedDecisionRecord = {
       ...record,
