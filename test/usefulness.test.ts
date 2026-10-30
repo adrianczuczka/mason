@@ -183,7 +183,7 @@ it("does not count overflow or absence as a resolved finding; older observations
   expect((await usefulnessStatus(root)).sessions[0].resolved).toBe(4);
 }, 30000);
 
-it("merges concurrent sessions and isolates branches", async () => {
+it("merges concurrent sessions and shares them across branches", async () => {
   await configureUsefulness(root, true);
   const { report } = await automate(root, { event: "task_end" });
   await Promise.all(
@@ -193,7 +193,103 @@ it("merges concurrent sessions and isolates branches", async () => {
   );
   expect((await usefulnessStatus(root)).sessions).toHaveLength(2);
   await git(["checkout", "-b", "other"], root);
-  expect((await usefulnessStatus(root)).sessions).toHaveLength(0);
+  expect((await usefulnessStatus(root)).sessions).toHaveLength(2);
+  await observeUsefulness(
+    root,
+    { event: "task_end", host: "claude", sessionId: "three" },
+    report,
+    [],
+    [],
+    10,
+  );
+  await git(["checkout", "-"], root);
+  expect((await usefulnessStatus(root)).sessions).toHaveLength(3);
+}, 30000);
+
+it("shows a rating recorded in a linked worktree from the primary checkout", async () => {
+  await configureUsefulness(root, true);
+  await fs.rm(path.join(root, "old"), { recursive: true });
+  const { report } = await automate(root, { event: "task_end" });
+  const finding = report.findings.find((f) => f.original.type === "deleted-reference")!;
+  await git(["checkout", "--", "old"], root);
+  const linked = root + "-linked";
+  await git(["worktree", "add", "-b", "linked", linked], root);
+  try {
+    const event = { event: "after_tool" as const, host: "claude" as const, sessionId: "linked" };
+    await observeUsefulness(linked, event, { ...report, findings: [finding] }, [finding], [], 5);
+    const session = (await usefulnessStatus(linked)).sessions[0];
+    await rateUsefulness(linked, session.id, finding.id, "irrelevant");
+    const primary = await usefulnessStatus(root);
+    expect(primary.sessions.map((s) => s.id)).toEqual([session.id]);
+    expect(primary.summary.ratings.irrelevant).toBe(1);
+    await expect(fs.access(path.join(linked, ".mason/local/usefulness"))).rejects.toThrow();
+  } finally {
+    await git(["worktree", "remove", "--force", linked], root);
+  }
+}, 30000);
+
+it("reads and rates sessions kept in earlier per-branch files without rewriting them", async () => {
+  await configureUsefulness(root, true);
+  const legacy = {
+    version: 1,
+    sessions: {
+      "earlier-session": {
+        host: "claude",
+        updatedAt: "2026-09-01T10:00:00.000Z",
+        checks: 1,
+        checkMs: 3,
+        findings: {
+          "earlier-finding": {
+            type: "decision-anchor-drift",
+            channels: ["agent"],
+            status: "unresolved",
+            deliveredAt: "2026-09-01T10:00:00.000Z",
+            observedAt: "2026-09-01T10:00:00.000Z",
+          },
+        },
+        decisions: [],
+        retrievalObserved: false,
+        receiptIds: [],
+        reportPath: ".mason/reports/automation/0123456789abcdef01234567/checks/earlier.json",
+        truncated: false,
+      },
+    },
+  };
+  const legacyFile = ".mason/local/usefulness/0123456789abcdef01234567.json";
+  await write(legacyFile, JSON.stringify(legacy));
+  expect((await usefulnessStatus(root)).sessions.map((s) => s.id)).toEqual(["earlier-session"]);
+  await rateUsefulness(root, "earlier-session", "earlier-finding", "already-knew");
+  expect((await usefulnessStatus(root)).summary.ratings["already-knew"]).toBe(1);
+  expect(JSON.parse(await fs.readFile(path.join(root, legacyFile), "utf8"))).toEqual(legacy);
+  await write(".mason/local/usefulness/fedcba9876543210fedcba98.json", "broken-json");
+  const status = await usefulnessStatus(root);
+  expect(status.legacyUnreadable).toBe(1);
+  expect(summarizeUsefulness(status)).toContain("could not be read");
+}, 30000);
+
+it("counts a get_context receipt in the bare content-block shape Claude Code sends", async () => {
+  await configureUsefulness(root, true);
+  const fixture = JSON.parse(
+    await fs.readFile(
+      path.join(import.meta.dirname, "fixtures/hooks/claude-post-tool-use-get-context.json"),
+      "utf8",
+    ),
+  );
+  expect(Array.isArray(fixture.tool_response)).toBe(true);
+  expect(retrievedDecisions(fixture.tool_name, fixture.tool_response)).toEqual([
+    "upload-backoff",
+    "queue-ordering",
+  ]);
+  await hook("SessionStart");
+  await hook("PostToolUse", {
+    tool_name: fixture.tool_name,
+    tool_use_id: fixture.tool_use_id,
+    tool_input: fixture.tool_input,
+    tool_response: fixture.tool_response,
+  });
+  const summary = (await usefulnessStatus(root)).summary;
+  expect(summary.retrievalObservedSessions).toBe(1);
+  expect(summary.retrievedDecisions).toBe(2);
 }, 30000);
 
 it("parses successful retrieval receipts without treating calls or errors as retrieval", () => {

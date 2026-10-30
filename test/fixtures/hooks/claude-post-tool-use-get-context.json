@@ -1,0 +1,14 @@
+{
+  "session_id": "fixture-session",
+  "transcript_path": "/tmp/fixture-session.jsonl",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__mason__get_context",
+  "tool_use_id": "toolu_fixture_context",
+  "tool_input": { "task": "change the upload queue retry delay", "files": ["src/upload/queue.ts"] },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "{\"exists\":false,\"map\":{\"status\":\"missing\"},\"task\":\"change the upload queue retry delay\",\"features\":{},\"flows\":{},\"decisions\":{\"upload-backoff\":{\"title\":\"Upload retries must back off exponentially\",\"body\":\"Keep the jittered backoff.\"},\"queue-ordering\":{\"title\":\"Upload queue keeps insertion order\",\"body\":\"Servers reject out-of-order parts.\"}},\"relatedTests\":[],\"impact\":null,\"hint\":\"\"}"
+    }
+  ]
+}

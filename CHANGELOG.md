@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Count `get_context` retrieval receipts from Claude Code. Its PostToolUse payload passes an MCP result as a bare array of content blocks, which was rejected, so `mason stats` always reported zero retrieved decisions.
+- Share `mason stats` across a repository's branches and linked worktrees. Observations were kept per checkout and per branch, so a rating recorded on one branch did not appear on another. The store is keyed by Git's common directory and kept in the primary checkout; files from earlier versions are read alongside it and not rewritten.
 - `get_context` returns no decision rather than weak lexical matches. Previously every record sharing one word with the task was a match, so on a store of a few dozen records almost every task returned five, mostly irrelevant, and the "No saved decision matched" hint never appeared. A decision is now kept only when it is anchored to a requested file or matched map entry, its title shares at least two task words, or its score reaches 8 and half the best match's. Description words are weighted down when common across records or in very long descriptions. `omittedBelowFloor` reports how many weak matches were left out.
 - Wait up to about 10 minutes for npm to list a new version before publishing it to the official MCP Registry, and allow 60 seconds per registry lookup with retries. npm took over a minute for both 0.23.0 and 0.23.1, and registry lookups took 6-12 seconds during the 0.23.1 release, which failed the registry job.
 

@@ -1,7 +1,8 @@
 import { isRecord } from "../utils/validation.js";
 import fs from "node:fs/promises";
+import path from "node:path";
 import { z } from "zod";
-import { workspace, hash } from "./evidence.js";
+import { git, workspace, hash } from "./evidence.js";
 import { readStoreJson, writeStoreJson, storePath } from "../utils/storage.js";
 import { withStoreLock } from "../utils/store-lock.js";
 import type { AutomationEvent, AutomationReport } from "./runtime.js";
@@ -34,32 +35,138 @@ const sessionSchema = z.object({
 });
 const stateSchema = z.object({ version: z.literal(1), sessions: z.record(sessionSchema) });
 type Session = z.infer<typeof sessionSchema>;
-const empty = () => ({ version: 1 as const, sessions: {} as Record<string, Session> });
-const statePath = (ws: Awaited<ReturnType<typeof workspace>>) =>
-  `${directory}/${hash([ws.root, ws.gitDir, ws.branch]).slice(0, 24)}.json`;
-async function enabled(root: string) {
+type State = z.infer<typeof stateSchema>;
+const empty = (): State => ({ version: 1 as const, sessions: {} as Record<string, Session> });
+const SESSION_LIMIT = 50;
+
+/**
+ * One store per repository, keyed by Git's common directory and kept in the primary
+ * checkout, so sessions on other branches and linked worktrees share ratings and counts.
+ * Bare repositories have no primary checkout; their worktrees keep separate stores.
+ */
+async function statsStore(dir: string) {
+  const ws = await workspace(dir);
+  const commonDir = await fs.realpath(
+    path.resolve(ws.root, (await git(ws.root, "rev-parse", "--git-common-dir")).trim()),
+  );
+  let root = ws.root;
+  if (commonDir !== ws.gitDir) {
+    try {
+      const primary = (await git(ws.root, "worktree", "list", "--porcelain", "-z"))
+        .split("\0\0")[0]
+        .split("\0");
+      const candidate = primary.find((field) => field.startsWith("worktree "))?.slice(9);
+      if (candidate && !primary.includes("bare")) {
+        const candidateRoot = await fs.realpath(
+          (await git(candidate, "rev-parse", "--show-toplevel")).trim(),
+        );
+        const candidateCommon = await fs.realpath(
+          path.resolve(
+            candidateRoot,
+            (await git(candidateRoot, "rev-parse", "--git-common-dir")).trim(),
+          ),
+        );
+        if (candidateCommon === commonDir) root = candidateRoot;
+      }
+    } catch {
+      /* A missing or moved primary checkout leaves this worktree's own store. */
+    }
+  }
+  return {
+    ws,
+    root,
+    statePath: `${directory}/${hash([commonDir]).slice(0, 24)}.json`,
+  };
+}
+type Store = Awaited<ReturnType<typeof statsStore>>;
+
+async function readConfig(root: string) {
   const raw = await readStoreJson(root, configPath);
-  return raw !== null && configSchema.parse(raw).enabled;
+  return raw === null ? null : configSchema.parse(raw).enabled;
+}
+/** A worktree enabled before stores were shared keeps its own preference until set again. */
+async function enabled(store: Store) {
+  return (
+    (await readConfig(store.root)) ??
+    (store.root !== store.ws.root ? await readConfig(store.ws.root) : null) ??
+    false
+  );
+}
+
+async function readState(store: Store): Promise<State> {
+  const raw = await readStoreJson(store.root, store.statePath);
+  return raw === null ? empty() : stateSchema.parse(raw);
+}
+
+/**
+ * Earlier releases kept one file per checkout and branch. Read them alongside the shared
+ * store, which wins for a session present in both; they are never rewritten or removed.
+ */
+async function readLegacyStates(store: Store) {
+  const states: State[] = [];
+  let unreadable = 0;
+  for (const root of [...new Set([store.root, store.ws.root])]) {
+    let names: string[];
+    try {
+      names = await fs.readdir(await storePath(root, directory));
+    } catch {
+      continue;
+    }
+    for (const name of names.sort()) {
+      const relative = directory + "/" + name;
+      if (!/^[a-f0-9]{24}\.json$/.test(name) || relative === store.statePath) continue;
+      try {
+        const raw = await readStoreJson(root, relative);
+        if (raw !== null) states.push(stateSchema.parse(raw));
+      } catch {
+        unreadable++;
+      }
+    }
+  }
+  return { states, unreadable };
+}
+
+function newestSessions(sessions: Record<string, Session>) {
+  return Object.fromEntries(
+    Object.entries(sessions)
+      .sort(([, a], [, b]) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, SESSION_LIMIT),
+  );
+}
+
+async function readMergedState(store: Store) {
+  const current = await readState(store);
+  const legacy = await readLegacyStates(store);
+  const sessions: Record<string, Session> = {};
+  for (const state of legacy.states)
+    for (const [id, session] of Object.entries(state.sessions))
+      if (!sessions[id] || sessions[id].updatedAt < session.updatedAt) sessions[id] = session;
+  Object.assign(sessions, current.sessions);
+  return {
+    current,
+    merged: { version: 1 as const, sessions: newestSessions(sessions) },
+    legacyUnreadable: legacy.unreadable,
+  };
 }
 export async function configureUsefulness(
   dir: string,
   value: boolean,
   options: { onlyIfUnset?: boolean } = {},
 ) {
-  const ws = await workspace(dir);
-  const configured = await withStoreLock(ws.root, directory, async () => {
+  const store = await statsStore(dir);
+  const configured = await withStoreLock(store.root, directory, async () => {
     if (options.onlyIfUnset) {
-      const existing = await readStoreJson(ws.root, configPath);
-      if (existing !== null) return configSchema.parse(existing).enabled;
+      const existing = await readConfig(store.root);
+      if (existing !== null) return existing;
     }
     // Self-contained ignore rules keep these observations local even before project setup.
-    const ignore = await storePath(ws.root, directory + "/.gitignore", true);
+    const ignore = await storePath(store.root, directory + "/.gitignore", true);
     try {
       await fs.writeFile(ignore, "*\n", { flag: "wx", mode: 0o600 });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
-    await writeStoreJson(ws.root, configPath, { version: 1, enabled: value });
+    await writeStoreJson(store.root, configPath, { version: 1, enabled: value });
     return value;
   });
   return {
@@ -79,12 +186,17 @@ export async function observeUsefulness(
   elapsedMs: number,
   observedAt = new Date().toISOString(),
 ) {
-  if (!event.host || !event.sessionId || !(await enabled(root))) return;
-  const ws = await workspace(root);
-  await withStoreLock(ws.root, directory, async () => {
-    if (!(await enabled(root))) return;
-    const raw = await readStoreJson(root, statePath(ws));
-    const state = raw === null ? empty() : stateSchema.parse(raw);
+  if (!event.host || !event.sessionId) return;
+  // Every hook reaches here; a primary checkout (.git directory) holds its own store, so
+  // disabled tracking costs one file read there rather than Git calls.
+  const gitEntry = await fs.lstat(path.join(root, ".git")).catch(() => null);
+  if (gitEntry?.isDirectory() && !(await readConfig(root))) return;
+  const store = await statsStore(root);
+  const ws = store.ws;
+  if (!(await enabled(store))) return;
+  await withStoreLock(store.root, directory, async () => {
+    if (!(await enabled(store))) return;
+    const state = await readState(store);
     const now = observedAt;
     const key = hash([event.host, event.sessionId]);
     const session = (state.sessions[key] ??= {
@@ -169,11 +281,8 @@ export async function observeUsefulness(
         session.receiptIds = [...session.receiptIds, receipt].slice(-200);
       }
     }
-    const keys = Object.keys(state.sessions).sort((a, b) =>
-      state.sessions[b].updatedAt.localeCompare(state.sessions[a].updatedAt),
-    );
-    for (const key of keys.slice(50)) delete state.sessions[key];
-    await writeStoreJson(root, statePath(ws), state);
+    state.sessions = newestSessions(state.sessions);
+    await writeStoreJson(store.root, store.statePath, state);
   });
 }
 export async function rateUsefulness(
@@ -182,21 +291,24 @@ export async function rateUsefulness(
   findingId: string,
   rating: z.infer<typeof usefulnessRating>,
 ) {
-  const ws = await workspace(dir);
-  return withStoreLock(ws.root, directory, async () => {
-    const state = stateSchema.parse(await readStoreJson(ws.root, statePath(ws)));
-    const finding = state.sessions[sessionId]?.findings[findingId];
+  const store = await statsStore(dir);
+  return withStoreLock(store.root, directory, async () => {
+    const { current, merged } = await readMergedState(store);
+    // A session retained only in an earlier per-branch file moves into the shared store.
+    const session = current.sessions[sessionId] ?? structuredClone(merged.sessions[sessionId]);
+    const finding = session?.findings[findingId];
     if (!finding)
       throw new Error("Unknown retained session or finding; inspect mason stats --json.");
     finding.rating = usefulnessRating.parse(rating);
-    await writeStoreJson(ws.root, statePath(ws), state);
+    current.sessions[sessionId] = session;
+    current.sessions = newestSessions(current.sessions);
+    await writeStoreJson(store.root, store.statePath, current);
     return { session: sessionId, finding: findingId, rating };
   });
 }
 export async function usefulnessStatus(dir: string, sessionId?: string) {
-  const ws = await workspace(dir);
-  const raw = await readStoreJson(ws.root, statePath(ws));
-  const state = raw === null ? empty() : stateSchema.parse(raw);
+  const store = await statsStore(dir);
+  const { merged: state, legacyUnreadable } = await readMergedState(store);
   if (sessionId !== undefined && !Object.hasOwn(state.sessions, sessionId))
     throw new Error("Unknown retained session; inspect mason stats --json for session IDs.");
   const sessions = Object.entries(state.sessions)
@@ -230,8 +342,10 @@ export async function usefulnessStatus(dir: string, sessionId?: string) {
   const retrievalObservedSessions = sessions.filter((s) => s.retrievalObserved).length;
   return {
     version: 1,
-    enabled: await enabled(ws.root),
-    branch: ws.branch,
+    enabled: await enabled(store),
+    branch: store.ws.branch,
+    scope: "repository" as const,
+    ...(legacyUnreadable ? { legacyUnreadable } : {}),
     sessionId: sessionId ?? null,
     summary: {
       sessions: sessions.length,
@@ -250,7 +364,7 @@ export async function usefulnessStatus(dir: string, sessionId?: string) {
       application: "unknown",
       modelTokens: null,
     },
-    note: "Counts sum distinct findings and returned records within each retained session; the same item may appear in multiple sessions. Status reflects the last observed check, not a fresh verification. Up to 50 sessions and 200 findings/records per session are retained. Resolution after a notice does not establish causation. Ratings are supplied feedback, not authenticated judgments. Lesson application, later-session reuse and model-token cost are unknown.",
+    note: "Counts sum distinct findings and returned records within each retained session; the same item may appear in multiple sessions. Status reflects the last observed check, not a fresh verification. Sessions from every branch and linked worktree of this repository are combined. Up to 50 sessions and 200 findings/records per session are retained. Resolution after a notice does not establish causation. Ratings are supplied feedback, not authenticated judgments. Lesson application, later-session reuse and model-token cost are unknown.",
     sessions,
   };
 }
@@ -258,13 +372,18 @@ export function summarizeUsefulness(result: Awaited<ReturnType<typeof usefulness
   const s = result.summary;
   return [
     `Mason stats — tracking ${result.enabled ? "enabled" : "disabled"} (local only)`,
-    `${s.sessions} retained session(s)${result.sessionId ? " selected" : " in this branch"}. Counts are summed per session.`,
+    `${s.sessions} retained session(s)${result.sessionId ? " selected" : " across this repository's branches and worktrees"}. Counts are summed per session.`,
     `Findings: ${s.delivered} delivered; ${s.resolved} observed resolved; ${s.open} open; ${s.unknown} unknown.`,
     `Feedback: ${s.ratings.helpful} helpful; ${s.ratings["already-knew"]} already knew; ${s.ratings.irrelevant} irrelevant; ${s.ratings.deferred} deferred.`,
     `Decision records returned: ${s.retrievedDecisions ?? "unknown"} (${s.retrievalObservedSessions}/${s.sessions} sessions with retrieval receipts); application unknown.`,
     `Automation: ${(s.checkMs / 1000).toFixed(2)} seconds across ${s.checks} observations; model-token cost unknown.`,
     ...(s.truncatedSessions
       ? [`${s.truncatedSessions} session(s) have truncated observations.`]
+      : []),
+    ...(result.legacyUnreadable
+      ? [
+          `${result.legacyUnreadable} earlier per-branch observation file(s) could not be read and were left unchanged.`,
+        ]
       : []),
     ...(result.sessionId
       ? result.sessions.flatMap((session) => [
@@ -284,7 +403,8 @@ export function summarizeUsefulness(result: Awaited<ReturnType<typeof usefulness
   ].join("\n");
 }
 
-/** Hosts may wrap MCP text blocks; do not infer retrieval from tool inputs. */
+/** Hosts may wrap MCP text blocks; do not infer retrieval from tool inputs.
+ * Claude Code passes an MCP result's content blocks as a bare array. */
 export function retrievedDecisions(
   tool: string | undefined,
   response: unknown,
@@ -292,6 +412,7 @@ export function retrievedDecisions(
   if (!/(?:^|__)mason__get_context$/.test(tool ?? "")) return undefined;
   try {
     let value: unknown = typeof response === "string" ? JSON.parse(response) : response;
+    if (Array.isArray(value)) value = { content: value };
     if (!isRecord(value)) return undefined;
     if (value.isError) return undefined;
     if (Array.isArray(value?.content)) {
