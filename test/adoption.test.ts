@@ -116,7 +116,7 @@ describe("Mason without a concept map", () => {
       {},
     );
     const saved = JSON.parse(await saveDecision(repo, knowledge));
-    const context = JSON.parse(await getContext(repo, "idempotency"));
+    const context = JSON.parse(await getContext(repo, "retry safety"));
     expect(context.features).toEqual({});
     expect(context.availableFeatures["unrelated catalog"]).toBeDefined();
     expect(context.decisions[saved.id]).toBeDefined();

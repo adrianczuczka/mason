@@ -623,7 +623,7 @@ describe("decisions", () => {
 
       const bundle = (await assembleContext(
         tmpDir,
-        "when can I run the deployment",
+        "when can I run deployments on Fridays",
       )) as NoMatchBundle;
 
       expect(bundle.features).toEqual({});

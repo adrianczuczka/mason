@@ -7,7 +7,7 @@ import { createSnapshotTrustReader, readSnapshotTrustIndex } from "../snapshot/t
 import { computeDrift, type DriftReport } from "../drift/drift.js";
 import { analyzeImpact } from "../impact/impact.js";
 import type { CochangeEntry, ReferenceEntry } from "../impact/impact.js";
-import { scoreEntry, tokenSet } from "./lexical.js";
+import { descriptionCorpus, nameHits, scoreEntry, tokenSet } from "./lexical.js";
 import { loadDecisionStore } from "../decisions/decisions.js";
 import {
   decisionKnowledge,
@@ -26,6 +26,10 @@ const MAX_FLOWS = 3;
 const MAX_IMPACT_TARGETS = 3;
 const MAX_DECISIONS = 5;
 const DECISION_FEATURE_OVERLAP_BOOST = 2;
+/** Lexical-only decisions below this score are incidental word overlap, not relevance. */
+const DECISION_SCORE_FLOOR = 8;
+const DECISION_RELATIVE_FLOOR = 0.5;
+const DECISION_TITLE_HITS = 2;
 
 export interface MatchedFeature {
   description: string;
@@ -66,6 +70,8 @@ export interface ContextBundle {
   flows: Record<string, MatchedFlow>;
   /** Relevant knowledge; approval distinguishes constraints from proposals. */
   decisions: Record<string, MatchedDecision>;
+  /** Decisions sharing only incidental words with the task, omitted from `decisions`. */
+  omittedBelowFloor?: number;
   /** All tests paired with the matched files, deduped. */
   relatedTests: string[];
   impact: {
@@ -97,6 +103,7 @@ export interface NoMatchBundle {
   flows: Record<string, never>;
   /** Decisions can match even when no feature does. */
   decisions: Record<string, MatchedDecision>;
+  omittedBelowFloor?: number;
   /** The full feature catalog, so the caller can still act without a second guess. */
   availableFeatures: Record<string, string>;
   availableFlows: Record<string, string>;
@@ -178,7 +185,7 @@ export async function assembleContext(
   };
 
   if (!snapshot) {
-    const decisions = matchDecisions(
+    const { decisions, omittedBelowFloor } = matchDecisions(
       allDecisions,
       taskTokens,
       anchorBoost,
@@ -197,6 +204,7 @@ export async function assembleContext(
       features: {},
       flows: {},
       decisions,
+      ...(omittedBelowFloor ? { omittedBelowFloor } : {}),
       impact,
       relatedTests,
       diagnostics: [...mapState.diagnostics, ...store.diagnostics],
@@ -218,7 +226,7 @@ export async function assembleContext(
                 ...(d.pendingProposal ? [d.pendingProposal.trust] : []),
               ]),
             )
-          : "No saved decision matched. Inspect the source and use save_decision for a learned constraint or incident rationale. ") +
+          : noDecisionHint(omittedBelowFloor)) +
         (store.diagnostics.length
           ? " Some decision records are invalid; consult diagnostics before assuming all constraints were retrieved."
           : ""),
@@ -256,7 +264,7 @@ export async function assembleContext(
     ...featureScores.flatMap((e) => e.feat.files),
     ...flowScores.flatMap((e) => e.flow.chain),
   ]);
-  const decisions = matchDecisions(
+  const { decisions, omittedBelowFloor } = matchDecisions(
     allDecisions,
     taskTokens,
     anchorBoost,
@@ -266,6 +274,7 @@ export async function assembleContext(
 
   if (featureScores.length === 0 && flowScores.length === 0) {
     const bundle = noMatchBundle(snapshot, task, decisions);
+    if (omittedBelowFloor) bundle.omittedBelowFloor = omittedBelowFloor;
     Object.assign(
       bundle,
       await collectImpact(resolvedRoot, [
@@ -290,6 +299,7 @@ export async function assembleContext(
         ]),
       ]);
     if (Object.keys(decisions).length) bundle.hint += " " + DECISION_GUIDANCE;
+    else if (omittedBelowFloor) bundle.hint += " " + noDecisionHint(omittedBelowFloor);
     if (store.diagnostics.length)
       bundle.hint += " Some decision records are invalid; consult diagnostics.";
     return bundle;
@@ -351,6 +361,7 @@ export async function assembleContext(
     features,
     flows,
     decisions,
+    ...(omittedBelowFloor ? { omittedBelowFloor } : {}),
     relatedTests,
     impact,
     freshness: {
@@ -359,7 +370,11 @@ export async function assembleContext(
       staleMatches,
     },
     hint:
-      (Object.keys(decisions).length ? DECISION_GUIDANCE + " " : "") +
+      (Object.keys(decisions).length
+        ? DECISION_GUIDANCE + " "
+        : omittedBelowFloor
+          ? noDecisionHint(omittedBelowFloor)
+          : "") +
       trustHint([
         ...Object.values(features).map((e) => e.trust),
         ...Object.values(flows).map((e) => e.trust),
@@ -374,11 +389,26 @@ export async function assembleContext(
   };
 }
 
+function noDecisionHint(omittedBelowFloor: number): string {
+  return (
+    "No saved decision matched. " +
+    (omittedBelowFloor
+      ? `${omittedBelowFloor} decision(s) shared only incidental words with the task and were omitted; pass the files you will edit to retrieve decisions anchored to them. `
+      : "") +
+    "Inspect the source and use save_decision for a learned constraint or incident rationale. "
+  );
+}
+
 /**
  * Score active decisions against the task with the same lexical machinery
  * as map entries, plus a feature-overlap boost: a decision anchored to a
  * file of an already-matched feature is relevant even with zero lexical
  * overlap ("auth is weird" should surface on any auth task).
+ *
+ * A positive score alone is not relevance: in a store of dozens of records most
+ * share some word with any task. Keep a decision only when it is anchored to a
+ * requested file or matched feature, its title shares several task words, or its
+ * score is strong in absolute terms and close to the best match.
  */
 function matchDecisions(
   allDecisions: DecisionRecord[],
@@ -386,26 +416,42 @@ function matchDecisions(
   anchorBoost: (files: string[]) => number,
   matchedEntryFiles: Set<string>,
   decisionDrift: DecisionDriftReport,
-): Record<string, MatchedDecision> {
-  const scored = allDecisions
-    .filter((d) => d.status === "active")
+): { decisions: Record<string, MatchedDecision>; omittedBelowFloor: number } {
+  const active = allDecisions.filter((d) => d.status === "active");
+  const revisions = (d: DecisionRecord) => [...new Set([effectiveDecision(d), d])];
+  const corpus = descriptionCorpus(active.flatMap((d) => revisions(d).map((r) => r.body)));
+  const candidates = active
     .map((d) => {
-      const scoreRevision = (revision: DecisionRecord) =>
-        scoreEntry(taskTokens, {
-          name: revision.title,
-          description: revision.body,
-          files: revision.files,
-        }) +
-        anchorBoost(revision.files) +
-        (revision.files.some((f) => [...matchedEntryFiles].some((file) => anchorMatches(f, file)))
-          ? DECISION_FEATURE_OVERLAP_BOOST
-          : 0);
-      const score = Math.max(scoreRevision(effectiveDecision(d)), scoreRevision(d));
-      return { d, score };
+      let score = 0;
+      let anchored = false;
+      let titleHits = 0;
+      for (const revision of revisions(d)) {
+        const anchor = anchorBoost(revision.files);
+        const overlap = revision.files.some((f) =>
+          [...matchedEntryFiles].some((file) => anchorMatches(f, file)),
+        );
+        score = Math.max(
+          score,
+          scoreEntry(
+            taskTokens,
+            { name: revision.title, description: revision.body, files: revision.files },
+            corpus,
+          ) +
+            anchor +
+            (overlap ? DECISION_FEATURE_OVERLAP_BOOST : 0),
+        );
+        anchored ||= anchor > 0 || overlap;
+        titleHits = Math.max(titleHits, nameHits(taskTokens, revision.title));
+      }
+      return { d, score, anchored, titleHits };
     })
-    .filter((e) => e.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_DECISIONS);
+    .filter((e) => e.score > 0);
+  const top = Math.max(0, ...candidates.map((e) => e.score));
+  const floor = Math.max(DECISION_SCORE_FLOOR, DECISION_RELATIVE_FLOOR * top);
+  const kept = candidates.filter(
+    (e) => e.anchored || e.titleHits >= DECISION_TITLE_HITS || e.score >= floor,
+  );
+  const scored = kept.sort((a, b) => b.score - a.score).slice(0, MAX_DECISIONS);
 
   const result: Record<string, MatchedDecision> = {};
   for (const { d, score } of scored) {
@@ -415,11 +461,11 @@ function matchDecisions(
         decisionDrift.freshness?.[d.id] ?? "unknown",
         decisionDrift.pendingProposals?.[d.id]?.freshness ?? "unknown",
       ),
-      score,
+      score: Math.round(score * 100) / 100,
       stale: decisionDrift.freshness?.[d.id] !== "current",
     };
   }
-  return result;
+  return { decisions: result, omittedBelowFloor: candidates.length - kept.length };
 }
 
 function noMatchBundle(
